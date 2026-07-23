@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { SiteNav } from "@/components/site-nav";
@@ -25,7 +25,6 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const configured = isSupabaseConfigured();
 
   useEffect(() => {
     if (user) navigate({ to: "/dashboard" });
@@ -37,11 +36,6 @@ function AuthPage() {
     setError(null);
     setSuccessMessage(null);
     try {
-      if (!configured) {
-        throw new Error(
-          "Supabase ist nicht konfiguriert. Bitte trage VITE_SUPABASE_URL und VITE_SUPABASE_PUBLISHABLE_KEY in deinen Cloudflare Pages Einstellungen (oder in der .env-Datei) ein.",
-        );
-      }
 
       if (mode === "signup") {
         if (!fullName.trim()) throw new Error(t("auth.fullName"));
@@ -82,11 +76,6 @@ function AuthPage() {
   const onGoogle = async () => {
     setError(null);
     try {
-      if (!configured) {
-        throw new Error(
-          "Supabase ist nicht konfiguriert. Bitte trage VITE_SUPABASE_URL und VITE_SUPABASE_PUBLISHABLE_KEY in Cloudflare Pages ein.",
-        );
-      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: window.location.origin + "/dashboard" },
@@ -108,15 +97,6 @@ function AuthPage() {
       <div className="mx-auto flex max-w-md flex-col px-4 py-16">
         <h1 className="font-brand text-3xl">{t("auth.title")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{t("auth.subtitle")}</p>
-
-        {!configured && (
-          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
-            <p className="font-semibold text-amber-400">⚠️ Supabase ist noch nicht verbunden</p>
-            <p className="mt-1">
-              Für Registrierung & Login müssen <code>VITE_SUPABASE_URL</code> und <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> in den <strong>Cloudflare Pages &gt; Settings &gt; Environment variables</strong> (bzw. lokal in deiner <code>.env</code>-Datei) hinterlegt werden.
-            </p>
-          </div>
-        )}
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-glass-border bg-glass p-6 backdrop-blur">
           {mode === "signup" && (
