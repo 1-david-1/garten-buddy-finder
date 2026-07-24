@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Anmelden · GreenMatch" }] }),
+  validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => ({
+    mode: search.mode === "signup" ? "signup" : undefined,
+  }),
   component: AuthPage,
 });
 
@@ -17,7 +20,8 @@ function AuthPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { mode: initialMode } = Route.useSearch();
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signup" ? "signup" : "signin");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"helper" | "customer" | null>(null);
   const [email, setEmail] = useState("");
