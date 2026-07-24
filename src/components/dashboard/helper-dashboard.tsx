@@ -105,19 +105,19 @@ export function HelperDashboard() {
     {
       key: "dashboard",
       label: t("dashboard.nav.dashboard"),
-      href: "#top",
+      href: "/dashboard",
       icon: <BarChart3 className="size-4" />,
     },
     {
       key: "orders",
       label: t("dashboard.nav.orders"),
-      href: "#recent-gigs",
+      href: "/gigs",
       icon: <ClipboardList className="size-4" />,
     },
     {
       key: "earnings",
       label: t("dashboard.nav.earnings"),
-      href: "#earnings-chart",
+      href: "/earnings",
       icon: <Wallet className="size-4" />,
     },
   ];
