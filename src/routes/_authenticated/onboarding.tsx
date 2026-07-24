@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { completeOnboarding, getMyRoles } from "@/lib/roles.functions";
+import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { SiteNav } from "@/components/site-nav";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Role = "customer" | "helper_youth" | "helper_adult" | "helper_pro";
+type SignupRole = "helper" | "customer" | undefined;
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
@@ -18,8 +20,14 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
 function Onboarding() {
   const { t, locale } = useI18n();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const submit = useServerFn(completeOnboarding);
   const getRoles = useServerFn(getMyRoles);
+
+  // Bei der Registrierung wurde bereits "Helfer" oder "Kunde" gewählt
+  // (gespeichert in user_metadata.signup_role) - das übernehmen wir hier,
+  // statt die Wahl erneut abzufragen.
+  const signupRole = user?.user_metadata?.signup_role as SignupRole;
 
   const rolesQuery = useQuery({ queryKey: ["my-roles"], queryFn: () => getRoles() });
 
@@ -30,6 +38,14 @@ function Onboarding() {
   }, [rolesQuery.data, navigate]);
 
   const [role, setRole] = useState<Role | null>(null);
+
+  // Kunden brauchen keine weitere Auswahl - direkt weiter zum Profil-Formular.
+  useEffect(() => {
+    if (signupRole === "customer" && !role) {
+      setRole("customer");
+    }
+  }, [signupRole, role]);
+
   const [form, setForm] = useState({
     displayName: "",
     city: "",
@@ -47,12 +63,15 @@ function Onboarding() {
     onError: (e) => setError((e as Error).message),
   });
 
-  const roles: { key: Role }[] = [
-    { key: "customer" },
-    { key: "helper_youth" },
-    { key: "helper_adult" },
-    { key: "helper_pro" },
-  ];
+  // Wer sich als "Helfer" registriert hat, sieht nur die Helfer-Abstufungen.
+  // Wer sich als "Kunde" registriert hat, überspringt diese Auswahl (s.o.).
+  // Ohne bekannten signup_role (Altfall/Fallback) zeigen wir weiterhin alle 4.
+  const roles: { key: Role }[] =
+    signupRole === "helper"
+      ? [{ key: "helper_youth" }, { key: "helper_adult" }, { key: "helper_pro" }]
+      : signupRole === "customer"
+        ? [{ key: "customer" }]
+        : [{ key: "customer" }, { key: "helper_youth" }, { key: "helper_adult" }, { key: "helper_pro" }];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
