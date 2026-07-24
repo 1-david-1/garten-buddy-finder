@@ -6,6 +6,7 @@ import { getMyRoles } from "@/lib/roles.functions";
 import { SiteNav } from "@/components/site-nav";
 import { useI18n } from "@/lib/i18n";
 import { HelperDashboard } from "@/components/dashboard/helper-dashboard";
+import { CustomerDashboard } from "@/components/dashboard/customer-dashboard";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardRouter,
@@ -39,14 +40,5 @@ function DashboardRouter() {
   const isHelper = q.data.roles.some((r) => r.startsWith("helper_"));
   if (isHelper) return <HelperDashboard />;
 
-  // Customer dashboard (search/filter/favorites/gig-poster) is a later build step.
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <SiteNav />
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <h1 className="font-brand text-3xl">{t("dashboard.customer.title")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("dashboard.empty")}</p>
-      </div>
-    </div>
-  );
+  return <CustomerDashboard />;
 }
