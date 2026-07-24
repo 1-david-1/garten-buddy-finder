@@ -65,13 +65,13 @@ export function DashboardShell({
     {
       key: "orders",
       label: t("dashboard.nav.orders") || "Aufträge",
-      href: "/dashboard#recent-gigs",
+      href: "/gigs",
       icon: <ClipboardList className="size-4" />,
     },
     {
       key: "earnings",
       label: t("dashboard.nav.earnings") || "Einnahmen",
-      href: "/dashboard#earnings-chart",
+      href: "/earnings",
       icon: <Wallet className="size-4" />,
     },
   ];
@@ -94,10 +94,10 @@ export function DashboardShell({
                 {itemsToRender.map((item) => (
                   <SidebarMenuItem key={item.key}>
                     <SidebarMenuButton asChild isActive={item.key === activeKey} tooltip={item.label}>
-                      <a href={item.href}>
+                      <Link to={item.href}>
                         {item.icon}
                         <span>{item.label}</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
