@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Euro,
+  Mail,
   Star,
   TrendingDown,
   TrendingUp,
@@ -107,6 +108,12 @@ export function HelperDashboard() {
       label: t("dashboard.nav.dashboard"),
       href: "/dashboard",
       icon: <BarChart3 className="size-4" />,
+    },
+    {
+      key: "inbox",
+      label: "Postfach",
+      href: "/inbox",
+      icon: <Mail className="size-4" />,
     },
     {
       key: "orders",
