@@ -3,8 +3,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { BarChart3, Mail } from "lucide-react";
+import { BarChart3, ClipboardList, Mail, Wallet } from "lucide-react";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import { useI18n } from "@/lib/i18n";
 
 interface Notification {
   id: string;
@@ -136,11 +137,14 @@ export const Route = createFileRoute("/_authenticated/inbox")({
 });
 
 function InboxPage() {
+  const { t } = useI18n();
   const loaderData = Route.useLoaderData();
 
   const navItems: DashboardNavItem[] = [
-    { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: <BarChart3 className="size-4" /> },
+    { key: "dashboard", label: t("dashboard.nav.dashboard"), href: "/dashboard", icon: <BarChart3 className="size-4" /> },
     { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
+    { key: "orders", label: t("dashboard.nav.orders"), href: "/gigs", icon: <ClipboardList className="size-4" /> },
+    { key: "earnings", label: t("dashboard.nav.earnings"), href: "/earnings", icon: <Wallet className="size-4" /> },
   ];
 
   const formatDate = (dateStr: string) => {
