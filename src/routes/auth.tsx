@@ -53,10 +53,15 @@ function AuthPage() {
           },
         });
         if (error) {
-          // Supabase returns "User already registered" for duplicate emails
+          // Supabase returns "User already registered" or similar for duplicate emails
+          const msg = error.message.toLowerCase();
           if (
-            error.message.toLowerCase().includes("already registered") ||
-            error.message.toLowerCase().includes("already been registered")
+            msg.includes("already registered") ||
+            msg.includes("already been registered") ||
+            msg.includes("bereits registriert") ||
+            msg.includes("schon vergeben") ||
+            msg.includes("user_already_exists") ||
+            error.status === 422 || error.status === 400
           ) {
             throw new Error("E-Mail-Adresse schon vergeben");
           }
