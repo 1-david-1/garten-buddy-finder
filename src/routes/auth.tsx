@@ -52,7 +52,27 @@ function AuthPage() {
             data: { full_name: fullName.trim(), signup_role: role },
           },
         });
-        if (error) throw error;
+        if (error) {
+          // Supabase returns "User already registered" for duplicate emails
+          if (
+            error.message.toLowerCase().includes("already registered") ||
+            error.message.toLowerCase().includes("already been registered")
+          ) {
+            throw new Error("E-Mail-Adresse schon vergeben");
+          }
+          throw error;
+        }
+
+        // When email confirmations are enabled Supabase may return a user
+        // with an empty identities array instead of an error when the email
+        // is already taken (to prevent enumeration). Detect that case.
+        if (
+          data.user &&
+          data.user.identities &&
+          data.user.identities.length === 0
+        ) {
+          throw new Error("E-Mail-Adresse schon vergeben");
+        }
 
         if (data.user && !data.session) {
           setSuccessMessage(
