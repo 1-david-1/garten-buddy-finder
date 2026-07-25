@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { BarChart3, Mail } from "lucide-react";
+import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
 
 interface Notification {
   id: string;
@@ -134,8 +136,12 @@ export const Route = createFileRoute("/_authenticated/inbox")({
 });
 
 function InboxPage() {
-  const { t } = { t: (key: string) => key }; // Placeholder
   const loaderData = Route.useLoaderData();
+
+  const navItems: DashboardNavItem[] = [
+    { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: <BarChart3 className="size-4" /> },
+    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
+  ];
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -161,18 +167,11 @@ function InboxPage() {
     });
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <div className="border-b border-border/50 bg-card">
-        <div className="mx-auto max-w-4xl px-4 py-6">
-          <h1 className="font-brand text-3xl">Postfach</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ihre Buchungsanfragen und Benachrichtigungen
-          </p>
-        </div>
-      </div>
+    <DashboardShell title="Postfach" navItems={navItems} activeKey="inbox">
+      <h1 className="font-brand text-2xl">Postfach</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Ihre Buchungsanfragen und Benachrichtigungen</p>
 
-      <div className="mx-auto max-w-4xl px-4 py-6 space-y-8">
+      <div className="mt-6 space-y-8">
         {/* Booking Requests Section */}
         <section>
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -329,6 +328,6 @@ function InboxPage() {
           )}
         </section>
       </div>
-    </div>
+    </DashboardShell>
   );
 }
