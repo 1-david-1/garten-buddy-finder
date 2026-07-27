@@ -116,6 +116,12 @@ export function HelperDashboard() {
       icon: <Mail className="size-4" />,
     },
     {
+      key: "marketplace",
+      label: "Aufträge finden",
+      href: "/marketplace",
+      icon: <ClipboardList className="size-4" />,
+    },
+    {
       key: "orders",
       label: t("dashboard.nav.orders"),
       href: "/gigs",
