@@ -12,11 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCreateGigRouteImport } from './routes/_authenticated/create-gig'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedEarningsRouteImport } from './routes/_authenticated/earnings'
 import { Route as AuthenticatedGigsRouteImport } from './routes/_authenticated/gigs'
 import { Route as AuthenticatedInboxRouteImport } from './routes/_authenticated/inbox'
+import { Route as AuthenticatedMarketplaceRouteImport } from './routes/_authenticated/marketplace'
+import { Route as AuthenticatedMyGigsRouteImport } from './routes/_authenticated/my-gigs'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -31,6 +35,11 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedCreateGigRoute = AuthenticatedCreateGigRouteImport.update({
+  id: '/create-gig',
+  path: '/create-gig',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
@@ -52,70 +61,110 @@ const AuthenticatedInboxRoute = AuthenticatedInboxRouteImport.update({
   path: '/inbox',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMarketplaceRoute =
+  AuthenticatedMarketplaceRouteImport.update({
+    id: '/marketplace',
+    path: '/marketplace',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMyGigsRoute = AuthenticatedMyGigsRouteImport.update({
+  id: '/my-gigs',
+  path: '/my-gigs',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/create-gig': typeof AuthenticatedCreateGigRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
   '/gigs': typeof AuthenticatedGigsRoute
   '/inbox': typeof AuthenticatedInboxRoute
+  '/marketplace': typeof AuthenticatedMarketplaceRoute
+  '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/profile': typeof AuthenticatedProfileRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/create-gig': typeof AuthenticatedCreateGigRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
   '/gigs': typeof AuthenticatedGigsRoute
   '/inbox': typeof AuthenticatedInboxRoute
+  '/marketplace': typeof AuthenticatedMarketplaceRoute
+  '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/profile': typeof AuthenticatedProfileRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/create-gig': typeof AuthenticatedCreateGigRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/earnings': typeof AuthenticatedEarningsRoute
   '/_authenticated/gigs': typeof AuthenticatedGigsRoute
   '/_authenticated/inbox': typeof AuthenticatedInboxRoute
+  '/_authenticated/marketplace': typeof AuthenticatedMarketplaceRoute
+  '/_authenticated/my-gigs': typeof AuthenticatedMyGigsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/create-gig'
     | '/dashboard'
     | '/earnings'
     | '/gigs'
     | '/inbox'
+    | '/marketplace'
+    | '/my-gigs'
     | '/onboarding'
+    | '/profile'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/create-gig'
     | '/dashboard'
     | '/earnings'
     | '/gigs'
     | '/inbox'
+    | '/marketplace'
+    | '/my-gigs'
     | '/onboarding'
+    | '/profile'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/create-gig'
     | '/_authenticated/dashboard'
     | '/_authenticated/earnings'
     | '/_authenticated/gigs'
     | '/_authenticated/inbox'
+    | '/_authenticated/marketplace'
+    | '/_authenticated/my-gigs'
     | '/_authenticated/onboarding'
+    | '/_authenticated/profile'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -147,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/create-gig': {
+      id: '/_authenticated/create-gig'
+      path: '/create-gig'
+      fullPath: '/create-gig'
+      preLoaderRoute: typeof AuthenticatedCreateGigRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -175,6 +231,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInboxRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/marketplace': {
+      id: '/_authenticated/marketplace'
+      path: '/marketplace'
+      fullPath: '/marketplace'
+      preLoaderRoute: typeof AuthenticatedMarketplaceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/my-gigs': {
+      id: '/_authenticated/my-gigs'
+      path: '/my-gigs'
+      fullPath: '/my-gigs'
+      preLoaderRoute: typeof AuthenticatedMyGigsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/onboarding': {
       id: '/_authenticated/onboarding'
       path: '/onboarding'
@@ -182,23 +252,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCreateGigRoute: typeof AuthenticatedCreateGigRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEarningsRoute: typeof AuthenticatedEarningsRoute
   AuthenticatedGigsRoute: typeof AuthenticatedGigsRoute
   AuthenticatedInboxRoute: typeof AuthenticatedInboxRoute
+  AuthenticatedMarketplaceRoute: typeof AuthenticatedMarketplaceRoute
+  AuthenticatedMyGigsRoute: typeof AuthenticatedMyGigsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCreateGigRoute: AuthenticatedCreateGigRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEarningsRoute: AuthenticatedEarningsRoute,
   AuthenticatedGigsRoute: AuthenticatedGigsRoute,
   AuthenticatedInboxRoute: AuthenticatedInboxRoute,
+  AuthenticatedMarketplaceRoute: AuthenticatedMarketplaceRoute,
+  AuthenticatedMyGigsRoute: AuthenticatedMyGigsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
