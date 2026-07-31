@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { Database } from "@/integrations/supabase/types";
 
 export interface GigInput {
   title: string;
@@ -39,12 +38,12 @@ export const createGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: GigInput) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { supabase, user } = context;
 
     const { data: gig, error } = await supabase
       .from("gigs")
       .insert({
-        customer_id: userId,
+        customer_id: user.id,
         title: data.title,
         description: data.description,
         service_type: data.serviceType,
@@ -69,12 +68,12 @@ export const createGig = createServerFn({ method: "POST" })
 export const getMyGigs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
+    const { supabase, user } = context;
 
     const { data: gigs, error } = await supabase
       .from("gigs")
       .select("*")
-      .eq("customer_id", userId)
+      .eq("customer_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -139,15 +138,15 @@ export const getGigDetails = createServerFn({ method: "GET" })
  */
 export const updateGigStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string; status: Database["public"]["Enums"]["gig_status"] }) => data)
+  .validator((data: { gigId: string; status: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { supabase, user } = context;
 
     const { data: gig, error } = await supabase
       .from("gigs")
       .update({ status: data.status })
       .eq("id", data.gigId)
-      .eq("customer_id", userId)
+      .eq("customer_id", user.id)
       .select()
       .single();
 
@@ -162,7 +161,7 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { gigId: string; helperId: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { supabase, user } = context;
 
     const { data: gig, error } = await supabase
       .from("gigs")
@@ -171,7 +170,7 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
         status: "assigned",
       })
       .eq("id", data.gigId)
-      .eq("customer_id", userId)
+      .eq("customer_id", user.id)
       .select()
       .single();
 
@@ -186,13 +185,13 @@ export const completeGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { gigId: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { supabase, user } = context;
 
     const { data: gig, error } = await supabase
       .from("gigs")
       .update({ status: "completed" })
       .eq("id", data.gigId)
-      .eq("customer_id", userId)
+      .eq("customer_id", user.id)
       .select()
       .single();
 
