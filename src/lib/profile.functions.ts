@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -19,12 +20,12 @@ export interface ProfileUpdateInput {
 export const getMyProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, user } = context;
+    const { supabase, userId, claims } = context;
 
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (error) throw error;
@@ -32,12 +33,12 @@ export const getMyProfile = createServerFn({ method: "GET" })
     const { data: roles } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     return {
       profile,
       roles: (roles ?? []).map((r) => r.role),
-      email: user.email,
+      email: claims.email as string | undefined,
     };
   });
 
@@ -48,27 +49,51 @@ export const updateProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: ProfileUpdateInput) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
-    const updateData: Record<string, unknown> = {};
-    if (data.displayName !== undefined) updateData.display_name = data.displayName;
-    if (data.city !== undefined) updateData.city = data.city;
-    if (data.postalCode !== undefined) updateData.postal_code = data.postalCode;
-    if (data.bio !== undefined) updateData.bio = data.bio;
-    if (data.businessName !== undefined) updateData.business_name = data.businessName;
-    if (data.ustId !== undefined) updateData.ust_id = data.ustId;
-    if (data.birthdate !== undefined) updateData.birthdate = data.birthdate;
-    if (data.guardianEmail !== undefined) updateData.guardian_email = data.guardianEmail;
-    if (data.language !== undefined) updateData.language = data.language;
+    const profileUpdate: Database["public"]["Tables"]["profiles"]["Update"] = {};
+    if (data.displayName !== undefined) profileUpdate.display_name = data.displayName;
+    if (data.city !== undefined) profileUpdate.city = data.city;
+    if (data.postalCode !== undefined) profileUpdate.postal_code = data.postalCode;
+    if (data.bio !== undefined) profileUpdate.bio = data.bio;
+    if (data.businessName !== undefined) profileUpdate.business_name = data.businessName;
+    if (data.ustId !== undefined) profileUpdate.ust_id = data.ustId;
+    if (data.language !== undefined) profileUpdate.language = data.language;
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .update(updateData)
-      .eq("id", user.id)
-      .select()
-      .single();
+    // birthdate + guardian_email liegen aus Datenschutzgründen in profile_private,
+    // nicht in profiles (siehe Migration 20260721091500_profile_private.sql).
+    const privateUpdate: Database["public"]["Tables"]["profile_private"]["Update"] = {};
+    if (data.birthdate !== undefined) privateUpdate.birthdate = data.birthdate;
+    if (data.guardianEmail !== undefined) privateUpdate.guardian_email = data.guardianEmail;
 
-    if (error) throw error;
+    if (Object.keys(privateUpdate).length > 0) {
+      const { error: privateError } = await supabase
+        .from("profile_private")
+        .update(privateUpdate)
+        .eq("id", userId);
+      if (privateError) throw privateError;
+    }
+
+    let profile: Database["public"]["Tables"]["profiles"]["Row"] | null = null;
+    if (Object.keys(profileUpdate).length > 0) {
+      const { data: updated, error } = await supabase
+        .from("profiles")
+        .update(profileUpdate)
+        .eq("id", userId)
+        .select()
+        .single();
+      if (error) throw error;
+      profile = updated;
+    } else {
+      const { data: current, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      if (error) throw error;
+      profile = current;
+    }
+
     return { profile };
   });
 
@@ -121,18 +146,18 @@ export const toggleFavorite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { helperId: string; add: boolean }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     if (data.add) {
       const { error } = await supabase
         .from("favorites")
-        .insert({ customer_id: user.id, helper_id: data.helperId });
+        .insert({ customer_id: userId, helper_id: data.helperId });
       if (error && error.code !== "23505") throw error; // Ignore duplicate
     } else {
       const { error } = await supabase
         .from("favorites")
         .delete()
-        .eq("customer_id", user.id)
+        .eq("customer_id", userId)
         .eq("helper_id", data.helperId);
       if (error) throw error;
     }
@@ -146,7 +171,7 @@ export const toggleFavorite = createServerFn({ method: "POST" })
 export const getMyFavorites = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     const { data: favorites, error } = await supabase
       .from("favorites")
@@ -162,7 +187,7 @@ export const getMyFavorites = createServerFn({ method: "GET" })
           available_today
         )
       `)
-      .eq("customer_id", user.id);
+      .eq("customer_id", userId);
 
     if (error) throw error;
     return { favorites: favorites ?? [] };
