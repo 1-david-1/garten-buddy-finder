@@ -26,13 +26,13 @@ export const createBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: NegotiationInput) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     // Prüfe ob User ein Helper ist
     const { data: roles, error: rolesError } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .in("role", ["helper_youth", "helper_adult", "helper_pro"]);
 
     if (rolesError) throw rolesError;
@@ -45,7 +45,7 @@ export const createBid = createServerFn({ method: "POST" })
       .from("negotiations")
       .insert({
         gig_id: data.gigId,
-        helper_id: user.id,
+        helper_id: userId,
         bid_cents: data.bidCents,
         message: data.message,
         status: "pending",
@@ -72,7 +72,7 @@ export const counterBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { negotiationId: string; counterBidCents: number }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     const { data: negotiation, error } = await supabase
       .from("negotiations")
@@ -90,7 +90,7 @@ export const counterBid = createServerFn({ method: "POST" })
     if (error) throw error;
 
     // @ts-ignore - Supabase join syntax
-    if (negotiation.gigs.customer_id !== user.id) {
+    if (negotiation.gigs.customer_id !== userId) {
       throw new Error("Nicht autorisiert");
     }
 
@@ -104,7 +104,7 @@ export const acceptBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { negotiationId: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     // Hole Negotiation Details
     const { data: negotiation, error: negError } = await supabase
@@ -116,7 +116,7 @@ export const acceptBid = createServerFn({ method: "POST" })
     if (negError) throw negError;
 
     // Nur Helper kann akzeptieren
-    if (negotiation.helper_id !== user.id) {
+    if (negotiation.helper_id !== userId) {
       throw new Error("Nicht autorisiert");
     }
 
@@ -132,7 +132,7 @@ export const acceptBid = createServerFn({ method: "POST" })
     const { error: gigError } = await supabase
       .from("gigs")
       .update({
-        assigned_helper_id: user.id,
+        assigned_helper_id: userId,
         status: "assigned",
         budget_cents: negotiation.counter_bid_cents ?? negotiation.bid_cents,
       })
@@ -149,7 +149,7 @@ export const acceptBid = createServerFn({ method: "POST" })
       gig_id: negotiation.gig_id,
       // @ts-ignore - gigs is joined
       customer_id: negotiation.gigs.customer_id,
-      helper_id: user.id,
+      helper_id: userId,
       bid_cents: finalAmount,
       customer_fee_cents: customerFee,
       helper_fee_cents: helperFee,
@@ -168,7 +168,7 @@ export const declineBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { negotiationId: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     const { data: negotiation, error } = await supabase
       .from("negotiations")
@@ -184,8 +184,8 @@ export const declineBid = createServerFn({ method: "POST" })
 
     // Customer oder Helper können ablehnen
     // @ts-ignore - Supabase join
-    const isCustomer = negotiation.gigs.customer_id === user.id;
-    const isHelper = negotiation.helper_id === user.id;
+    const isCustomer = negotiation.gigs.customer_id === userId;
+    const isHelper = negotiation.helper_id === userId;
 
     if (!isCustomer && !isHelper) {
       throw new Error("Nicht autorisiert");
@@ -227,7 +227,7 @@ export const getNegotiationsForGig = createServerFn({ method: "GET" })
 export const getMyBids = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, user } = context;
+    const { supabase, userId } = context;
 
     const { data: negotiations, error } = await supabase
       .from("negotiations")
@@ -245,7 +245,7 @@ export const getMyBids = createServerFn({ method: "GET" })
           )
         )
       `)
-      .eq("helper_id", user.id)
+      .eq("helper_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
