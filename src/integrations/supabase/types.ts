@@ -8,6 +8,57 @@ export type Database = {
   };
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string;
+          admin_id: string;
+          created_at: string;
+          id: string;
+          metadata: Json | null;
+          target_id: string | null;
+          target_type: string;
+        };
+        Insert: {
+          action: string;
+          admin_id: string;
+          created_at?: string;
+          id?: string;
+          metadata?: Json | null;
+          target_id?: string | null;
+          target_type: string;
+        };
+        Update: {
+          action?: string;
+          admin_id?: string;
+          created_at?: string;
+          id?: string;
+          metadata?: Json | null;
+          target_id?: string | null;
+          target_type?: string;
+        };
+        Relationships: [];
+      };
+      admin_settings: {
+        Row: {
+          description: string | null;
+          key: string;
+          updated_at: string;
+          value: Json;
+        };
+        Insert: {
+          description?: string | null;
+          key: string;
+          updated_at?: string;
+          value: Json;
+        };
+        Update: {
+          description?: string | null;
+          key?: string;
+          updated_at?: string;
+          value?: Json;
+        };
+        Relationships: [];
+      };
       earnings_tracker: {
         Row: {
           gross_cents: number;
@@ -414,9 +465,18 @@ export type Database = {
         Returns: boolean;
       };
       is_helper: { Args: { _user_id: string }; Returns: boolean };
+      log_admin_action: {
+        Args: {
+          _action: string;
+          _metadata?: Json | null;
+          _target_id?: string | null;
+          _target_type: string;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
-      app_role: "customer" | "helper_youth" | "helper_adult" | "helper_pro";
+      app_role: "customer" | "helper_youth" | "helper_adult" | "helper_pro" | "admin";
       escrow_state: "pending" | "held" | "releasing" | "paid_out" | "disputed";
       gig_status:
         "draft" | "open" | "negotiating" | "assigned" | "in_progress" | "completed" | "cancelled";
@@ -542,7 +602,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["customer", "helper_youth", "helper_adult", "helper_pro"],
+      app_role: ["customer", "helper_youth", "helper_adult", "helper_pro", "admin"],
       escrow_state: ["pending", "held", "releasing", "paid_out", "disputed"],
       gig_status: [
         "draft",
