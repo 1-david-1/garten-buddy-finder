@@ -98,6 +98,52 @@ export const updateProfile = createServerFn({ method: "POST" })
   });
 
 /**
+ * Aktualisiert die E-Mail-Benachrichtigungs-Präferenzen (Teil-Update, andere
+ * Kategorien bleiben unangetastet).
+ */
+export const updateNotificationPrefs = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    (data: {
+      enabled?: boolean;
+      newBid?: boolean;
+      bidUpdates?: boolean;
+      gigUpdates?: boolean;
+    }) => data,
+  )
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+
+    const { data: current, error: readError } = await supabase
+      .from("profiles")
+      .select("notification_prefs")
+      .eq("id", userId)
+      .maybeSingle();
+    if (readError) throw readError;
+
+    const existing = (current?.notification_prefs ?? {}) as Record<string, boolean>;
+    const prefs = {
+      enabled: existing.enabled ?? true,
+      new_bid: existing.new_bid ?? true,
+      bid_updates: existing.bid_updates ?? true,
+      gig_updates: existing.gig_updates ?? true,
+    };
+
+    if (data.enabled !== undefined) prefs.enabled = data.enabled;
+    if (data.newBid !== undefined) prefs.new_bid = data.newBid;
+    if (data.bidUpdates !== undefined) prefs.bid_updates = data.bidUpdates;
+    if (data.gigUpdates !== undefined) prefs.gig_updates = data.gigUpdates;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ notification_prefs: prefs })
+      .eq("id", userId);
+    if (error) throw error;
+
+    return { notificationPrefs: prefs };
+  });
+
+/**
  * Holt ein öffentliches Helferprofil
  */
 export const getHelperProfile = createServerFn({ method: "GET" })
@@ -108,7 +154,9 @@ export const getHelperProfile = createServerFn({ method: "GET" })
 
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, display_name, city, postal_code, bio, business_name, available_today, trust_score")
+      .select(
+        "id, display_name, city, postal_code, bio, business_name, available_today, vacation_mode, trust_score",
+      )
       .eq("id", data.helperId)
       .single();
 
