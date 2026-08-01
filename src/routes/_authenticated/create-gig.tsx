@@ -14,7 +14,10 @@ import {
   Clock,
   ChevronLeft,
 } from "lucide-react";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import {
+  DashboardShell,
+  type DashboardNavItem,
+} from "@/components/dashboard/dashboard-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createGig } from "@/lib/gigs.functions";
+import { SERVICE_TYPES } from "@/lib/service-types";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -36,26 +40,22 @@ export const Route = createFileRoute("/_authenticated/create-gig")({
   component: CreateGigPage,
 });
 
-const SERVICE_TYPES = [
-  { value: "rasenmähen", label: "🌿 Rasenmähen" },
-  { value: "heckenschnitt", label: "✂️ Heckenschnitt" },
-  { value: "unkraut", label: "🌱 Unkraut jäten" },
-  { value: "blumenbeete", label: "🌸 Blumenbeete pflegen" },
-  { value: "laub", label: "🍂 Laub entfernen" },
-  { value: "baumpflege", label: "🌳 Baumpflege" },
-  { value: "gartendesign", label: "🎨 Gartendesign / Umgestaltung" },
-  { value: "bewässerung", label: "💧 Bewässerungsanlage" },
-  { value: "sonstiges", label: "🔧 Sonstiges" },
-];
-
 const AGE_GROUPS = [
   {
     value: "helper_youth",
     label: "Jugendliche (13–17)",
     desc: "Leichte Arbeit, max. 2h/Tag, Mo–Fr 08–18 Uhr",
   },
-  { value: "helper_adult", label: "Nachbarn (18+)", desc: "Gelegenheitshelfer" },
-  { value: "helper_pro", label: "Profi-Gärtner", desc: "Gewerblich, mit Rechnung" },
+  {
+    value: "helper_adult",
+    label: "Nachbarn (18+)",
+    desc: "Gelegenheitshelfer",
+  },
+  {
+    value: "helper_pro",
+    label: "Profi-Gärtner",
+    desc: "Gewerblich, mit Rechnung",
+  },
 ];
 
 function CreateGigPage() {
@@ -99,7 +99,9 @@ function CreateGigPage() {
       navigate({ to: "/my-gigs" });
     },
     onError: (err) => {
-      toast.error((err as Error).message || "Fehler beim Erstellen des Auftrags");
+      toast.error(
+        (err as Error).message || "Fehler beim Erstellen des Auftrags",
+      );
     },
   });
 
@@ -116,7 +118,12 @@ function CreateGigPage() {
       href: "/dashboard",
       icon: <BarChart3 className="size-4" />,
     },
-    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
+    {
+      key: "inbox",
+      label: "Postfach",
+      href: "/inbox",
+      icon: <Mail className="size-4" />,
+    },
     {
       key: "my-gigs",
       label: "Meine Aufträge",
@@ -132,7 +139,11 @@ function CreateGigPage() {
   ];
 
   return (
-    <DashboardShell title="Auftrag erstellen" navItems={navItems} activeKey="create-gig">
+    <DashboardShell
+      title="Auftrag erstellen"
+      navItems={navItems}
+      activeKey="create-gig"
+    >
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/my-gigs">
@@ -143,7 +154,8 @@ function CreateGigPage() {
         <div>
           <h1 className="font-brand text-2xl">Neuen Auftrag erstellen</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Beschreibe was du brauchst – Helfer in deiner Nähe machen ein Angebot.
+            Beschreibe was du brauchst – Helfer in deiner Nähe machen ein
+            Angebot.
           </p>
         </div>
       </div>
@@ -220,7 +232,10 @@ function CreateGigPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="address" className="text-sm flex items-center gap-1">
+                  <Label
+                    htmlFor="address"
+                    className="text-sm flex items-center gap-1"
+                  >
                     <MapPin className="size-3" /> Adresse *
                   </Label>
                   <Input
@@ -247,7 +262,10 @@ function CreateGigPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="scheduledDate" className="text-sm flex items-center gap-1">
+                  <Label
+                    htmlFor="scheduledDate"
+                    className="text-sm flex items-center gap-1"
+                  >
                     <Calendar className="size-3" /> Wunschtermin
                   </Label>
                   <Input
@@ -274,7 +292,10 @@ function CreateGigPage() {
               </div>
 
               <div>
-                <Label htmlFor="durationHours" className="text-sm flex items-center gap-1">
+                <Label
+                  htmlFor="durationHours"
+                  className="text-sm flex items-center gap-1"
+                >
                   <Clock className="size-3" /> Voraussichtliche Dauer (Stunden)
                 </Label>
                 <Select value={durationHours} onValueChange={setDurationHours}>
@@ -282,11 +303,13 @@ function CreateGigPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {["1", "1.5", "2", "2.5", "3", "4", "5", "6", "8"].map((h) => (
-                      <SelectItem key={h} value={h}>
-                        {h} Stunden
-                      </SelectItem>
-                    ))}
+                    {["1", "1.5", "2", "2.5", "3", "4", "5", "6", "8"].map(
+                      (h) => (
+                        <SelectItem key={h} value={h}>
+                          {h} Stunden
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -304,7 +327,10 @@ function CreateGigPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="budget" className="text-sm flex items-center gap-1">
+                <Label
+                  htmlFor="budget"
+                  className="text-sm flex items-center gap-1"
+                >
                   <Euro className="size-3" /> Maximalbudget (€) *
                 </Label>
                 <div className="relative mt-1">
@@ -343,7 +369,9 @@ function CreateGigPage() {
                         >
                           {ag.label}
                         </label>
-                        <p className="text-xs text-muted-foreground mt-0.5">{ag.desc}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {ag.desc}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -362,12 +390,15 @@ function CreateGigPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Titel</span>
-                  <span className="font-medium truncate max-w-[140px]">{title || "—"}</span>
+                  <span className="font-medium truncate max-w-[140px]">
+                    {title || "—"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Leistung</span>
                   <span className="font-medium">
-                    {SERVICE_TYPES.find((s) => s.value === serviceType)?.label || "—"}
+                    {SERVICE_TYPES.find((s) => s.value === serviceType)
+                      ?.label || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -418,7 +449,8 @@ function CreateGigPage() {
               </Button>
 
               <p className="text-[11px] text-muted-foreground text-center">
-                Der Auftrag ist sofort sichtbar. Du kannst ihn jederzeit löschen.
+                Der Auftrag ist sofort sichtbar. Du kannst ihn jederzeit
+                löschen.
               </p>
             </CardContent>
           </Card>
