@@ -14,6 +14,7 @@ import {
   Star,
   Shield,
   Heart,
+  Bell,
 } from "lucide-react";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,9 +23,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { getMyProfile, updateProfile, getMyFavorites } from "@/lib/profile.functions";
+import {
+  getMyProfile,
+  updateProfile,
+  getMyFavorites,
+  updateNotificationPrefs,
+} from "@/lib/profile.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -77,6 +84,18 @@ function ProfilePage() {
     onError: (err) => toast.error((err as Error).message),
   });
 
+  const notificationPrefsFn = useServerFn(updateNotificationPrefs);
+  const notificationPrefsMutation = useMutation({
+    mutationFn: (input: {
+      enabled?: boolean;
+      newBid?: boolean;
+      bidUpdates?: boolean;
+      gigUpdates?: boolean;
+    }) => notificationPrefsFn({ data: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-profile"] }),
+    onError: (err) => toast.error((err as Error).message),
+  });
+
   const startEditing = () => {
     const p = profileQuery.data?.profile;
     if (!p) return;
@@ -112,6 +131,13 @@ function ProfilePage() {
   const isHelper = roles.some((r) => r.startsWith("helper_"));
   const isPro = roles.includes("helper_pro");
   const favorites = favoritesQuery.data?.favorites ?? [];
+  const rawPrefs = (profile?.notification_prefs ?? {}) as Record<string, boolean>;
+  const notificationPrefs = {
+    enabled: rawPrefs.enabled ?? true,
+    newBid: rawPrefs.new_bid ?? true,
+    bidUpdates: rawPrefs.bid_updates ?? true,
+    gigUpdates: rawPrefs.gig_updates ?? true,
+  };
 
   return (
     <DashboardShell title="Mein Profil" navItems={navItems} activeKey="profile">
@@ -395,6 +421,65 @@ function ProfilePage() {
                     year: "numeric",
                   })}
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-glass-border bg-glass backdrop-blur">
+              <CardContent className="pt-5 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Bell className="size-3.5" />
+                  Benachrichtigungen
+                </p>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">E-Mail-Benachrichtigungen</span>
+                  <Switch
+                    checked={notificationPrefs.enabled}
+                    disabled={notificationPrefsMutation.isPending}
+                    onCheckedChange={(checked) =>
+                      notificationPrefsMutation.mutate({ enabled: checked })
+                    }
+                  />
+                </div>
+
+                {notificationPrefs.enabled && (
+                  <div className="space-y-2 pl-0.5">
+                    {!isHelper && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Neue Gebote auf meine Aufträge</span>
+                        <Switch
+                          checked={notificationPrefs.newBid}
+                          disabled={notificationPrefsMutation.isPending}
+                          onCheckedChange={(checked) =>
+                            notificationPrefsMutation.mutate({ newBid: checked })
+                          }
+                        />
+                      </div>
+                    )}
+                    {isHelper && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Rückmeldungen zu meinen Geboten</span>
+                        <Switch
+                          checked={notificationPrefs.bidUpdates}
+                          disabled={notificationPrefsMutation.isPending}
+                          onCheckedChange={(checked) =>
+                            notificationPrefsMutation.mutate({ bidUpdates: checked })
+                          }
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Auftragsstatus-Updates</span>
+                      <Switch
+                        checked={notificationPrefs.gigUpdates}
+                        disabled={notificationPrefsMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          notificationPrefsMutation.mutate({ gigUpdates: checked })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
