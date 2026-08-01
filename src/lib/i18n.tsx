@@ -104,6 +104,14 @@ const de: Dict = {
   "dashboard.helper.available": "Ich arbeite heute",
   "dashboard.helper.unavailable": "Heute Pause",
 
+  "dashboard.helper.vacation.label": "Urlaubsmodus",
+  "dashboard.helper.vacation.returnDateLabel": "Rückkehrdatum (optional)",
+  "dashboard.helper.vacation.backOn": "Zurück ab",
+  "dashboard.helper.vacation.activeNoDate": "Aktiv, kein Rückkehrdatum hinterlegt",
+  "dashboard.helper.vacation.bannerTitle": "Urlaubsmodus aktiv",
+  "dashboard.helper.vacation.bannerBody":
+    "Du bist als \"nicht verfügbar\" markiert und kannst aktuell keine Gebote abgeben. Kunden sehen dich nicht als buchbar.",
+
   "dashboard.helper.stat.earnings": "Verdienst (7 Tage)",
   "dashboard.helper.stat.vsLastWeek": "vs. letzte Woche",
   "dashboard.helper.stat.rating": "Bewertung",
@@ -336,6 +344,14 @@ const en: Dict = {
   "dashboard.helper.greeting": "Welcome back",
   "dashboard.helper.available": "Working today",
   "dashboard.helper.unavailable": "Off today",
+
+  "dashboard.helper.vacation.label": "Vacation mode",
+  "dashboard.helper.vacation.returnDateLabel": "Return date (optional)",
+  "dashboard.helper.vacation.backOn": "Back on",
+  "dashboard.helper.vacation.activeNoDate": "Active, no return date set",
+  "dashboard.helper.vacation.bannerTitle": "Vacation mode active",
+  "dashboard.helper.vacation.bannerBody":
+    "You're marked as unavailable and can't place bids right now. Customers won't see you as bookable.",
 
   "dashboard.helper.stat.earnings": "Earnings (7 days)",
   "dashboard.helper.stat.vsLastWeek": "vs last week",
