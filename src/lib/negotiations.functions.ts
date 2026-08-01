@@ -40,6 +40,18 @@ export const createBid = createServerFn({ method: "POST" })
       throw new Error("Nur Helfer können Gebote abgeben");
     }
 
+    const { data: helperProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("display_name, vacation_mode")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (helperProfile?.vacation_mode) {
+      throw new Error(
+        "Du hast den Urlaubsmodus aktiviert und kannst aktuell keine Gebote abgeben.",
+      );
+    }
+
     // Erstelle Gebot
     const { data: negotiation, error } = await supabase
       .from("negotiations")
@@ -61,6 +73,31 @@ export const createBid = createServerFn({ method: "POST" })
       .update({ status: "negotiating" })
       .eq("id", data.gigId)
       .eq("status", "open");
+
+    // E-Mail-Benachrichtigung an den Kunden: neues Gebot
+    const { data: gig } = await supabase
+      .from("gigs")
+      .select("title, customer_id")
+      .eq("id", data.gigId)
+      .maybeSingle();
+
+    if (gig) {
+      const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+      const { emailTemplate } = await import("@/lib/server/email.server");
+      await notifyUserByEmail({
+        userId: gig.customer_id,
+        category: "new_bid",
+        subject: `Neues Gebot für "${gig.title}"`,
+        html: emailTemplate({
+          heading: "Du hast ein neues Gebot erhalten",
+          bodyLines: [
+            `${helperProfile?.display_name ?? "Ein Helfer"} hat ${(data.bidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} für deinen Auftrag „${gig.title}“ geboten.`,
+          ],
+          ctaLabel: "Gebot ansehen",
+          ctaPath: "/gigs",
+        }),
+      });
+    }
 
     return { negotiation };
   });
@@ -93,6 +130,22 @@ export const counterBid = createServerFn({ method: "POST" })
     if (negotiation.gigs.customer_id !== userId) {
       throw new Error("Nicht autorisiert");
     }
+
+    const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+    const { emailTemplate } = await import("@/lib/server/email.server");
+    await notifyUserByEmail({
+      userId: negotiation.helper_id,
+      category: "bid_updates",
+      subject: "Du hast ein Gegenangebot erhalten",
+      html: emailTemplate({
+        heading: "Gegenangebot erhalten",
+        bodyLines: [
+          `Der Kunde hat dir ein Gegenangebot von ${(data.counterBidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} gemacht.`,
+        ],
+        ctaLabel: "Angebot ansehen",
+        ctaPath: "/gigs",
+      }),
+    });
 
     return { negotiation };
   });
@@ -158,6 +211,24 @@ export const acceptBid = createServerFn({ method: "POST" })
 
     if (escrowError) throw escrowError;
 
+    const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+    const { emailTemplate } = await import("@/lib/server/email.server");
+    await notifyUserByEmail({
+      // @ts-ignore - gigs is joined
+      userId: negotiation.gigs.customer_id,
+      category: "bid_updates",
+      subject: "Dein Auftrag wurde bestätigt",
+      html: emailTemplate({
+        heading: "Ein Helfer wurde zugewiesen",
+        bodyLines: [
+          // @ts-ignore - gigs is joined
+          `Dein Auftrag „${negotiation.gigs.title}“ wurde bestätigt und einem Helfer zugewiesen.`,
+        ],
+        ctaLabel: "Auftrag ansehen",
+        ctaPath: "/gigs",
+      }),
+    });
+
     return { success: true };
   });
 
@@ -190,6 +261,22 @@ export const declineBid = createServerFn({ method: "POST" })
     if (!isCustomer && !isHelper) {
       throw new Error("Nicht autorisiert");
     }
+
+    const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+    const { emailTemplate } = await import("@/lib/server/email.server");
+    // @ts-ignore - gigs is joined
+    const recipientId = isCustomer ? negotiation.helper_id : negotiation.gigs.customer_id;
+    await notifyUserByEmail({
+      userId: recipientId,
+      category: "bid_updates",
+      subject: "Ein Gebot wurde abgelehnt",
+      html: emailTemplate({
+        heading: "Gebot abgelehnt",
+        bodyLines: ["Ein Gebot für einen deiner Aufträge wurde abgelehnt."],
+        ctaLabel: isCustomer ? "Aufträge finden" : "Meine Aufträge",
+        ctaPath: isCustomer ? "/marketplace" : "/gigs",
+      }),
+    });
 
     return { negotiation };
   });
