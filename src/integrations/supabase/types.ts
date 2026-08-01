@@ -369,10 +369,13 @@ export type Database = {
           display_name: string;
           id: string;
           language: string;
+          notification_prefs: Json;
           postal_code: string | null;
           trust_score: number;
           updated_at: string;
           ust_id: string | null;
+          vacation_mode: boolean;
+          vacation_return_date: string | null;
           verified_at: string | null;
         };
         Insert: {
@@ -384,10 +387,13 @@ export type Database = {
           display_name?: string;
           id: string;
           language?: string;
+          notification_prefs?: Json;
           postal_code?: string | null;
           trust_score?: number;
           updated_at?: string;
           ust_id?: string | null;
+          vacation_mode?: boolean;
+          vacation_return_date?: string | null;
           verified_at?: string | null;
         };
         Update: {
@@ -399,10 +405,13 @@ export type Database = {
           display_name?: string;
           id?: string;
           language?: string;
+          notification_prefs?: Json;
           postal_code?: string | null;
           trust_score?: number;
           updated_at?: string;
           ust_id?: string | null;
+          vacation_mode?: boolean;
+          vacation_return_date?: string | null;
           verified_at?: string | null;
         };
         Relationships: [];
