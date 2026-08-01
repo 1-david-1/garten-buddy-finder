@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Euro,
   Mail,
+  Palmtree,
   Star,
   TrendingDown,
   TrendingUp,
@@ -37,7 +38,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
-import { getHelperDashboard, setAvailability, submitTaxId } from "@/lib/helper-dashboard.functions";
+import {
+  getHelperDashboard,
+  setAvailability,
+  setVacationMode,
+  submitTaxId,
+} from "@/lib/helper-dashboard.functions";
 import { useI18n } from "@/lib/i18n";
 
 interface RecentGig {
@@ -90,6 +96,14 @@ export function HelperDashboard() {
   const availabilityFn = useServerFn(setAvailability);
   const availabilityMutation = useMutation({
     mutationFn: (availableToday: boolean) => availabilityFn({ data: { availableToday } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
+  });
+
+  const [vacationReturnDateInput, setVacationReturnDateInput] = useState("");
+  const vacationFn = useServerFn(setVacationMode);
+  const vacationMutation = useMutation({
+    mutationFn: (input: { vacationMode: boolean; returnDate: string | null }) =>
+      vacationFn({ data: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
   });
 
@@ -172,7 +186,7 @@ export function HelperDashboard() {
             {profile.displayName ? `, ${profile.displayName}` : ""}
           </h1>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3 rounded-2xl border border-glass-border bg-glass px-4 py-2.5 backdrop-blur">
             <span
               className={`h-2.5 w-2.5 rounded-full ${profile.availableToday ? "bg-primary shadow-[0_0_8px_var(--color-primary)]" : "bg-muted-foreground"}`}
@@ -185,7 +199,7 @@ export function HelperDashboard() {
             <Switch
               checked={profile.availableToday}
               onCheckedChange={(checked) => availabilityMutation.mutate(checked)}
-              disabled={availabilityMutation.isPending}
+              disabled={availabilityMutation.isPending || profile.vacationMode}
               aria-label={
                 profile.availableToday
                   ? t("dashboard.helper.available")
@@ -196,8 +210,57 @@ export function HelperDashboard() {
           {availabilityMutation.isError && (
             <span className="text-xs text-destructive">{t("dashboard.helper.error.generic")}</span>
           )}
+
+          <div className="flex flex-col items-end gap-2 rounded-2xl border border-glass-border bg-glass px-4 py-2.5 backdrop-blur">
+            <div className="flex items-center gap-3">
+              <Palmtree
+                className={`size-4 ${profile.vacationMode ? "text-primary" : "text-muted-foreground"}`}
+              />
+              <span className="text-sm font-medium">{t("dashboard.helper.vacation.label")}</span>
+              <Switch
+                checked={profile.vacationMode}
+                disabled={vacationMutation.isPending}
+                onCheckedChange={(checked) => {
+                  if (!checked) {
+                    vacationMutation.mutate({ vacationMode: false, returnDate: null });
+                    return;
+                  }
+                  vacationMutation.mutate({
+                    vacationMode: true,
+                    returnDate: vacationReturnDateInput || null,
+                  });
+                }}
+                aria-label={t("dashboard.helper.vacation.label")}
+              />
+            </div>
+            {profile.vacationMode ? (
+              <p className="text-xs text-muted-foreground">
+                {profile.vacationReturnDate
+                  ? `${t("dashboard.helper.vacation.backOn")} ${new Date(profile.vacationReturnDate).toLocaleDateString(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric" })}`
+                  : t("dashboard.helper.vacation.activeNoDate")}
+              </p>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={vacationReturnDateInput}
+                  onChange={(e) => setVacationReturnDateInput(e.target.value)}
+                  className="h-8 w-36 text-xs"
+                  aria-label={t("dashboard.helper.vacation.returnDateLabel")}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {profile.vacationMode && (
+        <Alert className="mt-6 border-primary/30 bg-primary/5">
+          <Palmtree className="size-4 text-primary" />
+          <AlertTitle>{t("dashboard.helper.vacation.bannerTitle")}</AlertTitle>
+          <AlertDescription>{t("dashboard.helper.vacation.bannerBody")}</AlertDescription>
+        </Alert>
+      )}
 
       {isYouth && (
         <Alert className="mt-6 border-primary/30 bg-primary/5">
