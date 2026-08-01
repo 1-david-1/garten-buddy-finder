@@ -15,7 +15,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       [
         supabase
           .from("profiles")
-          .select("display_name, available_today")
+          .select("display_name, available_today, vacation_mode, vacation_return_date")
           .eq("id", userId)
           .maybeSingle(),
         supabase.from("profile_private").select("tax_id, birthdate").eq("id", userId).maybeSingle(),
@@ -125,10 +125,26 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       customerName: nameById.get(g.customer_id) ?? "—",
     }));
 
+    // Urlaubsmodus läuft automatisch aus, sobald das Rückkehrdatum erreicht ist
+    // (lazy, ohne Cronjob - wird beim nächsten Laden korrigiert).
+    const vacationReturnDate = profileRes.data?.vacation_return_date ?? null;
+    const vacationExpired =
+      vacationReturnDate !== null && new Date(vacationReturnDate).getTime() <= Date.now();
+    const vacationMode = (profileRes.data?.vacation_mode ?? false) && !vacationExpired;
+
+    if (vacationExpired && profileRes.data?.vacation_mode) {
+      await supabase
+        .from("profiles")
+        .update({ vacation_mode: false, vacation_return_date: null })
+        .eq("id", userId);
+    }
+
     return {
       profile: {
         displayName: profileRes.data?.display_name ?? "",
         availableToday: profileRes.data?.available_today ?? false,
+        vacationMode,
+        vacationReturnDate: vacationExpired ? null : vacationReturnDate,
         hasTaxId: Boolean(privateRes.data?.tax_id),
         birthdate: privateRes.data?.birthdate ?? null,
       },
@@ -157,6 +173,37 @@ export const setAvailability = createServerFn({ method: "POST" })
       .update({ available_today: data.availableToday })
       .eq("id", context.userId);
     if (error) throw error;
+    return { ok: true };
+  });
+
+export const setVacationMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        vacationMode: z.boolean(),
+        returnDate: z.string().date().nullable().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const update: {
+      vacation_mode: boolean;
+      vacation_return_date: string | null;
+      available_today?: boolean;
+    } = {
+      vacation_mode: data.vacationMode,
+      vacation_return_date: data.vacationMode ? (data.returnDate ?? null) : null,
+    };
+    // Wer in den Urlaub geht, gilt automatisch auch nicht mehr als "heute verfügbar".
+    if (data.vacationMode) update.available_today = false;
+
+    const { error } = await context.supabase
+      .from("profiles")
+      .update(update)
+      .eq("id", context.userId);
+    if (error) throw error;
+
     return { ok: true };
   });
 
