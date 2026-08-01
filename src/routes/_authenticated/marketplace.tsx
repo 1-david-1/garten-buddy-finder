@@ -16,7 +16,10 @@ import {
   Send,
   CheckCircle2,
 } from "lucide-react";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import {
+  DashboardShell,
+  type DashboardNavItem,
+} from "@/components/dashboard/dashboard-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +44,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getAvailableGigs } from "@/lib/gigs.functions";
 import { createBid, getMyBids } from "@/lib/negotiations.functions";
 import { toast } from "sonner";
+import { formatEuros } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/marketplace")({
   component: MarketplacePage,
@@ -57,10 +61,6 @@ const SERVICE_LABELS: Record<string, string> = {
   bewässerung: "💧 Bewässerung",
   sonstiges: "🔧 Sonstiges",
 };
-
-function formatEuros(cents: number) {
-  return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
-}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -86,7 +86,10 @@ function MarketplacePage() {
   const createBidFn = useServerFn(createBid);
   const getMyBidsFn = useServerFn(getMyBids);
 
-  const gigsQuery = useQuery({ queryKey: ["available-gigs"], queryFn: () => getGigsFn() });
+  const gigsQuery = useQuery({
+    queryKey: ["available-gigs"],
+    queryFn: () => getGigsFn(),
+  });
   const myBidsQuery = useQuery({
     queryKey: ["my-bids"],
     queryFn: () => getMyBidsFn(),
@@ -110,7 +113,8 @@ function MarketplacePage() {
       setBidAmount("");
       setBidMessage("");
     },
-    onError: (err) => toast.error((err as Error).message || "Fehler beim Abgeben des Angebots"),
+    onError: (err) =>
+      toast.error((err as Error).message || "Fehler beim Abgeben des Angebots"),
   });
 
   const navItems: DashboardNavItem[] = [
@@ -120,7 +124,12 @@ function MarketplacePage() {
       href: "/dashboard",
       icon: <BarChart3 className="size-4" />,
     },
-    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
+    {
+      key: "inbox",
+      label: "Postfach",
+      href: "/inbox",
+      icon: <Mail className="size-4" />,
+    },
     {
       key: "marketplace",
       label: "Aufträge finden",
@@ -144,16 +153,22 @@ function MarketplacePage() {
   const gigs = gigsQuery.data?.gigs ?? [];
 
   const filteredGigs = gigs.filter((gig: any) => {
-    if (serviceFilter !== "all" && gig.service_type !== serviceFilter) return false;
+    if (serviceFilter !== "all" && gig.service_type !== serviceFilter)
+      return false;
     if (locationFilter.trim()) {
-      const loc = `${gig.postal_code ?? ""} ${gig.profiles?.city ?? ""}`.toLowerCase();
+      const loc =
+        `${gig.postal_code ?? ""} ${gig.profiles?.city ?? ""}`.toLowerCase();
       if (!loc.includes(locationFilter.toLowerCase())) return false;
     }
     return true;
   });
 
   return (
-    <DashboardShell title="Aufträge finden" navItems={navItems} activeKey="marketplace">
+    <DashboardShell
+      title="Aufträge finden"
+      navItems={navItems}
+      activeKey="marketplace"
+    >
       <div className="mb-6">
         <h1 className="font-brand text-2xl">Offene Aufträge</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
@@ -232,7 +247,9 @@ function MarketplacePage() {
 
           {/* Gig-Liste */}
           {gigsQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Lädt Aufträge…</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              Lädt Aufträge…
+            </p>
           ) : filteredGigs.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Search className="size-10 text-muted-foreground/30" />
@@ -256,22 +273,28 @@ function MarketplacePage() {
                   <CardContent className="pt-4 pb-4">
                     <div className="flex items-start gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xl">
-                        {SERVICE_LABELS[gig.service_type]?.split(" ")[0] ?? "🔧"}
+                        {SERVICE_LABELS[gig.service_type]?.split(" ")[0] ??
+                          "🔧"}
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <h3 className="font-semibold leading-snug">{gig.title}</h3>
+                            <h3 className="font-semibold leading-snug">
+                              {gig.title}
+                            </h3>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {SERVICE_LABELS[gig.service_type] ?? gig.service_type}
+                              {SERVICE_LABELS[gig.service_type] ??
+                                gig.service_type}
                             </p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-base font-bold text-primary">
                               {formatEuros(gig.budget_cents)}
                             </p>
-                            <p className="text-[10px] text-muted-foreground">Budget</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              Budget
+                            </p>
                           </div>
                         </div>
 
@@ -279,19 +302,25 @@ function MarketplacePage() {
                           <span className="flex items-center gap-1">
                             <MapPin className="size-3" />
                             {gig.postal_code}
-                            {gig.profiles?.city ? ` · ${gig.profiles.city}` : ""}
+                            {gig.profiles?.city
+                              ? ` · ${gig.profiles.city}`
+                              : ""}
                           </span>
                           {gig.scheduled_at && (
                             <span className="flex items-center gap-1">
                               <Calendar className="size-3" />
-                              {new Date(gig.scheduled_at).toLocaleDateString("de-DE")}
+                              {new Date(gig.scheduled_at).toLocaleDateString(
+                                "de-DE",
+                              )}
                             </span>
                           )}
                           <span className="flex items-center gap-1">
                             <Clock className="size-3" />
                             {gig.duration_minutes / 60}h
                           </span>
-                          <span className="text-muted-foreground/50">{timeAgo(gig.created_at)}</span>
+                          <span className="text-muted-foreground/50">
+                            {timeAgo(gig.created_at)}
+                          </span>
                         </div>
 
                         {gig.description && (
@@ -306,7 +335,9 @@ function MarketplacePage() {
                       <div className="flex items-center gap-2">
                         <Avatar className="size-6">
                           <AvatarFallback className="text-[9px] bg-muted">
-                            {(gig.profiles?.display_name ?? "K").slice(0, 1).toUpperCase()}
+                            {(gig.profiles?.display_name ?? "K")
+                              .slice(0, 1)
+                              .toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-xs text-muted-foreground">
@@ -331,7 +362,9 @@ function MarketplacePage() {
       {activeTab === "my-bids" && (
         <div className="space-y-3">
           {myBidsQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Lädt…</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              Lädt…
+            </p>
           ) : !myBidsQuery.data?.negotiations?.length ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Send className="size-10 text-muted-foreground/30" />
@@ -341,11 +374,16 @@ function MarketplacePage() {
             </div>
           ) : (
             myBidsQuery.data.negotiations.map((neg: any) => (
-              <Card key={neg.id} className="border-glass-border bg-glass backdrop-blur">
+              <Card
+                key={neg.id}
+                className="border-glass-border bg-glass backdrop-blur"
+              >
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{neg.gigs?.title ?? "Auftrag"}</h3>
+                      <h3 className="font-semibold truncate">
+                        {neg.gigs?.title ?? "Auftrag"}
+                      </h3>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Kunde: {neg.gigs?.profiles?.display_name ?? "—"}
                       </p>
@@ -385,7 +423,9 @@ function MarketplacePage() {
                     {neg.gigs?.scheduled_at && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Calendar className="size-3" />
-                        {new Date(neg.gigs.scheduled_at).toLocaleDateString("de-DE")}
+                        {new Date(neg.gigs.scheduled_at).toLocaleDateString(
+                          "de-DE",
+                        )}
                       </span>
                     )}
                   </div>
@@ -403,7 +443,10 @@ function MarketplacePage() {
       )}
 
       {/* Bid Dialog */}
-      <Dialog open={!!selectedGig} onOpenChange={(open) => !open && setSelectedGig(null)}>
+      <Dialog
+        open={!!selectedGig}
+        onOpenChange={(open) => !open && setSelectedGig(null)}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Angebot abgeben</DialogTitle>
@@ -418,7 +461,9 @@ function MarketplacePage() {
                   <div className="flex items-center gap-1.5">
                     <MapPin className="size-3.5" />
                     {selectedGig.postal_code}
-                    {selectedGig.profiles?.city ? `, ${selectedGig.profiles.city}` : ""}
+                    {selectedGig.profiles?.city
+                      ? `, ${selectedGig.profiles.city}`
+                      : ""}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="size-3.5" />
@@ -427,7 +472,9 @@ function MarketplacePage() {
                   {selectedGig.scheduled_at && (
                     <div className="flex items-center gap-1.5">
                       <Calendar className="size-3.5" />
-                      {new Date(selectedGig.scheduled_at).toLocaleDateString("de-DE")}
+                      {new Date(selectedGig.scheduled_at).toLocaleDateString(
+                        "de-DE",
+                      )}
                     </div>
                   )}
                   <div className="flex items-center gap-1.5 text-primary font-medium">
@@ -461,8 +508,8 @@ function MarketplacePage() {
                   />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Budget des Kunden: {formatEuros(selectedGig.budget_cents)}. Du kannst weniger
-                  verlangen.
+                  Budget des Kunden: {formatEuros(selectedGig.budget_cents)}. Du
+                  kannst weniger verlangen.
                 </p>
               </div>
 
@@ -502,7 +549,11 @@ function MarketplacePage() {
               <Button
                 className="w-full"
                 onClick={() => bidMutation.mutate()}
-                disabled={bidMutation.isPending || !bidAmount || parseFloat(bidAmount) <= 0}
+                disabled={
+                  bidMutation.isPending ||
+                  !bidAmount ||
+                  parseFloat(bidAmount) <= 0
+                }
               >
                 {bidMutation.isPending ? (
                   "Wird gesendet…"
