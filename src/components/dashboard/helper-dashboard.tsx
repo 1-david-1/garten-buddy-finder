@@ -8,13 +8,21 @@ import {
   ClipboardList,
   Euro,
   Mail,
+  Package,
   Palmtree,
   Star,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -37,7 +45,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import {
+  DashboardShell,
+  type DashboardNavItem,
+} from "@/components/dashboard/dashboard-shell";
 import {
   getHelperDashboard,
   setAvailability,
@@ -63,10 +74,16 @@ function useHelperDashboardData() {
 }
 
 function formatEuros(cents: number, locale: string) {
-  return (cents / 100).toLocaleString(locale, { style: "currency", currency: "EUR" });
+  return (cents / 100).toLocaleString(locale, {
+    style: "currency",
+    currency: "EUR",
+  });
 }
 
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariant: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
   completed: "default",
   in_progress: "secondary",
   assigned: "secondary",
@@ -95,8 +112,10 @@ export function HelperDashboard() {
 
   const availabilityFn = useServerFn(setAvailability);
   const availabilityMutation = useMutation({
-    mutationFn: (availableToday: boolean) => availabilityFn({ data: { availableToday } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
+    mutationFn: (availableToday: boolean) =>
+      availabilityFn({ data: { availableToday } }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
   });
 
   const [vacationReturnDateInput, setVacationReturnDateInput] = useState("");
@@ -104,7 +123,8 @@ export function HelperDashboard() {
   const vacationMutation = useMutation({
     mutationFn: (input: { vacationMode: boolean; returnDate: string | null }) =>
       vacationFn({ data: input }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
   });
 
   const taxIdFn = useServerFn(submitTaxId);
@@ -142,6 +162,12 @@ export function HelperDashboard() {
       icon: <ClipboardList className="size-4" />,
     },
     {
+      key: "sell",
+      label: "Meine Angebote",
+      href: "/sell",
+      icon: <Package className="size-4" />,
+    },
+    {
       key: "earnings",
       label: t("dashboard.nav.earnings"),
       href: "/earnings",
@@ -151,7 +177,11 @@ export function HelperDashboard() {
 
   if (q.isError) {
     return (
-      <DashboardShell title={t("dashboard.helper.title")} navItems={navItems} activeKey="dashboard">
+      <DashboardShell
+        title={t("dashboard.helper.title")}
+        navItems={navItems}
+        activeKey="dashboard"
+      >
         <Alert variant="destructive">
           <AlertTitle>{t("dashboard.helper.error.title")}</AlertTitle>
           <AlertDescription>
@@ -164,22 +194,35 @@ export function HelperDashboard() {
 
   if (q.isLoading || !q.data) {
     return (
-      <DashboardShell title={t("dashboard.helper.title")} navItems={navItems} activeKey="dashboard">
+      <DashboardShell
+        title={t("dashboard.helper.title")}
+        navItems={navItems}
+        activeKey="dashboard"
+      >
         <p className="text-muted-foreground">{t("common.loading")}</p>
       </DashboardShell>
     );
   }
 
   const { profile, stats, chart, pstg, recentGigs } = q.data;
-  const isYouth = profile.birthdate ? ageFromISO(profile.birthdate) < 18 : false;
+  const isYouth = profile.birthdate
+    ? ageFromISO(profile.birthdate) < 18
+    : false;
   const pstgRatio = Math.max(
     pstg.txCount / pstg.txThreshold,
     pstg.grossCents / pstg.grossThreshold,
   );
 
   return (
-    <DashboardShell title={t("dashboard.helper.title")} navItems={navItems} activeKey="dashboard">
-      <div id="top" className="flex flex-wrap items-center justify-between gap-4">
+    <DashboardShell
+      title={t("dashboard.helper.title")}
+      navItems={navItems}
+      activeKey="dashboard"
+    >
+      <div
+        id="top"
+        className="flex flex-wrap items-center justify-between gap-4"
+      >
         <div>
           <h1 className="font-brand text-2xl">
             {t("dashboard.helper.greeting")}
@@ -198,7 +241,9 @@ export function HelperDashboard() {
             </span>
             <Switch
               checked={profile.availableToday}
-              onCheckedChange={(checked) => availabilityMutation.mutate(checked)}
+              onCheckedChange={(checked) =>
+                availabilityMutation.mutate(checked)
+              }
               disabled={availabilityMutation.isPending || profile.vacationMode}
               aria-label={
                 profile.availableToday
@@ -208,7 +253,9 @@ export function HelperDashboard() {
             />
           </div>
           {availabilityMutation.isError && (
-            <span className="text-xs text-destructive">{t("dashboard.helper.error.generic")}</span>
+            <span className="text-xs text-destructive">
+              {t("dashboard.helper.error.generic")}
+            </span>
           )}
 
           <div className="flex flex-col items-end gap-2 rounded-2xl border border-glass-border bg-glass px-4 py-2.5 backdrop-blur">
@@ -216,13 +263,18 @@ export function HelperDashboard() {
               <Palmtree
                 className={`size-4 ${profile.vacationMode ? "text-primary" : "text-muted-foreground"}`}
               />
-              <span className="text-sm font-medium">{t("dashboard.helper.vacation.label")}</span>
+              <span className="text-sm font-medium">
+                {t("dashboard.helper.vacation.label")}
+              </span>
               <Switch
                 checked={profile.vacationMode}
                 disabled={vacationMutation.isPending}
                 onCheckedChange={(checked) => {
                   if (!checked) {
-                    vacationMutation.mutate({ vacationMode: false, returnDate: null });
+                    vacationMutation.mutate({
+                      vacationMode: false,
+                      returnDate: null,
+                    });
                     return;
                   }
                   vacationMutation.mutate({
@@ -258,7 +310,9 @@ export function HelperDashboard() {
         <Alert className="mt-6 border-primary/30 bg-primary/5">
           <Palmtree className="size-4 text-primary" />
           <AlertTitle>{t("dashboard.helper.vacation.bannerTitle")}</AlertTitle>
-          <AlertDescription>{t("dashboard.helper.vacation.bannerBody")}</AlertDescription>
+          <AlertDescription>
+            {t("dashboard.helper.vacation.bannerBody")}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -266,7 +320,9 @@ export function HelperDashboard() {
         <Alert className="mt-6 border-primary/30 bg-primary/5">
           <CalendarClock className="size-4 text-primary" />
           <AlertTitle>{t("dashboard.helper.youth.title")}</AlertTitle>
-          <AlertDescription>{t("dashboard.helper.youth.banner")}</AlertDescription>
+          <AlertDescription>
+            {t("dashboard.helper.youth.banner")}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -290,7 +346,13 @@ export function HelperDashboard() {
                 ) : (
                   <TrendingDown className="size-3.5 text-destructive" />
                 )}
-                <span className={stats.earningsTrendPct >= 0 ? "text-primary" : "text-destructive"}>
+                <span
+                  className={
+                    stats.earningsTrendPct >= 0
+                      ? "text-primary"
+                      : "text-destructive"
+                  }
+                >
                   {stats.earningsTrendPct >= 0 ? "+" : ""}
                   {stats.earningsTrendPct.toFixed(1)}%
                 </span>
@@ -316,7 +378,9 @@ export function HelperDashboard() {
           <CardContent>
             <div className="text-2xl font-semibold">
               {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
-              {stats.avgRating !== null && <span className="ml-1 text-base text-primary">★</span>}
+              {stats.avgRating !== null && (
+                <span className="ml-1 text-base text-primary">★</span>
+              )}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {stats.ratingCount > 0
@@ -335,7 +399,9 @@ export function HelperDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
-              {stats.completionRate !== null ? `${Math.round(stats.completionRate * 100)}%` : "—"}
+              {stats.completionRate !== null
+                ? `${Math.round(stats.completionRate * 100)}%`
+                : "—"}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {stats.completionRate !== null
@@ -354,19 +420,26 @@ export function HelperDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">{stats.completedCount}</div>
-            <p className="mt-1 text-xs text-muted-foreground">{t("dashboard.helper.stat.total")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("dashboard.helper.stat.total")}
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Chart + PStTG monitor */}
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Card id="earnings-chart" className="border-glass-border bg-glass backdrop-blur">
+        <Card
+          id="earnings-chart"
+          className="border-glass-border bg-glass backdrop-blur"
+        >
           <CardHeader>
             <CardTitle className="font-brand text-lg">
               {t("dashboard.helper.chart.title")}
             </CardTitle>
-            <p className="text-sm text-muted-foreground">{t("dashboard.helper.chart.sub")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.helper.chart.sub")}
+            </p>
           </CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -386,9 +459,16 @@ export function HelperDashboard() {
                     borderRadius: 12,
                     fontSize: 12,
                   }}
-                  formatter={(value: number) => [`${value} €`, t("dashboard.helper.chart.title")]}
+                  formatter={(value: number) => [
+                    `${value} €`,
+                    t("dashboard.helper.chart.title"),
+                  ]}
                 />
-                <Bar dataKey="euros" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+                <Bar
+                  dataKey="euros"
+                  fill="var(--color-primary)"
+                  radius={[6, 6, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -396,8 +476,12 @@ export function HelperDashboard() {
 
         <Card className="border-glass-border bg-glass backdrop-blur">
           <CardHeader>
-            <CardTitle className="font-brand text-lg">{t("dashboard.helper.pstg.title")}</CardTitle>
-            <p className="text-sm text-muted-foreground">{t("dashboard.helper.pstg.sub")}</p>
+            <CardTitle className="font-brand text-lg">
+              {t("dashboard.helper.pstg.title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.helper.pstg.sub")}
+            </p>
           </CardHeader>
           <CardContent>
             <Progress value={Math.min(100, pstgRatio * 100)} className="h-2" />
@@ -419,7 +503,8 @@ export function HelperDashboard() {
                     className="mt-3 flex gap-2"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      if (taxIdInput.trim()) taxIdMutation.mutate(taxIdInput.trim());
+                      if (taxIdInput.trim())
+                        taxIdMutation.mutate(taxIdInput.trim());
                     }}
                   >
                     <Input
@@ -428,7 +513,11 @@ export function HelperDashboard() {
                       onChange={(e) => setTaxIdInput(e.target.value)}
                       className="h-9"
                     />
-                    <Button type="submit" size="sm" disabled={taxIdMutation.isPending}>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={taxIdMutation.isPending}
+                    >
                       {t("dashboard.helper.pstg.taxIdSubmit")}
                     </Button>
                   </form>
@@ -445,27 +534,42 @@ export function HelperDashboard() {
       </div>
 
       {/* Recent orders */}
-      <Card id="recent-gigs" className="mt-6 border-glass-border bg-glass backdrop-blur">
+      <Card
+        id="recent-gigs"
+        className="mt-6 border-glass-border bg-glass backdrop-blur"
+      >
         <CardHeader>
-          <CardTitle className="font-brand text-lg">{t("dashboard.helper.orders.title")}</CardTitle>
-          <p className="text-sm text-muted-foreground">{t("dashboard.helper.orders.sub")}</p>
+          <CardTitle className="font-brand text-lg">
+            {t("dashboard.helper.orders.title")}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {t("dashboard.helper.orders.sub")}
+          </p>
         </CardHeader>
         <CardContent>
           {recentGigs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("dashboard.helper.orders.empty")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.helper.orders.empty")}
+            </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("dashboard.helper.orders.col.title")}</TableHead>
+                  <TableHead>
+                    {t("dashboard.helper.orders.col.title")}
+                  </TableHead>
                   <TableHead className="hidden sm:table-cell">
                     {t("dashboard.helper.orders.col.customer")}
                   </TableHead>
                   <TableHead className="hidden md:table-cell">
                     {t("dashboard.helper.orders.col.date")}
                   </TableHead>
-                  <TableHead>{t("dashboard.helper.orders.col.amount")}</TableHead>
-                  <TableHead>{t("dashboard.helper.orders.col.status")}</TableHead>
+                  <TableHead>
+                    {t("dashboard.helper.orders.col.amount")}
+                  </TableHead>
+                  <TableHead>
+                    {t("dashboard.helper.orders.col.status")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -481,10 +585,14 @@ export function HelperDashboard() {
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
                       {gig.scheduledAt
-                        ? new Date(gig.scheduledAt).toLocaleDateString(intlLocale)
+                        ? new Date(gig.scheduledAt).toLocaleDateString(
+                            intlLocale,
+                          )
                         : "—"}
                     </TableCell>
-                    <TableCell>{formatEuros(gig.budgetCents, intlLocale)}</TableCell>
+                    <TableCell>
+                      {formatEuros(gig.budgetCents, intlLocale)}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={statusVariant[gig.status] ?? "outline"}>
                         {t(`status.${gig.status}`)}
@@ -498,26 +606,37 @@ export function HelperDashboard() {
         </CardContent>
       </Card>
 
-      <Sheet open={selectedGig !== null} onOpenChange={(open) => !open && setSelectedGig(null)}>
+      <Sheet
+        open={selectedGig !== null}
+        onOpenChange={(open) => !open && setSelectedGig(null)}
+      >
         <SheetContent>
           {selectedGig && (
             <>
               <SheetHeader>
                 <SheetTitle>{selectedGig.title}</SheetTitle>
-                <SheetDescription>{t("dashboard.helper.detail.title")}</SheetDescription>
+                <SheetDescription>
+                  {t("dashboard.helper.detail.title")}
+                </SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-4 px-1 text-sm">
                 <div className="flex items-center justify-between border-b border-glass-border pb-3">
                   <span className="text-muted-foreground">
                     {t("dashboard.helper.detail.customer")}
                   </span>
-                  <span className="font-medium">{selectedGig.customerName}</span>
+                  <span className="font-medium">
+                    {selectedGig.customerName}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-b border-glass-border pb-3">
-                  <span className="text-muted-foreground">{t("dashboard.helper.detail.date")}</span>
+                  <span className="text-muted-foreground">
+                    {t("dashboard.helper.detail.date")}
+                  </span>
                   <span className="font-medium">
                     {selectedGig.scheduledAt
-                      ? new Date(selectedGig.scheduledAt).toLocaleString(intlLocale)
+                      ? new Date(selectedGig.scheduledAt).toLocaleString(
+                          intlLocale,
+                        )
                       : "—"}
                   </span>
                 </div>
@@ -525,7 +644,9 @@ export function HelperDashboard() {
                   <span className="text-muted-foreground">
                     {t("dashboard.helper.detail.address")}
                   </span>
-                  <span className="font-medium">{selectedGig.address ?? "—"}</span>
+                  <span className="font-medium">
+                    {selectedGig.address ?? "—"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-b border-glass-border pb-3">
                   <span className="text-muted-foreground">
@@ -539,7 +660,9 @@ export function HelperDashboard() {
                   <span className="text-muted-foreground">
                     {t("dashboard.helper.orders.col.status")}
                   </span>
-                  <Badge variant={statusVariant[selectedGig.status] ?? "outline"}>
+                  <Badge
+                    variant={statusVariant[selectedGig.status] ?? "outline"}
+                  >
                     {t(`status.${selectedGig.status}`)}
                   </Badge>
                 </div>
