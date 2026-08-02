@@ -3,7 +3,12 @@ import { describe, it, expect } from "vitest";
 describe("admin.functions", () => {
   describe("getAdminOverview", () => {
     it("should count active gigs by status correctly", () => {
-      const activeStatuses = new Set(["open", "negotiating", "assigned", "in_progress"]);
+      const activeStatuses = new Set([
+        "open",
+        "negotiating",
+        "assigned",
+        "in_progress",
+      ]);
       const gigs = [
         { status: "open" },
         { status: "negotiating" },
@@ -11,16 +16,33 @@ describe("admin.functions", () => {
         { status: "cancelled" },
         { status: "assigned" },
       ];
-      const activeGigs = gigs.filter((g) => activeStatuses.has(g.status)).length;
+      const activeGigs = gigs.filter((g) =>
+        activeStatuses.has(g.status),
+      ).length;
 
       expect(activeGigs).toBe(3);
     });
 
     it("should only sum gross volume and fees for paid_out escrow rows", () => {
       const escrow = [
-        { bid_cents: 10000, customer_fee_cents: 500, helper_fee_cents: 300, state: "paid_out" },
-        { bid_cents: 5000, customer_fee_cents: 200, helper_fee_cents: 100, state: "held" },
-        { bid_cents: 8000, customer_fee_cents: 400, helper_fee_cents: 250, state: "paid_out" },
+        {
+          bid_cents: 10000,
+          customer_fee_cents: 500,
+          helper_fee_cents: 300,
+          state: "paid_out",
+        },
+        {
+          bid_cents: 5000,
+          customer_fee_cents: 200,
+          helper_fee_cents: 100,
+          state: "held",
+        },
+        {
+          bid_cents: 8000,
+          customer_fee_cents: 400,
+          helper_fee_cents: 250,
+          state: "paid_out",
+        },
       ];
       const paidOut = escrow.filter((e) => e.state === "paid_out");
       const grossVolumeCents = paidOut.reduce((s, e) => s + e.bid_cents, 0);
@@ -34,22 +56,34 @@ describe("admin.functions", () => {
     });
 
     it("should count open disputes from escrow state", () => {
-      const escrow = [{ state: "disputed" }, { state: "held" }, { state: "disputed" }];
+      const escrow = [
+        { state: "disputed" },
+        { state: "held" },
+        { state: "disputed" },
+      ];
       const openDisputes = escrow.filter((e) => e.state === "disputed").length;
 
       expect(openDisputes).toBe(2);
     });
 
     it("should bucket helper vs customer roles for the users KPI", () => {
-      const helperRoleSet = new Set(["helper_youth", "helper_adult", "helper_pro"]);
+      const helperRoleSet = new Set([
+        "helper_youth",
+        "helper_adult",
+        "helper_pro",
+      ]);
       const roles = [
         { user_id: "a", role: "customer" },
         { user_id: "b", role: "helper_pro" },
         { user_id: "c", role: "helper_youth" },
         { user_id: "b", role: "customer" }, // same user can hold both roles
       ];
-      const helperIds = new Set(roles.filter((r) => helperRoleSet.has(r.role)).map((r) => r.user_id));
-      const customerIds = new Set(roles.filter((r) => r.role === "customer").map((r) => r.user_id));
+      const helperIds = new Set(
+        roles.filter((r) => helperRoleSet.has(r.role)).map((r) => r.user_id),
+      );
+      const customerIds = new Set(
+        roles.filter((r) => r.role === "customer").map((r) => r.user_id),
+      );
 
       expect(helperIds.size).toBe(2);
       expect(customerIds.size).toBe(2);
@@ -95,7 +129,9 @@ describe("admin.functions", () => {
       const verifiedAt = input.verified ? new Date().toISOString() : null;
 
       expect(verifiedAt).not.toBeNull();
-      expect(new Date(verifiedAt as string).toString()).not.toBe("Invalid Date");
+      expect(new Date(verifiedAt as string).toString()).not.toBe(
+        "Invalid Date",
+      );
     });
   });
 
@@ -120,10 +156,17 @@ describe("admin.functions", () => {
 
   describe("getAdminGigs", () => {
     it("should merge negotiation counts per gig", () => {
-      const negotiations = [{ gig_id: "g1" }, { gig_id: "g1" }, { gig_id: "g2" }];
+      const negotiations = [
+        { gig_id: "g1" },
+        { gig_id: "g1" },
+        { gig_id: "g2" },
+      ];
       const negotiationCountByGig = new Map<string, number>();
       for (const n of negotiations) {
-        negotiationCountByGig.set(n.gig_id, (negotiationCountByGig.get(n.gig_id) ?? 0) + 1);
+        negotiationCountByGig.set(
+          n.gig_id,
+          (negotiationCountByGig.get(n.gig_id) ?? 0) + 1,
+        );
       }
 
       expect(negotiationCountByGig.get("g1")).toBe(2);
@@ -132,9 +175,16 @@ describe("admin.functions", () => {
     });
 
     it("should filter by status unless 'all' is requested", () => {
-      const gigs = [{ status: "open" }, { status: "completed" }, { status: "open" }];
-      const filterStatus = "open";
-      const filtered = filterStatus === "all" ? gigs : gigs.filter((g) => g.status === filterStatus);
+      const gigs = [
+        { status: "open" },
+        { status: "completed" },
+        { status: "open" },
+      ];
+      const filterStatus: string = "open";
+      const filtered =
+        filterStatus === "all"
+          ? gigs
+          : gigs.filter((g) => g.status === filterStatus);
 
       expect(filtered).toHaveLength(2);
     });
