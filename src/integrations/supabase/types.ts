@@ -1,4 +1,10 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -461,11 +467,183 @@ export type Database = {
         };
         Relationships: [];
       };
+      service_listings: {
+        Row: {
+          auction_end_time: string | null;
+          buy_now_price_cents: number | null;
+          created_at: string;
+          current_price_cents: number | null;
+          description: string | null;
+          helper_id: string;
+          id: string;
+          listing_type: Database["public"]["Enums"]["listing_type"];
+          location: string | null;
+          min_bid_increment_cents: number | null;
+          postal_code: string | null;
+          price_cents: number | null;
+          reserve_price_cents: number | null;
+          service_type: string;
+          start_price_cents: number | null;
+          status: Database["public"]["Enums"]["service_listing_status"];
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          auction_end_time?: string | null;
+          buy_now_price_cents?: number | null;
+          created_at?: string;
+          current_price_cents?: number | null;
+          description?: string | null;
+          helper_id: string;
+          id?: string;
+          listing_type?: Database["public"]["Enums"]["listing_type"];
+          location?: string | null;
+          min_bid_increment_cents?: number | null;
+          postal_code?: string | null;
+          price_cents?: number | null;
+          reserve_price_cents?: number | null;
+          service_type: string;
+          start_price_cents?: number | null;
+          status?: Database["public"]["Enums"]["service_listing_status"];
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          auction_end_time?: string | null;
+          buy_now_price_cents?: number | null;
+          created_at?: string;
+          current_price_cents?: number | null;
+          description?: string | null;
+          helper_id?: string;
+          id?: string;
+          listing_type?: Database["public"]["Enums"]["listing_type"];
+          location?: string | null;
+          min_bid_increment_cents?: number | null;
+          postal_code?: string | null;
+          price_cents?: number | null;
+          reserve_price_cents?: number | null;
+          service_type?: string;
+          start_price_cents?: number | null;
+          status?: Database["public"]["Enums"]["service_listing_status"];
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_listings_helper_id_fkey";
+            columns: ["helper_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      auction_bids: {
+        Row: {
+          amount_cents: number;
+          bidder_id: string;
+          created_at: string;
+          id: string;
+          listing_id: string;
+        };
+        Insert: {
+          amount_cents: number;
+          bidder_id: string;
+          created_at?: string;
+          id?: string;
+          listing_id: string;
+        };
+        Update: {
+          amount_cents?: number;
+          bidder_id?: string;
+          created_at?: string;
+          id?: string;
+          listing_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "auction_bids_bidder_id_fkey";
+            columns: ["bidder_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "auction_bids_listing_id_fkey";
+            columns: ["listing_id"];
+            isOneToOne: false;
+            referencedRelation: "service_listings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      offers: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          id: string;
+          listing_id: string;
+          message: string | null;
+          offerer_id: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          id?: string;
+          listing_id: string;
+          message?: string | null;
+          offerer_id: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          amount_cents?: number;
+          created_at?: string;
+          id?: string;
+          listing_id?: string;
+          message?: string | null;
+          offerer_id?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offers_offerer_id_fkey";
+            columns: ["offerer_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offers_listing_id_fkey";
+            columns: ["listing_id"];
+            isOneToOne: false;
+            referencedRelation: "service_listings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
+      accept_service_offer: {
+        Args: { p_offer_id: string };
+        Returns: Database["public"]["Tables"]["gigs"]["Row"];
+      };
+      end_auction_listing: {
+        Args: { p_listing_id: string };
+        Returns: {
+          ended: boolean;
+          winner_id: string | null;
+          winning_bid_cents: number | null;
+          reserve_not_met: boolean;
+          gig_id: string | null;
+        }[];
+      };
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"];
@@ -483,13 +661,32 @@ export type Database = {
         };
         Returns: undefined;
       };
+      place_auction_bid: {
+        Args: { p_listing_id: string; p_amount_cents: number };
+        Returns: Database["public"]["Tables"]["auction_bids"]["Row"];
+      };
+      purchase_service_listing: {
+        Args: { p_listing_id: string; p_buy_now?: boolean };
+        Returns: Database["public"]["Tables"]["gigs"]["Row"];
+      };
     };
     Enums: {
-      app_role: "customer" | "helper_youth" | "helper_adult" | "helper_pro" | "admin";
+      app_role:
+        "customer" | "helper_youth" | "helper_adult" | "helper_pro" | "admin";
       escrow_state: "pending" | "held" | "releasing" | "paid_out" | "disputed";
       gig_status:
-        "draft" | "open" | "negotiating" | "assigned" | "in_progress" | "completed" | "cancelled";
-      negotiation_status: "pending" | "countered" | "accepted" | "declined" | "withdrawn";
+        | "draft"
+        | "open"
+        | "negotiating"
+        | "assigned"
+        | "in_progress"
+        | "completed"
+        | "cancelled";
+      listing_type: "fixed_price" | "auction" | "negotiable";
+      negotiation_status:
+        "pending" | "countered" | "accepted" | "declined" | "withdrawn";
+      service_listing_status:
+        "draft" | "active" | "sold" | "expired" | "cancelled";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -499,7 +696,10 @@ export type Database = {
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
+type DefaultSchema = DatabaseWithoutInternals[Extract<
+  keyof Database,
+  "public"
+>];
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
@@ -520,8 +720,10 @@ export type Tables<
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R;
       }
       ? R
@@ -594,7 +796,8 @@ export type Enums<
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
@@ -611,7 +814,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["customer", "helper_youth", "helper_adult", "helper_pro", "admin"],
+      app_role: [
+        "customer",
+        "helper_youth",
+        "helper_adult",
+        "helper_pro",
+        "admin",
+      ],
       escrow_state: ["pending", "held", "releasing", "paid_out", "disputed"],
       gig_status: [
         "draft",
@@ -622,7 +831,21 @@ export const Constants = {
         "completed",
         "cancelled",
       ],
-      negotiation_status: ["pending", "countered", "accepted", "declined", "withdrawn"],
+      negotiation_status: [
+        "pending",
+        "countered",
+        "accepted",
+        "declined",
+        "withdrawn",
+      ],
+      listing_type: ["fixed_price", "auction", "negotiable"],
+      service_listing_status: [
+        "draft",
+        "active",
+        "sold",
+        "expired",
+        "cancelled",
+      ],
     },
   },
 } as const;
