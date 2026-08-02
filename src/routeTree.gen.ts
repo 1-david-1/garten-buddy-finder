@@ -22,6 +22,12 @@ import { Route as AuthenticatedMarketplaceRouteImport } from './routes/_authenti
 import { Route as AuthenticatedMyGigsRouteImport } from './routes/_authenticated/my-gigs'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedSellRouteRouteImport } from './routes/_authenticated/sell/route'
+import { Route as AuthenticatedSellIndexRouteImport } from './routes/_authenticated/sell/index'
+import { Route as AuthenticatedSellCreateRouteImport } from './routes/_authenticated/sell/create'
+import { Route as AuthenticatedServiceListingsIndexRouteImport } from './routes/_authenticated/service-listings/index'
+import { Route as AuthenticatedServiceListingsIdRouteImport } from './routes/_authenticated/service-listings/$id'
+import { Route as AuthenticatedSellEditIdRouteImport } from './routes/_authenticated/sell/edit/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -88,10 +94,43 @@ const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSellRouteRoute = AuthenticatedSellRouteRouteImport.update({
+  id: '/sell',
+  path: '/sell',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSellIndexRoute = AuthenticatedSellIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedSellRouteRoute,
+} as any)
+const AuthenticatedSellCreateRoute = AuthenticatedSellCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => AuthenticatedSellRouteRoute,
+} as any)
+const AuthenticatedServiceListingsIndexRoute =
+  AuthenticatedServiceListingsIndexRouteImport.update({
+    id: '/service-listings/',
+    path: '/service-listings/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedServiceListingsIdRoute =
+  AuthenticatedServiceListingsIdRouteImport.update({
+    id: '/service-listings/$id',
+    path: '/service-listings/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSellEditIdRoute = AuthenticatedSellEditIdRouteImport.update({
+  id: '/edit/$id',
+  path: '/edit/$id',
+  getParentRoute: () => AuthenticatedSellRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/sell': typeof AuthenticatedSellRouteRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
   '/create-gig': typeof AuthenticatedCreateGigRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -102,6 +141,11 @@ export interface FileRoutesByFullPath {
   '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/sell/create': typeof AuthenticatedSellCreateRoute
+  '/service-listings/$id': typeof AuthenticatedServiceListingsIdRoute
+  '/sell/': typeof AuthenticatedSellIndexRoute
+  '/service-listings/': typeof AuthenticatedServiceListingsIndexRoute
+  '/sell/edit/$id': typeof AuthenticatedSellEditIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -116,12 +160,18 @@ export interface FileRoutesByTo {
   '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/sell/create': typeof AuthenticatedSellCreateRoute
+  '/service-listings/$id': typeof AuthenticatedServiceListingsIdRoute
+  '/sell': typeof AuthenticatedSellIndexRoute
+  '/service-listings': typeof AuthenticatedServiceListingsIndexRoute
+  '/sell/edit/$id': typeof AuthenticatedSellEditIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/sell': typeof AuthenticatedSellRouteRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/create-gig': typeof AuthenticatedCreateGigRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -132,12 +182,18 @@ export interface FileRoutesById {
   '/_authenticated/my-gigs': typeof AuthenticatedMyGigsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/sell/create': typeof AuthenticatedSellCreateRoute
+  '/_authenticated/service-listings/$id': typeof AuthenticatedServiceListingsIdRoute
+  '/_authenticated/sell/': typeof AuthenticatedSellIndexRoute
+  '/_authenticated/service-listings/': typeof AuthenticatedServiceListingsIndexRoute
+  '/_authenticated/sell/edit/$id': typeof AuthenticatedSellEditIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/sell'
     | '/admin'
     | '/create-gig'
     | '/dashboard'
@@ -148,6 +204,11 @@ export interface FileRouteTypes {
     | '/my-gigs'
     | '/onboarding'
     | '/profile'
+    | '/sell/create'
+    | '/service-listings/$id'
+    | '/sell/'
+    | '/service-listings/'
+    | '/sell/edit/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,11 +223,17 @@ export interface FileRouteTypes {
     | '/my-gigs'
     | '/onboarding'
     | '/profile'
+    | '/sell/create'
+    | '/service-listings/$id'
+    | '/sell'
+    | '/service-listings'
+    | '/sell/edit/$id'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/sell'
     | '/_authenticated/admin'
     | '/_authenticated/create-gig'
     | '/_authenticated/dashboard'
@@ -177,6 +244,11 @@ export interface FileRouteTypes {
     | '/_authenticated/my-gigs'
     | '/_authenticated/onboarding'
     | '/_authenticated/profile'
+    | '/_authenticated/sell/create'
+    | '/_authenticated/service-listings/$id'
+    | '/_authenticated/sell/'
+    | '/_authenticated/service-listings/'
+    | '/_authenticated/sell/edit/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -278,10 +350,71 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sell': {
+      id: '/_authenticated/sell'
+      path: '/sell'
+      fullPath: '/sell'
+      preLoaderRoute: typeof AuthenticatedSellRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sell/': {
+      id: '/_authenticated/sell/'
+      path: '/'
+      fullPath: '/sell/'
+      preLoaderRoute: typeof AuthenticatedSellIndexRouteImport
+      parentRoute: typeof AuthenticatedSellRouteRoute
+    }
+    '/_authenticated/sell/create': {
+      id: '/_authenticated/sell/create'
+      path: '/create'
+      fullPath: '/sell/create'
+      preLoaderRoute: typeof AuthenticatedSellCreateRouteImport
+      parentRoute: typeof AuthenticatedSellRouteRoute
+    }
+    '/_authenticated/service-listings/': {
+      id: '/_authenticated/service-listings/'
+      path: '/service-listings'
+      fullPath: '/service-listings/'
+      preLoaderRoute: typeof AuthenticatedServiceListingsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/service-listings/$id': {
+      id: '/_authenticated/service-listings/$id'
+      path: '/service-listings/$id'
+      fullPath: '/service-listings/$id'
+      preLoaderRoute: typeof AuthenticatedServiceListingsIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sell/edit/$id': {
+      id: '/_authenticated/sell/edit/$id'
+      path: '/edit/$id'
+      fullPath: '/sell/edit/$id'
+      preLoaderRoute: typeof AuthenticatedSellEditIdRouteImport
+      parentRoute: typeof AuthenticatedSellRouteRoute
+    }
   }
 }
 
+interface AuthenticatedSellRouteRouteChildren {
+  AuthenticatedSellCreateRoute: typeof AuthenticatedSellCreateRoute
+  AuthenticatedSellIndexRoute: typeof AuthenticatedSellIndexRoute
+  AuthenticatedSellEditIdRoute: typeof AuthenticatedSellEditIdRoute
+}
+
+const AuthenticatedSellRouteRouteChildren: AuthenticatedSellRouteRouteChildren =
+  {
+    AuthenticatedSellCreateRoute: AuthenticatedSellCreateRoute,
+    AuthenticatedSellIndexRoute: AuthenticatedSellIndexRoute,
+    AuthenticatedSellEditIdRoute: AuthenticatedSellEditIdRoute,
+  }
+
+const AuthenticatedSellRouteRouteWithChildren =
+  AuthenticatedSellRouteRoute._addFileChildren(
+    AuthenticatedSellRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedSellRouteRoute: typeof AuthenticatedSellRouteRouteWithChildren
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedCreateGigRoute: typeof AuthenticatedCreateGigRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -292,9 +425,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMyGigsRoute: typeof AuthenticatedMyGigsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedServiceListingsIdRoute: typeof AuthenticatedServiceListingsIdRoute
+  AuthenticatedServiceListingsIndexRoute: typeof AuthenticatedServiceListingsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedSellRouteRoute: AuthenticatedSellRouteRouteWithChildren,
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedCreateGigRoute: AuthenticatedCreateGigRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
@@ -305,6 +441,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMyGigsRoute: AuthenticatedMyGigsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedServiceListingsIdRoute: AuthenticatedServiceListingsIdRoute,
+  AuthenticatedServiceListingsIndexRoute:
+    AuthenticatedServiceListingsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
