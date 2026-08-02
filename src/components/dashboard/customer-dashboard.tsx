@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { Star, MapPin, Search, SlidersHorizontal, BarChart3, Mail } from "lucide-react";
+import {
+  Star,
+  MapPin,
+  Search,
+  SlidersHorizontal,
+  BarChart3,
+  Mail,
+  ShoppingBag,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +26,10 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BookingScheduler } from "@/components/booking/booking-scheduler";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import {
+  DashboardShell,
+  type DashboardNavItem,
+} from "@/components/dashboard/dashboard-shell";
 import { useI18n } from "@/lib/i18n";
 import { getAvailableHelpers } from "@/lib/marketplace.functions";
 
@@ -64,7 +75,8 @@ const demoHelpers: DemoHelper[] = [
     postalCode: "79098",
     rating: 4.9,
     reviewCount: 34,
-    imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop",
     hourlyRate: 2800,
     ageBadge: "helper_pro",
     categories: ["Rasenmähen", "Heckenschnitt"],
@@ -78,7 +90,8 @@ const demoHelpers: DemoHelper[] = [
     postalCode: "79100",
     rating: 4.7,
     reviewCount: 19,
-    imageUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&h=300&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&h=300&fit=crop",
     hourlyRate: 1800,
     ageBadge: "helper_adult",
     categories: ["Unkraut jäten", "Blumenbeete"],
@@ -92,7 +105,8 @@ const demoHelpers: DemoHelper[] = [
     postalCode: "79312",
     rating: 4.6,
     reviewCount: 8,
-    imageUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&h=300&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&h=300&fit=crop",
     hourlyRate: 1200,
     ageBadge: "helper_youth",
     categories: ["Laub entfernen", "Gartenarbeit allgemein"],
@@ -106,7 +120,8 @@ const demoHelpers: DemoHelper[] = [
     postalCode: "79104",
     rating: 5.0,
     reviewCount: 52,
-    imageUrl: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300&h=300&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300&h=300&fit=crop",
     hourlyRate: 3500,
     ageBadge: "helper_pro",
     categories: ["Gartenarbeit allgemein", "Blumenbeete"],
@@ -120,7 +135,8 @@ const demoHelpers: DemoHelper[] = [
     postalCode: "79211",
     rating: 4.4,
     reviewCount: 5,
-    imageUrl: "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=300&h=300&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=300&h=300&fit=crop",
     hourlyRate: 1500,
     ageBadge: "helper_adult",
     categories: ["Rasenmähen"],
@@ -134,7 +150,8 @@ const demoHelpers: DemoHelper[] = [
     postalCode: "79106",
     rating: 4.8,
     reviewCount: 27,
-    imageUrl: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&h=300&fit=crop",
+    imageUrl:
+      "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&h=300&fit=crop",
     hourlyRate: 2200,
     ageBadge: "helper_adult",
     categories: ["Heckenschnitt", "Laub entfernen"],
@@ -161,13 +178,18 @@ export function CustomerDashboard() {
   const { t } = useI18n();
 
   const getHelpers = useServerFn(getAvailableHelpers);
-  const helpersQuery = useQuery({ queryKey: ["marketplace-helpers"], queryFn: () => getHelpers() });
+  const helpersQuery = useQuery({
+    queryKey: ["marketplace-helpers"],
+    queryFn: () => getHelpers(),
+  });
 
   const [category, setCategory] = useState<string>("all");
   const [location, setLocation] = useState("");
   const [minRating, setMinRating] = useState<string>("0");
   const [maxPrice, setMaxPrice] = useState([50]);
-  const [selectedHelper, setSelectedHelper] = useState<DisplayHelper | null>(null);
+  const [selectedHelper, setSelectedHelper] = useState<DisplayHelper | null>(
+    null,
+  );
 
   const navItems: DashboardNavItem[] = [
     {
@@ -176,32 +198,52 @@ export function CustomerDashboard() {
       href: "/dashboard",
       icon: <BarChart3 className="size-4" />,
     },
-    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
+    {
+      key: "inbox",
+      label: "Postfach",
+      href: "/inbox",
+      icon: <Mail className="size-4" />,
+    },
+    {
+      key: "service-listings",
+      label: "Service-Angebote",
+      href: "/service-listings",
+      icon: <ShoppingBag className="size-4" />,
+    },
   ];
 
   const allHelpers: DisplayHelper[] = useMemo(() => {
-    const demo: DisplayHelper[] = demoHelpers.map((h) => ({ ...h, isDemo: true }));
-    const real: DisplayHelper[] = (helpersQuery.data?.helpers ?? []).map((h) => ({
-      id: h.id,
-      name: h.displayName,
-      title: h.businessName,
-      location: h.city,
-      postalCode: h.postalCode,
-      rating: h.rating,
-      reviewCount: h.reviewCount,
-      imageUrl: null,
-      hourlyRate: null,
-      ageBadge: h.role,
-      categories: [],
-      bio: h.bio,
-      isDemo: false,
+    const demo: DisplayHelper[] = demoHelpers.map((h) => ({
+      ...h,
+      isDemo: true,
     }));
+    const real: DisplayHelper[] = (helpersQuery.data?.helpers ?? []).map(
+      (h) => ({
+        id: h.id,
+        name: h.displayName,
+        title: h.businessName,
+        location: h.city,
+        postalCode: h.postalCode,
+        rating: h.rating,
+        reviewCount: h.reviewCount,
+        imageUrl: null,
+        hourlyRate: null,
+        ageBadge: h.role,
+        categories: [],
+        bio: h.bio,
+        isDemo: false,
+      }),
+    );
     return [...demo, ...real];
   }, [helpersQuery.data]);
 
   const filtered = useMemo(() => {
     return allHelpers.filter((h) => {
-      if (category !== "all" && h.categories.length > 0 && !h.categories.includes(category))
+      if (
+        category !== "all" &&
+        h.categories.length > 0 &&
+        !h.categories.includes(category)
+      )
         return false;
       if (
         location.trim() &&
@@ -211,7 +253,8 @@ export function CustomerDashboard() {
       )
         return false;
       if ((h.rating ?? 0) < Number(minRating)) return false;
-      if (h.hourlyRate !== null && h.hourlyRate / 100 > maxPrice[0]) return false;
+      if (h.hourlyRate !== null && h.hourlyRate / 100 > maxPrice[0])
+        return false;
       return true;
     });
   }, [allHelpers, category, location, minRating, maxPrice]);
@@ -222,9 +265,12 @@ export function CustomerDashboard() {
       navItems={navItems}
       activeKey="dashboard"
     >
-      <h1 className="font-brand text-2xl">{t("dashboard.customer.title") || "Helfer finden"}</h1>
+      <h1 className="font-brand text-2xl">
+        {t("dashboard.customer.title") || "Helfer finden"}
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Filtere nach Kategorie, Ort, Bewertung und Preis - wie bei einer Hotelsuche.
+        Filtere nach Kategorie, Ort, Bewertung und Preis - wie bei einer
+        Hotelsuche.
       </p>
 
       {/* Filterleiste */}
@@ -315,8 +361,12 @@ export function CustomerDashboard() {
               <CardContent className="pt-6">
                 <div className="flex items-start gap-3">
                   <Avatar className="h-14 w-14">
-                    {h.imageUrl && <AvatarImage src={h.imageUrl} alt={h.name} />}
-                    <AvatarFallback>{h.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    {h.imageUrl && (
+                      <AvatarImage src={h.imageUrl} alt={h.name} />
+                    )}
+                    <AvatarFallback>
+                      {h.name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
@@ -325,7 +375,9 @@ export function CustomerDashboard() {
                         {ageBadgeLabel[h.ageBadge]}
                       </Badge>
                     </div>
-                    {h.title && <p className="text-sm text-muted-foreground">{h.title}</p>}
+                    {h.title && (
+                      <p className="text-sm text-muted-foreground">{h.title}</p>
+                    )}
                     <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                       {h.location && (
                         <>
@@ -345,12 +397,18 @@ export function CustomerDashboard() {
                   </div>
                 </div>
 
-                {h.bio && <p className="mt-3 text-sm text-muted-foreground">{h.bio}</p>}
+                {h.bio && (
+                  <p className="mt-3 text-sm text-muted-foreground">{h.bio}</p>
+                )}
 
                 {h.categories.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {h.categories.map((c) => (
-                      <Badge key={c} variant="secondary" className="text-xs font-normal">
+                      <Badge
+                        key={c}
+                        variant="secondary"
+                        className="text-xs font-normal"
+                      >
                         {c}
                       </Badge>
                     ))}
@@ -362,7 +420,9 @@ export function CustomerDashboard() {
                     {h.hourlyRate !== null ? (
                       <>
                         {(h.hourlyRate / 100).toFixed(0)} €
-                        <span className="text-sm font-normal text-muted-foreground">/Std.</span>
+                        <span className="text-sm font-normal text-muted-foreground">
+                          /Std.
+                        </span>
                       </>
                     ) : (
                       <span className="text-sm font-normal text-muted-foreground">
@@ -380,7 +440,10 @@ export function CustomerDashboard() {
         )}
       </div>
 
-      <Dialog open={!!selectedHelper} onOpenChange={(open) => !open && setSelectedHelper(null)}>
+      <Dialog
+        open={!!selectedHelper}
+        onOpenChange={(open) => !open && setSelectedHelper(null)}
+      >
         <DialogContent className="max-w-3xl overflow-y-auto p-0 sm:max-h-[90vh]">
           <DialogTitle className="sr-only">Termin buchen</DialogTitle>
           {selectedHelper && (
