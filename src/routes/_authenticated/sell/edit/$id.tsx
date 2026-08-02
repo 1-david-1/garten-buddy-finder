@@ -17,6 +17,7 @@ import {
   updateServiceListing,
   type ServiceListingInput,
 } from "@/lib/service-listings.functions";
+import { QueryErrorCard } from "@/components/query-error-card";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/sell/edit/$id")({
@@ -88,7 +89,7 @@ function EditListingPage() {
     onError: (err) => toast.error((err as Error).message),
   });
 
-  if (listingQuery.isLoading || !loaded) {
+  if (listingQuery.isLoading || (listingQuery.data && !loaded)) {
     return (
       <DashboardShell
         title="Angebot bearbeiten"
@@ -96,6 +97,18 @@ function EditListingPage() {
         activeKey="sell"
       >
         <p className="text-sm text-muted-foreground">Lädt…</p>
+      </DashboardShell>
+    );
+  }
+
+  if (listingQuery.isError) {
+    return (
+      <DashboardShell
+        title="Angebot bearbeiten"
+        navItems={navItems}
+        activeKey="sell"
+      >
+        <QueryErrorCard error={listingQuery.error} />
       </DashboardShell>
     );
   }
