@@ -3,8 +3,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Mail,
   Package,
   Plus,
   Pencil,
@@ -15,13 +13,9 @@ import {
   Inbox,
   CheckCircle2,
   XCircle,
-  ClipboardList,
-  Wallet,
 } from "lucide-react";
-import {
-  DashboardShell,
-  type DashboardNavItem,
-} from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,40 +63,8 @@ function serviceTypeLabel(value: string) {
   return SERVICE_TYPES.find((s) => s.value === value)?.label ?? value;
 }
 
-const navItems: DashboardNavItem[] = [
-  {
-    key: "dashboard",
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: <BarChart3 className="size-4" />,
-  },
-  {
-    key: "inbox",
-    label: "Postfach",
-    href: "/inbox",
-    icon: <Mail className="size-4" />,
-  },
-  {
-    key: "orders",
-    label: "Aufträge",
-    href: "/gigs",
-    icon: <ClipboardList className="size-4" />,
-  },
-  {
-    key: "earnings",
-    label: "Einnahmen",
-    href: "/earnings",
-    icon: <Wallet className="size-4" />,
-  },
-  {
-    key: "sell",
-    label: "Meine Angebote",
-    href: "/sell",
-    icon: <Package className="size-4" />,
-  },
-];
-
 function SellDashboard() {
+  const { navItems } = useAppNavItems();
   const queryClient = useQueryClient();
   const [counterOfferId, setCounterOfferId] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
