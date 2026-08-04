@@ -1,15 +1,7 @@
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Star,
-  MapPin,
-  Search,
-  SlidersHorizontal,
-  BarChart3,
-  Mail,
-  ShoppingBag,
-} from "lucide-react";
+import { Star, MapPin, Search, SlidersHorizontal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,10 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BookingScheduler } from "@/components/booking/booking-scheduler";
-import {
-  DashboardShell,
-  type DashboardNavItem,
-} from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import { useI18n } from "@/lib/i18n";
 import { getAvailableHelpers } from "@/lib/marketplace.functions";
 
@@ -191,26 +181,7 @@ export function CustomerDashboard() {
     null,
   );
 
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: t("dashboard.nav.dashboard"),
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    {
-      key: "inbox",
-      label: "Postfach",
-      href: "/inbox",
-      icon: <Mail className="size-4" />,
-    },
-    {
-      key: "service-listings",
-      label: "Service-Angebote",
-      href: "/service-listings",
-      icon: <ShoppingBag className="size-4" />,
-    },
-  ];
+  const { navItems } = useAppNavItems();
 
   const allHelpers: DisplayHelper[] = useMemo(() => {
     const demo: DisplayHelper[] = demoHelpers.map((h) => ({
