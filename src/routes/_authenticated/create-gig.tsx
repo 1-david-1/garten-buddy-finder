@@ -3,21 +3,15 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Mail,
-  Plus,
   PlusCircle,
-  Search,
   Calendar,
   MapPin,
   Euro,
   Clock,
   ChevronLeft,
 } from "lucide-react";
-import {
-  DashboardShell,
-  type DashboardNavItem,
-} from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,32 +105,7 @@ function CreateGigPage() {
     );
   };
 
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    {
-      key: "inbox",
-      label: "Postfach",
-      href: "/inbox",
-      icon: <Mail className="size-4" />,
-    },
-    {
-      key: "my-gigs",
-      label: "Meine Aufträge",
-      href: "/my-gigs",
-      icon: <Search className="size-4" />,
-    },
-    {
-      key: "create-gig",
-      label: "Auftrag erstellen",
-      href: "/create-gig",
-      icon: <Plus className="size-4" />,
-    },
-  ];
+  const { navItems } = useAppNavItems();
 
   return (
     <DashboardShell
