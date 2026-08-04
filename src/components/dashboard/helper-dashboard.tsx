@@ -2,18 +2,14 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
   CalendarClock,
   CheckCircle2,
   ClipboardList,
   Euro,
-  Mail,
-  Package,
   Palmtree,
   Star,
   TrendingDown,
   TrendingUp,
-  Wallet,
 } from "lucide-react";
 import {
   Bar,
@@ -45,10 +41,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  DashboardShell,
-  type DashboardNavItem,
-} from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import {
   getHelperDashboard,
   setAvailability,
@@ -136,44 +130,7 @@ export function HelperDashboard() {
     },
   });
 
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: t("dashboard.nav.dashboard"),
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    {
-      key: "inbox",
-      label: "Postfach",
-      href: "/inbox",
-      icon: <Mail className="size-4" />,
-    },
-    {
-      key: "marketplace",
-      label: "Aufträge finden",
-      href: "/marketplace",
-      icon: <ClipboardList className="size-4" />,
-    },
-    {
-      key: "orders",
-      label: t("dashboard.nav.orders"),
-      href: "/gigs",
-      icon: <ClipboardList className="size-4" />,
-    },
-    {
-      key: "sell",
-      label: "Meine Angebote",
-      href: "/sell",
-      icon: <Package className="size-4" />,
-    },
-    {
-      key: "earnings",
-      label: t("dashboard.nav.earnings"),
-      href: "/earnings",
-      icon: <Wallet className="size-4" />,
-    },
-  ];
+  const { navItems } = useAppNavItems();
 
   if (q.isError) {
     return (
