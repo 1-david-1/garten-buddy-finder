@@ -1,13 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { createServerFn, useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { createServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { BarChart3, ClipboardList, Mail, Wallet } from "lucide-react";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
-import { useI18n } from "@/lib/i18n";
-import { getMyRoles } from "@/lib/roles.functions";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 
 interface BookingRequest {
   id: string;
@@ -43,7 +40,10 @@ export const getInboxDataFn = createServerFn({ method: "GET" })
 
     const customerIds = [...new Set((gigs || []).map((g) => g.customer_id))];
     const { data: profiles } = customerIds.length
-      ? await supabase.from("profiles").select("id, display_name").in("id", customerIds)
+      ? await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", customerIds)
       : { data: [] as { id: string; display_name: string | null }[] };
     const profileById = new Map((profiles || []).map((p) => [p.id, p]));
 
@@ -105,39 +105,8 @@ export const Route = createFileRoute("/_authenticated/inbox")({
 });
 
 function InboxPage() {
-  const { t } = useI18n();
   const loaderData = Route.useLoaderData();
-  const getRoles = useServerFn(getMyRoles);
-  const q = useQuery({ queryKey: ["my-roles"], queryFn: () => getRoles() });
-
-  const isHelper = q.data?.roles?.some((r: string) => r.startsWith("helper_"));
-
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: t("dashboard.nav.dashboard"),
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
-  ];
-
-  if (isHelper) {
-    navItems.push(
-      {
-        key: "orders",
-        label: t("dashboard.nav.orders"),
-        href: "/gigs",
-        icon: <ClipboardList className="size-4" />,
-      },
-      {
-        key: "earnings",
-        label: t("dashboard.nav.earnings"),
-        href: "/earnings",
-        icon: <Wallet className="size-4" />,
-      },
-    );
-  }
+  const { navItems } = useAppNavItems();
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -184,7 +153,9 @@ function InboxPage() {
 
           {loaderData.bookingRequests.length === 0 ? (
             <div className="text-center py-12 bg-muted/30 rounded-lg border border-dashed border-border/50">
-              <p className="text-muted-foreground">Keine offenen Buchungsanfragen</p>
+              <p className="text-muted-foreground">
+                Keine offenen Buchungsanfragen
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -196,13 +167,17 @@ function InboxPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                       <span className="text-primary font-semibold">
-                        {(booking.customer?.display_name || "K")[0].toUpperCase()}
+                        {(booking.customer?.display_name ||
+                          "K")[0].toUpperCase()}
                       </span>
                     </div>
                     <div>
-                      <p className="font-medium">{booking.customer?.display_name || "Anonym"}</p>
+                      <p className="font-medium">
+                        {booking.customer?.display_name || "Anonym"}
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(booking.created_at)} &bull; {formatTime(booking.created_at)}
+                        {formatDate(booking.created_at)} &bull;{" "}
+                        {formatTime(booking.created_at)}
                       </p>
                     </div>
                   </div>
@@ -210,23 +185,35 @@ function InboxPage() {
                   <div className="bg-muted/30 rounded-lg p-4 space-y-2">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Leistung:</span>
-                      <span className="font-medium">{booking.service_type}</span>
+                      <span className="font-medium">
+                        {booking.service_type}
+                      </span>
                     </div>
                     {booking.description && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Beschreibung:</span>
-                        <span className="font-medium">{booking.description}</span>
+                        <span className="text-muted-foreground">
+                          Beschreibung:
+                        </span>
+                        <span className="font-medium">
+                          {booking.description}
+                        </span>
                       </div>
                     )}
                     {booking.scheduled_at && (
                       <>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Datum:</span>
-                          <span className="font-medium">{formatDate(booking.scheduled_at)}</span>
+                          <span className="font-medium">
+                            {formatDate(booking.scheduled_at)}
+                          </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Uhrzeit:</span>
-                          <span className="font-medium">{formatTime(booking.scheduled_at)}</span>
+                          <span className="text-muted-foreground">
+                            Uhrzeit:
+                          </span>
+                          <span className="font-medium">
+                            {formatTime(booking.scheduled_at)}
+                          </span>
                         </div>
                       </>
                     )}
