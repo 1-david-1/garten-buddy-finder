@@ -3,9 +3,6 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Mail,
-  User,
   MapPin,
   Building2,
   Pencil,
@@ -16,7 +13,8 @@ import {
   Heart,
   Bell,
 } from "lucide-react";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,7 +90,8 @@ function ProfilePage() {
       bidUpdates?: boolean;
       gigUpdates?: boolean;
     }) => notificationPrefsFn({ data: input }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-profile"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["my-profile"] }),
     onError: (err) => toast.error((err as Error).message),
   });
 
@@ -110,28 +109,17 @@ function ProfilePage() {
     setEditing(true);
   };
 
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
-    {
-      key: "profile",
-      label: "Mein Profil",
-      href: "/profile",
-      icon: <User className="size-4" />,
-    },
-  ];
+  const { navItems } = useAppNavItems();
 
   const profile = profileQuery.data?.profile;
   const roles = profileQuery.data?.roles ?? [];
   const isHelper = roles.some((r) => r.startsWith("helper_"));
   const isPro = roles.includes("helper_pro");
   const favorites = favoritesQuery.data?.favorites ?? [];
-  const rawPrefs = (profile?.notification_prefs ?? {}) as Record<string, boolean>;
+  const rawPrefs = (profile?.notification_prefs ?? {}) as Record<
+    string,
+    boolean
+  >;
   const notificationPrefs = {
     enabled: rawPrefs.enabled ?? true,
     newBid: rawPrefs.new_bid ?? true,
@@ -159,7 +147,9 @@ function ProfilePage() {
       {profileQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">Lädt…</p>
       ) : !profile ? (
-        <p className="text-sm text-destructive">Profil konnte nicht geladen werden.</p>
+        <p className="text-sm text-destructive">
+          Profil konnte nicht geladen werden.
+        </p>
       ) : (
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Hauptprofil */}
@@ -178,10 +168,16 @@ function ProfilePage() {
                         <h2 className="text-xl font-bold">
                           {profile.display_name || "Name nicht gesetzt"}
                         </h2>
-                        <p className="text-sm text-muted-foreground">{profileQuery.data?.email}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {profileQuery.data?.email}
+                        </p>
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {roles.map((role) => (
-                            <Badge key={role} variant="secondary" className="text-xs">
+                            <Badge
+                              key={role}
+                              variant="secondary"
+                              className="text-xs"
+                            >
                               {ROLE_LABELS[role] ?? role}
                             </Badge>
                           ))}
@@ -193,7 +189,9 @@ function ProfilePage() {
                           <Label className="text-xs">Anzeigename *</Label>
                           <Input
                             value={form.displayName ?? ""}
-                            onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+                            onChange={(e) =>
+                              setForm({ ...form, displayName: e.target.value })
+                            }
                             className="mt-1 h-8"
                           />
                         </div>
@@ -214,8 +212,9 @@ function ProfilePage() {
                           <MapPin className="size-3" /> Standort
                         </p>
                         <p className="font-medium">
-                          {[profile.city, profile.postal_code].filter(Boolean).join(" · ") ||
-                            "Nicht angegeben"}
+                          {[profile.city, profile.postal_code]
+                            .filter(Boolean)
+                            .join(" · ") || "Nicht angegeben"}
                         </p>
                       </div>
                       {isPro && (
@@ -223,14 +222,18 @@ function ProfilePage() {
                           <p className="text-xs text-muted-foreground mb-0.5 flex items-center gap-1">
                             <Building2 className="size-3" /> Firmenname
                           </p>
-                          <p className="font-medium">{profile.business_name || "—"}</p>
+                          <p className="font-medium">
+                            {profile.business_name || "—"}
+                          </p>
                         </div>
                       )}
                     </div>
 
                     {profile.bio && (
                       <div>
-                        <p className="text-xs text-muted-foreground mb-1">Über mich</p>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Über mich
+                        </p>
                         <p className="text-sm">{profile.bio}</p>
                       </div>
                     )}
@@ -242,7 +245,9 @@ function ProfilePage() {
                         <Label className="text-xs">Stadt</Label>
                         <Input
                           value={form.city ?? ""}
-                          onChange={(e) => setForm({ ...form, city: e.target.value })}
+                          onChange={(e) =>
+                            setForm({ ...form, city: e.target.value })
+                          }
                           placeholder="Freiburg"
                           className="mt-1 h-8"
                         />
@@ -251,7 +256,9 @@ function ProfilePage() {
                         <Label className="text-xs">Postleitzahl</Label>
                         <Input
                           value={form.postalCode ?? ""}
-                          onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+                          onChange={(e) =>
+                            setForm({ ...form, postalCode: e.target.value })
+                          }
                           placeholder="79100"
                           className="mt-1 h-8"
                         />
@@ -264,7 +271,9 @@ function ProfilePage() {
                           <Label className="text-xs">Firmenname</Label>
                           <Input
                             value={form.businessName ?? ""}
-                            onChange={(e) => setForm({ ...form, businessName: e.target.value })}
+                            onChange={(e) =>
+                              setForm({ ...form, businessName: e.target.value })
+                            }
                             className="mt-1 h-8"
                           />
                         </div>
@@ -272,7 +281,9 @@ function ProfilePage() {
                           <Label className="text-xs">USt-IdNr.</Label>
                           <Input
                             value={form.ustId ?? ""}
-                            onChange={(e) => setForm({ ...form, ustId: e.target.value })}
+                            onChange={(e) =>
+                              setForm({ ...form, ustId: e.target.value })
+                            }
                             placeholder="DE123456789"
                             className="mt-1 h-8"
                           />
@@ -284,7 +295,9 @@ function ProfilePage() {
                       <Label className="text-xs">Über mich / Bio</Label>
                       <Textarea
                         value={form.bio ?? ""}
-                        onChange={(e) => setForm({ ...form, bio: e.target.value })}
+                        onChange={(e) =>
+                          setForm({ ...form, bio: e.target.value })
+                        }
                         placeholder="Beschreibe deine Erfahrungen, Stärken und Verfügbarkeit…"
                         className="mt-1 resize-none"
                         rows={4}
@@ -340,7 +353,9 @@ function ProfilePage() {
                         >
                           <Avatar className="size-9">
                             <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                              {(fav.profiles?.display_name ?? "H").slice(0, 2).toUpperCase()}
+                              {(fav.profiles?.display_name ?? "H")
+                                .slice(0, 2)
+                                .toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
@@ -396,8 +411,13 @@ function ProfilePage() {
                   </div>
 
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">E-Mail bestätigt</span>
-                    <Badge variant="outline" className="text-[10px] border-emerald-400/40 text-emerald-400">
+                    <span className="text-muted-foreground">
+                      E-Mail bestätigt
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] border-emerald-400/40 text-emerald-400"
+                    >
                       ✓
                     </Badge>
                   </div>
@@ -405,8 +425,14 @@ function ProfilePage() {
                   {profile.verified_at && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Verifiziert</span>
-                      <Badge variant="outline" className="text-[10px] border-emerald-400/40 text-emerald-400">
-                        ✓ {new Date(profile.verified_at).toLocaleDateString("de-DE")}
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] border-emerald-400/40 text-emerald-400"
+                      >
+                        ✓{" "}
+                        {new Date(profile.verified_at).toLocaleDateString(
+                          "de-DE",
+                        )}
                       </Badge>
                     </div>
                   )}
@@ -446,35 +472,47 @@ function ProfilePage() {
                   <div className="space-y-2 pl-0.5">
                     {!isHelper && (
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Neue Gebote auf meine Aufträge</span>
+                        <span className="text-muted-foreground">
+                          Neue Gebote auf meine Aufträge
+                        </span>
                         <Switch
                           checked={notificationPrefs.newBid}
                           disabled={notificationPrefsMutation.isPending}
                           onCheckedChange={(checked) =>
-                            notificationPrefsMutation.mutate({ newBid: checked })
+                            notificationPrefsMutation.mutate({
+                              newBid: checked,
+                            })
                           }
                         />
                       </div>
                     )}
                     {isHelper && (
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Rückmeldungen zu meinen Geboten</span>
+                        <span className="text-muted-foreground">
+                          Rückmeldungen zu meinen Geboten
+                        </span>
                         <Switch
                           checked={notificationPrefs.bidUpdates}
                           disabled={notificationPrefsMutation.isPending}
                           onCheckedChange={(checked) =>
-                            notificationPrefsMutation.mutate({ bidUpdates: checked })
+                            notificationPrefsMutation.mutate({
+                              bidUpdates: checked,
+                            })
                           }
                         />
                       </div>
                     )}
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Auftragsstatus-Updates</span>
+                      <span className="text-muted-foreground">
+                        Auftragsstatus-Updates
+                      </span>
                       <Switch
                         checked={notificationPrefs.gigUpdates}
                         disabled={notificationPrefsMutation.isPending}
                         onCheckedChange={(checked) =>
-                          notificationPrefsMutation.mutate({ gigUpdates: checked })
+                          notificationPrefsMutation.mutate({
+                            gigUpdates: checked,
+                          })
                         }
                       />
                     </div>
@@ -492,15 +530,18 @@ function ProfilePage() {
                   <ul className="space-y-1.5 text-xs text-muted-foreground">
                     <li className="flex gap-1.5">
                       <span className="text-primary">✓</span>
-                      Füge eine Bio hinzu – Kunden buchen lieber Helfer, die sich vorstellen.
+                      Füge eine Bio hinzu – Kunden buchen lieber Helfer, die
+                      sich vorstellen.
                     </li>
                     <li className="flex gap-1.5">
                       <span className="text-primary">✓</span>
-                      Schalte "Ich arbeite heute" im Dashboard ein, um mehr Aufträge zu bekommen.
+                      Schalte "Ich arbeite heute" im Dashboard ein, um mehr
+                      Aufträge zu bekommen.
                     </li>
                     <li className="flex gap-1.5">
                       <span className="text-primary">✓</span>
-                      Biete faire Preise – Angebote unter dem Budget werden bevorzugt.
+                      Biete faire Preise – Angebote unter dem Budget werden
+                      bevorzugt.
                     </li>
                   </ul>
                 </CardContent>
