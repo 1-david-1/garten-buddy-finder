@@ -3,8 +3,6 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Mail,
   Plus,
   Search,
   MapPin,
@@ -17,7 +15,8 @@ import {
   Users,
   Star,
 } from "lucide-react";
-import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +33,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getMyGigs, completeGig } from "@/lib/gigs.functions";
-import { getNegotiationsForGig, counterBid, acceptBid as acceptNegBid, declineBid } from "@/lib/negotiations.functions";
+import {
+  getNegotiationsForGig,
+  counterBid,
+  acceptBid as acceptNegBid,
+  declineBid,
+} from "@/lib/negotiations.functions";
 import { createReview } from "@/lib/reviews.functions";
 import { toast } from "sonner";
 
@@ -63,13 +67,20 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function formatEuros(cents: number) {
-  return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+  return (cents / 100).toLocaleString("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  });
 }
 
 function MyGigsPage() {
   const queryClient = useQueryClient();
   const [selectedGig, setSelectedGig] = useState<string | null>(null);
-  const [reviewGig, setReviewGig] = useState<{ id: string; helperId: string; helperName: string } | null>(null);
+  const [reviewGig, setReviewGig] = useState<{
+    id: string;
+    helperId: string;
+    helperName: string;
+  } | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [counterAmount, setCounterAmount] = useState("");
@@ -83,9 +94,14 @@ function MyGigsPage() {
   const declineBidFn = useServerFn(declineBid);
   const createReviewFn = useServerFn(createReview);
 
-  const gigsQuery = useQuery({ queryKey: ["my-gigs"], queryFn: () => getMyGigsFn() });
+  const gigsQuery = useQuery({
+    queryKey: ["my-gigs"],
+    queryFn: () => getMyGigsFn(),
+  });
 
-  const selectedGigData = gigsQuery.data?.gigs.find((g) => g.id === selectedGig);
+  const selectedGigData = gigsQuery.data?.gigs.find(
+    (g) => g.id === selectedGig,
+  );
 
   const negotiationsQuery = useQuery({
     queryKey: ["negotiations", selectedGig],
@@ -108,7 +124,9 @@ function MyGigsPage() {
       counterBidFn({ data: { negotiationId: negId, counterBidCents: cents } }),
     onSuccess: () => {
       toast.success("Gegenangebot gesendet!");
-      queryClient.invalidateQueries({ queryKey: ["negotiations", selectedGig] });
+      queryClient.invalidateQueries({
+        queryKey: ["negotiations", selectedGig],
+      });
       setCounterNegId(null);
       setCounterAmount("");
     },
@@ -116,10 +134,13 @@ function MyGigsPage() {
   });
 
   const declineMutation = useMutation({
-    mutationFn: (negId: string) => declineBidFn({ data: { negotiationId: negId } }),
+    mutationFn: (negId: string) =>
+      declineBidFn({ data: { negotiationId: negId } }),
     onSuccess: () => {
       toast.success("Angebot abgelehnt");
-      queryClient.invalidateQueries({ queryKey: ["negotiations", selectedGig] });
+      queryClient.invalidateQueries({
+        queryKey: ["negotiations", selectedGig],
+      });
       queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
     },
     onError: (err) => toast.error((err as Error).message),
@@ -144,34 +165,22 @@ function MyGigsPage() {
     onError: (err) => toast.error((err as Error).message),
   });
 
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    { key: "inbox", label: "Postfach", href: "/inbox", icon: <Mail className="size-4" /> },
-    {
-      key: "my-gigs",
-      label: "Meine Aufträge",
-      href: "/my-gigs",
-      icon: <Search className="size-4" />,
-    },
-    {
-      key: "create-gig",
-      label: "Auftrag erstellen",
-      href: "/create-gig",
-      icon: <Plus className="size-4" />,
-    },
-  ];
+  const { navItems } = useAppNavItems();
 
   const gigs = gigsQuery.data?.gigs ?? [];
-  const activeGigs = gigs.filter((g) => !["completed", "cancelled"].includes(g.status));
-  const pastGigs = gigs.filter((g) => ["completed", "cancelled"].includes(g.status));
+  const activeGigs = gigs.filter(
+    (g) => !["completed", "cancelled"].includes(g.status),
+  );
+  const pastGigs = gigs.filter((g) =>
+    ["completed", "cancelled"].includes(g.status),
+  );
 
   return (
-    <DashboardShell title="Meine Aufträge" navItems={navItems} activeKey="my-gigs">
+    <DashboardShell
+      title="Meine Aufträge"
+      navItems={navItems}
+      activeKey="my-gigs"
+    >
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-brand text-2xl">Meine Aufträge</h1>
@@ -195,7 +204,8 @@ function MyGigsPage() {
             <Search className="size-10 text-muted-foreground/40" />
             <h3 className="font-semibold">Noch keine Aufträge</h3>
             <p className="text-sm text-muted-foreground max-w-sm">
-              Erstelle deinen ersten Auftrag und erhalte Angebote von Helfern in deiner Nähe.
+              Erstelle deinen ersten Auftrag und erhalte Angebote von Helfern in
+              deiner Nähe.
             </p>
             <Button asChild className="mt-2">
               <Link to="/create-gig">
@@ -268,10 +278,15 @@ function MyGigsPage() {
       )}
 
       {/* Gig Details + Negotiations Dialog */}
-      <Dialog open={!!selectedGig} onOpenChange={(open) => !open && setSelectedGig(null)}>
+      <Dialog
+        open={!!selectedGig}
+        onOpenChange={(open) => !open && setSelectedGig(null)}
+      >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedGigData?.title ?? "Auftragsdetails"}</DialogTitle>
+            <DialogTitle>
+              {selectedGigData?.title ?? "Auftragsdetails"}
+            </DialogTitle>
             <DialogDescription>
               Angebote verwalten und Auftrag abschließen
             </DialogDescription>
@@ -283,12 +298,15 @@ function MyGigsPage() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <MapPin className="size-3.5" />
-                  {selectedGigData.address ?? "—"}, {selectedGigData.postal_code}
+                  {selectedGigData.address ?? "—"},{" "}
+                  {selectedGigData.postal_code}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="size-3.5" />
                   {selectedGigData.scheduled_at
-                    ? new Date(selectedGigData.scheduled_at).toLocaleDateString("de-DE")
+                    ? new Date(selectedGigData.scheduled_at).toLocaleDateString(
+                        "de-DE",
+                      )
                     : "Flexibel"}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -320,7 +338,9 @@ function MyGigsPage() {
                 </h3>
 
                 {negotiationsQuery.isLoading ? (
-                  <p className="text-sm text-muted-foreground">Lädt Angebote…</p>
+                  <p className="text-sm text-muted-foreground">
+                    Lädt Angebote…
+                  </p>
                 ) : !negotiationsQuery.data?.negotiations?.length ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
                     Noch keine Angebote eingegangen.
@@ -336,7 +356,9 @@ function MyGigsPage() {
                           <div className="flex items-center gap-3">
                             <Avatar className="size-9">
                               <AvatarFallback className="bg-primary/15 text-primary text-xs">
-                                {(neg.profiles?.display_name ?? "?").slice(0, 2).toUpperCase()}
+                                {(neg.profiles?.display_name ?? "?")
+                                  .slice(0, 2)
+                                  .toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -353,7 +375,9 @@ function MyGigsPage() {
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-bold text-primary">
-                              {formatEuros(neg.counter_bid_cents ?? neg.bid_cents)}
+                              {formatEuros(
+                                neg.counter_bid_cents ?? neg.bid_cents,
+                              )}
                             </p>
                             {neg.counter_bid_cents && (
                               <p className="text-xs text-muted-foreground line-through">
@@ -390,7 +414,8 @@ function MyGigsPage() {
                           </Badge>
                         </div>
 
-                        {neg.status === "pending" || neg.status === "countered" ? (
+                        {neg.status === "pending" ||
+                        neg.status === "countered" ? (
                           <div className="flex gap-2 flex-wrap">
                             {counterNegId === neg.id ? (
                               <div className="flex gap-2 w-full">
@@ -398,7 +423,9 @@ function MyGigsPage() {
                                   type="number"
                                   placeholder="Betrag (€)"
                                   value={counterAmount}
-                                  onChange={(e) => setCounterAmount(e.target.value)}
+                                  onChange={(e) =>
+                                    setCounterAmount(e.target.value)
+                                  }
                                   className="h-8 text-sm"
                                 />
                                 <Button
@@ -413,10 +440,14 @@ function MyGigsPage() {
                                   onClick={() =>
                                     counterMutation.mutate({
                                       negId: neg.id,
-                                      cents: Math.round(parseFloat(counterAmount) * 100),
+                                      cents: Math.round(
+                                        parseFloat(counterAmount) * 100,
+                                      ),
                                     })
                                   }
-                                  disabled={!counterAmount || counterMutation.isPending}
+                                  disabled={
+                                    !counterAmount || counterMutation.isPending
+                                  }
                                 >
                                   Senden
                                 </Button>
@@ -456,7 +487,8 @@ function MyGigsPage() {
                     Arbeit erledigt?
                   </h4>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Bestätige den Abschluss, um die Zahlung aus dem Treuhandkonto freizugeben.
+                    Bestätige den Abschluss, um die Zahlung aus dem
+                    Treuhandkonto freizugeben.
                   </p>
                   <Button
                     size="sm"
@@ -475,7 +507,10 @@ function MyGigsPage() {
       </Dialog>
 
       {/* Review Dialog */}
-      <Dialog open={!!reviewGig} onOpenChange={(open) => !open && setReviewGig(null)}>
+      <Dialog
+        open={!!reviewGig}
+        onOpenChange={(open) => !open && setReviewGig(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Bewertung abgeben</DialogTitle>
@@ -493,7 +528,9 @@ function MyGigsPage() {
                     key={star}
                     onClick={() => setReviewRating(star)}
                     className={`text-2xl transition-transform hover:scale-110 ${
-                      star <= reviewRating ? "text-amber-400" : "text-muted-foreground/30"
+                      star <= reviewRating
+                        ? "text-amber-400"
+                        : "text-muted-foreground/30"
                     }`}
                   >
                     ★
@@ -525,7 +562,9 @@ function MyGigsPage() {
               disabled={reviewMutation.isPending}
             >
               <Star className="size-4 mr-2" />
-              {reviewMutation.isPending ? "Wird gespeichert…" : "Bewertung senden"}
+              {reviewMutation.isPending
+                ? "Wird gespeichert…"
+                : "Bewertung senden"}
             </Button>
           </div>
         </DialogContent>
@@ -560,7 +599,10 @@ function GigCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-semibold truncate">{gig.title}</h3>
-              <Badge variant="outline" className={`shrink-0 text-[11px] ${statusClass}`}>
+              <Badge
+                variant="outline"
+                className={`shrink-0 text-[11px] ${statusClass}`}
+              >
                 {statusLabel}
               </Badge>
             </div>
@@ -588,7 +630,10 @@ function GigCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex items-center gap-2 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
             {gig.status === "completed" && gig.assigned_helper_id && (
               <Button
                 size="sm"
