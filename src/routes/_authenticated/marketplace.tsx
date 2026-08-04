@@ -3,10 +3,6 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Mail,
-  ClipboardList,
-  Wallet,
   Search,
   MapPin,
   Calendar,
@@ -16,10 +12,8 @@ import {
   Send,
   CheckCircle2,
 } from "lucide-react";
-import {
-  DashboardShell,
-  type DashboardNavItem,
-} from "@/components/dashboard/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { useAppNavItems } from "@/lib/use-app-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +38,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getAvailableGigs } from "@/lib/gigs.functions";
 import { createBid, getMyBids } from "@/lib/negotiations.functions";
 import { toast } from "sonner";
-import { formatEuros } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/marketplace")({
   component: MarketplacePage,
@@ -61,6 +54,13 @@ const SERVICE_LABELS: Record<string, string> = {
   bewässerung: "💧 Bewässerung",
   sonstiges: "🔧 Sonstiges",
 };
+
+function formatEuros(cents: number) {
+  return (cents / 100).toLocaleString("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  });
+}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -117,38 +117,7 @@ function MarketplacePage() {
       toast.error((err as Error).message || "Fehler beim Abgeben des Angebots"),
   });
 
-  const navItems: DashboardNavItem[] = [
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      href: "/dashboard",
-      icon: <BarChart3 className="size-4" />,
-    },
-    {
-      key: "inbox",
-      label: "Postfach",
-      href: "/inbox",
-      icon: <Mail className="size-4" />,
-    },
-    {
-      key: "marketplace",
-      label: "Aufträge finden",
-      href: "/marketplace",
-      icon: <Search className="size-4" />,
-    },
-    {
-      key: "orders",
-      label: "Meine Aufträge",
-      href: "/gigs",
-      icon: <ClipboardList className="size-4" />,
-    },
-    {
-      key: "earnings",
-      label: "Verdienst",
-      href: "/earnings",
-      icon: <Wallet className="size-4" />,
-    },
-  ];
+  const { navItems } = useAppNavItems();
 
   const gigs = gigsQuery.data?.gigs ?? [];
 
