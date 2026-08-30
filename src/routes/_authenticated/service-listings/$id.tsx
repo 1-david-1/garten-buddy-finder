@@ -29,6 +29,7 @@ import {
   purchaseServiceListing,
   makeOffer,
   endAuction,
+  purchaseWithSchedule,
 } from "@/lib/service-listings.functions";
 import { startConversation } from "@/lib/messaging.functions";
 import { toast } from "sonner";
@@ -64,6 +65,10 @@ function ServiceListingDetailPage() {
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [offerAmount, setOfferAmount] = useState("");
   const [offerMessage, setOfferMessage] = useState("");
+  const [bookingDialogOpen, setBookingDialogOpen] = useState(false);
+  const [bookingStart, setBookingStart] = useState("");
+  const [bookingEnd, setBookingEnd] = useState("");
+  const [bookingMessage, setBookingMessage] = useState("");
   const [hasTriedAutoEnd, setHasTriedAutoEnd] = useState(false);
   const [activePhoto, setActivePhoto] = useState(0);
 
@@ -71,6 +76,7 @@ function ServiceListingDetailPage() {
   const getBidsFn = useServerFn(getAuctionBids);
   const placeBidFn = useServerFn(placeAuctionBid);
   const purchaseFn = useServerFn(purchaseServiceListing);
+  const purchaseWithScheduleFn = useServerFn(purchaseWithSchedule);
   const makeOfferFn = useServerFn(makeOffer);
   const endAuctionFn = useServerFn(endAuction);
 
@@ -115,6 +121,24 @@ function ServiceListingDetailPage() {
       purchaseFn({ data: { listingId: id, buyNow } }),
     onSuccess: () => {
       toast.success("Kauf abgeschlossen! Der Auftrag wurde erstellt.");
+      navigate({ to: "/my-gigs" });
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const bookingMutation = useMutation({
+    mutationFn: () =>
+      purchaseWithScheduleFn({
+        data: {
+          listingId: id,
+          scheduledAt: new Date(bookingStart).toISOString(),
+          scheduledEnd: bookingEnd ? new Date(bookingEnd).toISOString() : undefined,
+          message: bookingMessage,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Anfrage gesendet – der Helfer wird benachrichtigt");
+      setBookingDialogOpen(false);
       navigate({ to: "/my-gigs" });
     },
     onError: (err) => toast.error((err as Error).message),
@@ -415,8 +439,7 @@ function ServiceListingDetailPage() {
                       </div>
                       <Button
                         className="w-full"
-                        onClick={() => purchaseMutation.mutate(false)}
-                        disabled={purchaseMutation.isPending}
+                        onClick={() => setBookingDialogOpen(true)}
                       >
                         Jetzt kaufen
                       </Button>
@@ -523,6 +546,55 @@ function ServiceListingDetailPage() {
               disabled={!offerAmount || offerMutation.isPending}
             >
               Angebot senden
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Buchungsanfrage</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="booking-start">Wann? (Datum & Uhrzeit) *</Label>
+              <Input
+                id="booking-start"
+                type="datetime-local"
+                value={bookingStart}
+                onChange={(e) => setBookingStart(e.target.value)}
+                className="mt-1"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="booking-end">Bis wann? (Optional)</Label>
+              <Input
+                id="booking-end"
+                type="datetime-local"
+                value={bookingEnd}
+                onChange={(e) => setBookingEnd(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="booking-message">Nachricht an den Helfer (Optional)</Label>
+              <Textarea
+                id="booking-message"
+                placeholder="Hallo, ich bräuchte Hilfe bei..."
+                value={bookingMessage}
+                onChange={(e) => setBookingMessage(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => bookingMutation.mutate()}
+              disabled={!bookingStart || bookingMutation.isPending}
+            >
+              Buchungsanfrage senden
             </Button>
           </DialogFooter>
         </DialogContent>
