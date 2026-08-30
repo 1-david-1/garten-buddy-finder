@@ -1,633 +1,300 @@
-import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  CalendarClock,
-  CheckCircle2,
-  ClipboardList,
-  Euro,
-  Palmtree,
-  Star,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { useAppNavItems } from "@/lib/use-app-nav";
-import {
-  getHelperDashboard,
-  setAvailability,
-  setVacationMode,
-  submitTaxId,
-} from "@/lib/helper-dashboard.functions";
-import { useI18n } from "@/lib/i18n";
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-interface RecentGig {
-  id: string;
-  title: string;
-  serviceType: string;
-  budgetCents: number;
-  address: string | null;
-  scheduledAt: string | null;
-  status: string;
-  customerName: string;
-}
+const PSTG_TX_THRESHOLD = 25;
+const PSTG_GROSS_CENTS_THRESHOLD = 180000; // 1.800 €
 
-function useHelperDashboardData() {
-  const getFn = useServerFn(getHelperDashboard);
-  return useQuery({ queryKey: ["helper-dashboard"], queryFn: () => getFn() });
-}
+export const getHelperDashboard = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const year = new Date().getFullYear();
 
-function formatEuros(cents: number, locale: string) {
-  return (cents / 100).toLocaleString(locale, {
-    style: "currency",
-    currency: "EUR",
-  });
-}
+    const [
+      profileRes,
+      privateRes,
+      gigsRes,
+      pendingGigsRes,
+      escrowRes,
+      reviewsRes,
+      earningsRes,
+    ] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select(
+          "display_name, available_today, vacation_mode, vacation_return_date",
+        )
+        .eq("id", userId)
+        .maybeSingle(),
+      supabase
+        .from("profile_private")
+        .select("tax_id, birthdate")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabase
+        .from("gigs")
+        .select(
+          "id, title, service_type, budget_cents, address, scheduled_at, status, customer_id",
+        )
+        .eq("assigned_helper_id", userId)
+        .order("scheduled_at", { ascending: false, nullsFirst: false })
+        .limit(20),
+      supabase
+        .from("gigs")
+        .select(
+          "id, title, service_type, budget_cents, address, scheduled_at, status, customer_id, created_at",
+        )
+        .eq("assigned_helper_id", userId)
+        .eq("status", "pending_helper")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("escrow_transactions")
+        .select(
+          "id, gig_id, bid_cents, helper_fee_cents, state, paid_out_at, created_at",
+        )
+        .eq("helper_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(90),
+      supabase.from("reviews").select("rating").eq("helper_id", userId),
+      supabase
+        .from("earnings_tracker")
+        .select("tx_count, gross_cents, payouts_locked")
+        .eq("helper_id", userId)
+        .eq("year", year)
+        .maybeSingle(),
+    ]);
 
-const statusVariant: Record<
-  string,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  completed: "default",
-  in_progress: "secondary",
-  assigned: "secondary",
-  negotiating: "outline",
-  open: "outline",
-  cancelled: "destructive",
-  draft: "outline",
-};
+    if (profileRes.error) throw profileRes.error;
+    if (privateRes.error) throw privateRes.error;
+    if (gigsRes.error) throw gigsRes.error;
+    if (pendingGigsRes.error) throw pendingGigsRes.error;
+    if (escrowRes.error) throw escrowRes.error;
+    if (reviewsRes.error) throw reviewsRes.error;
+    if (earningsRes.error) throw earningsRes.error;
 
-function ageFromISO(iso: string): number {
-  const d = new Date(iso);
-  const now = new Date();
-  let a = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) a--;
-  return a;
-}
+    const gigs = gigsRes.data ?? [];
+    const pendingGigs = pendingGigsRes.data ?? [];
+    const escrow = escrowRes.data ?? [];
+    const reviews = reviewsRes.data ?? [];
 
-export function HelperDashboard() {
-  const { t, locale } = useI18n();
-  const intlLocale = locale === "de" ? "de-DE" : "en-GB";
-  const q = useHelperDashboardData();
-  const queryClient = useQueryClient();
-  const [selectedGig, setSelectedGig] = useState<RecentGig | null>(null);
-  const [taxIdInput, setTaxIdInput] = useState("");
-
-  const availabilityFn = useServerFn(setAvailability);
-  const availabilityMutation = useMutation({
-    mutationFn: (availableToday: boolean) =>
-      availabilityFn({ data: { availableToday } }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
-  });
-
-  const [vacationReturnDateInput, setVacationReturnDateInput] = useState("");
-  const vacationFn = useServerFn(setVacationMode);
-  const vacationMutation = useMutation({
-    mutationFn: (input: { vacationMode: boolean; returnDate: string | null }) =>
-      vacationFn({ data: input }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
-  });
-
-  const taxIdFn = useServerFn(submitTaxId);
-  const taxIdMutation = useMutation({
-    mutationFn: (taxId: string) => taxIdFn({ data: { taxId } }),
-    onSuccess: () => {
-      setTaxIdInput("");
-      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
-    },
-  });
-
-  const { navItems } = useAppNavItems();
-
-  if (q.isError) {
-    return (
-      <DashboardShell
-        title={t("dashboard.helper.title")}
-        navItems={navItems}
-        activeKey="dashboard"
-      >
-        <Alert variant="destructive">
-          <AlertTitle>{t("dashboard.helper.error.title")}</AlertTitle>
-          <AlertDescription>
-            {(q.error as Error)?.message ?? t("dashboard.helper.error.body")}
-          </AlertDescription>
-        </Alert>
-      </DashboardShell>
+    // Customer display names for the recent-orders list and pending bookings
+    const customerIds = Array.from(new Set([...gigs.map((g) => g.customer_id), ...pendingGigs.map((g) => g.customer_id)]));
+    const { data: customerProfiles } = customerIds.length
+      ? await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", customerIds)
+      : { data: [] as { id: string; display_name: string }[] };
+    const nameById = new Map(
+      (customerProfiles ?? []).map((p) => [p.id, p.display_name]),
     );
-  }
 
-  if (q.isLoading || !q.data) {
-    return (
-      <DashboardShell
-        title={t("dashboard.helper.title")}
-        navItems={navItems}
-        activeKey="dashboard"
-      >
-        <p className="text-muted-foreground">{t("common.loading")}</p>
-      </DashboardShell>
+    // Completion rate (Erfolgsquote): completed vs. completed+cancelled
+    const finished = gigs.filter(
+      (g) => g.status === "completed" || g.status === "cancelled",
     );
-  }
+    const completed = gigs.filter((g) => g.status === "completed");
+    const completionRate =
+      finished.length > 0 ? completed.length / finished.length : null;
 
-  const { profile, stats, chart, pstg, recentGigs } = q.data;
-  const isYouth = profile.birthdate
-    ? ageFromISO(profile.birthdate) < 18
-    : false;
-  const pstgRatio = Math.max(
-    pstg.txCount / pstg.txThreshold,
-    pstg.grossCents / pstg.grossThreshold,
-  );
+    // Average rating
+    const ratingCount = reviews.length;
+    const avgRating =
+      ratingCount > 0
+        ? reviews.reduce((s, r) => s + r.rating, 0) / ratingCount
+        : null;
 
-  return (
-    <DashboardShell
-      title={t("dashboard.helper.title")}
-      navItems={navItems}
-      activeKey="dashboard"
-    >
-      <div
-        id="top"
-        className="flex flex-wrap items-center justify-between gap-4"
-      >
-        <div>
-          <h1 className="font-brand text-2xl">
-            {t("dashboard.helper.greeting")}
-            {profile.displayName ? `, ${profile.displayName}` : ""}
-          </h1>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-3 rounded-2xl border border-glass-border bg-glass px-4 py-2.5 backdrop-blur">
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${profile.availableToday ? "bg-primary shadow-[0_0_8px_var(--color-primary)]" : "bg-muted-foreground"}`}
-            />
-            <span className="text-sm font-medium">
-              {profile.availableToday
-                ? t("dashboard.helper.available")
-                : t("dashboard.helper.unavailable")}
-            </span>
-            <Switch
-              checked={profile.availableToday}
-              onCheckedChange={(checked) =>
-                availabilityMutation.mutate(checked)
-              }
-              disabled={availabilityMutation.isPending || profile.vacationMode}
-              aria-label={
-                profile.availableToday
-                  ? t("dashboard.helper.available")
-                  : t("dashboard.helper.unavailable")
-              }
-            />
-          </div>
-          {availabilityMutation.isError && (
-            <span className="text-xs text-destructive">
-              {t("dashboard.helper.error.generic")}
-            </span>
-          )}
+    // Net earnings = bid - helper_fee, only for paid-out transactions
+    const paidOut = escrow.filter(
+      (e) => e.state === "paid_out" && e.paid_out_at,
+    );
+    const netCentsOf = (e: (typeof escrow)[number]) =>
+      e.bid_cents - e.helper_fee_cents;
 
-          <div className="flex flex-col items-end gap-2 rounded-2xl border border-glass-border bg-glass px-4 py-2.5 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <Palmtree
-                className={`size-4 ${profile.vacationMode ? "text-primary" : "text-muted-foreground"}`}
-              />
-              <span className="text-sm font-medium">
-                {t("dashboard.helper.vacation.label")}
-              </span>
-              <Switch
-                checked={profile.vacationMode}
-                disabled={vacationMutation.isPending}
-                onCheckedChange={(checked) => {
-                  if (!checked) {
-                    vacationMutation.mutate({
-                      vacationMode: false,
-                      returnDate: null,
-                    });
-                    return;
-                  }
-                  vacationMutation.mutate({
-                    vacationMode: true,
-                    returnDate: vacationReturnDateInput || null,
-                  });
-                }}
-                aria-label={t("dashboard.helper.vacation.label")}
-              />
-            </div>
-            {profile.vacationMode ? (
-              <p className="text-xs text-muted-foreground">
-                {profile.vacationReturnDate
-                  ? `${t("dashboard.helper.vacation.backOn")} ${new Date(profile.vacationReturnDate).toLocaleDateString(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric" })}`
-                  : t("dashboard.helper.vacation.activeNoDate")}
-              </p>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={vacationReturnDateInput}
-                  onChange={(e) => setVacationReturnDateInput(e.target.value)}
-                  className="h-8 w-36 text-xs"
-                  aria-label={t("dashboard.helper.vacation.returnDateLabel")}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+    const now = Date.now();
+    const DAY = 86_400_000;
+    const last7Total = paidOut
+      .filter((e) => now - new Date(e.paid_out_at!).getTime() <= 7 * DAY)
+      .reduce((s, e) => s + netCentsOf(e), 0);
+    const prev7Total = paidOut
+      .filter((e) => {
+        const age = now - new Date(e.paid_out_at!).getTime();
+        return age > 7 * DAY && age <= 14 * DAY;
+      })
+      .reduce((s, e) => s + netCentsOf(e), 0);
 
-      {profile.vacationMode && (
-        <Alert className="mt-6 border-primary/30 bg-primary/5">
-          <Palmtree className="size-4 text-primary" />
-          <AlertTitle>{t("dashboard.helper.vacation.bannerTitle")}</AlertTitle>
-          <AlertDescription>
-            {t("dashboard.helper.vacation.bannerBody")}
-          </AlertDescription>
-        </Alert>
-      )}
+    // Daily buckets for the last 7 days (oldest -> newest) for the earnings chart
+    const dayLabels = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    const chart = Array.from({ length: 7 }, (_, i) => {
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      dayStart.setDate(dayStart.getDate() - (6 - i));
+      const dayEnd = new Date(dayStart.getTime() + DAY);
+      const cents = paidOut
+        .filter((e) => {
+          const t = new Date(e.paid_out_at!).getTime();
+          return t >= dayStart.getTime() && t < dayEnd.getTime();
+        })
+        .reduce((s, e) => s + netCentsOf(e), 0);
+      return {
+        label: dayLabels[dayStart.getDay()],
+        euros: Math.round(cents / 100),
+      };
+    });
 
-      {isYouth && (
-        <Alert className="mt-6 border-primary/30 bg-primary/5">
-          <CalendarClock className="size-4 text-primary" />
-          <AlertTitle>{t("dashboard.helper.youth.title")}</AlertTitle>
-          <AlertDescription>
-            {t("dashboard.helper.youth.banner")}
-          </AlertDescription>
-        </Alert>
-      )}
+    const tracker = earningsRes.data ?? {
+      tx_count: 0,
+      gross_cents: 0,
+      payouts_locked: false,
+    };
+    const pstg = {
+      txCount: tracker.tx_count,
+      grossCents: tracker.gross_cents,
+      payoutsLocked: tracker.payouts_locked,
+      txThreshold: PSTG_TX_THRESHOLD,
+      grossThreshold: PSTG_GROSS_CENTS_THRESHOLD,
+      thresholdReached:
+        tracker.tx_count >= PSTG_TX_THRESHOLD ||
+        tracker.gross_cents >= PSTG_GROSS_CENTS_THRESHOLD,
+    };
 
-      {/* Stat cards */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-glass-border bg-glass backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-normal text-muted-foreground">
-              {t("dashboard.helper.stat.earnings")}
-            </CardTitle>
-            <Euro className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">
-              {formatEuros(stats.earningsLast7Cents, intlLocale)}
-            </div>
-            {stats.earningsTrendPct !== null ? (
-              <p className="mt-1 flex items-center gap-1 text-xs">
-                {stats.earningsTrendPct >= 0 ? (
-                  <TrendingUp className="size-3.5 text-primary" />
-                ) : (
-                  <TrendingDown className="size-3.5 text-destructive" />
-                )}
-                <span
-                  className={
-                    stats.earningsTrendPct >= 0
-                      ? "text-primary"
-                      : "text-destructive"
-                  }
-                >
-                  {stats.earningsTrendPct >= 0 ? "+" : ""}
-                  {stats.earningsTrendPct.toFixed(1)}%
-                </span>
-                <span className="text-muted-foreground">
-                  {t("dashboard.helper.stat.vsLastWeek")}
-                </span>
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("dashboard.helper.stat.vsLastWeek")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+    const recentGigs = gigs.slice(0, 8).map((g) => ({
+      id: g.id,
+      title: g.title,
+      serviceType: g.service_type,
+      budgetCents: g.budget_cents,
+      address: g.address,
+      scheduledAt: g.scheduled_at,
+      status: g.status,
+      customerId: g.customer_id,
+      customerName: nameById.get(g.customer_id) ?? "—",
+    }));
 
-        <Card className="border-glass-border bg-glass backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-normal text-muted-foreground">
-              {t("dashboard.helper.stat.rating")}
-            </CardTitle>
-            <Star className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">
-              {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
-              {stats.avgRating !== null && (
-                <span className="ml-1 text-base text-primary">★</span>
-              )}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {stats.ratingCount > 0
-                ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
-                : t("dashboard.helper.stat.noRatings")}
-            </p>
-          </CardContent>
-        </Card>
+    const pendingBookings = pendingGigs.map((g) => ({
+      id: g.id,
+      title: g.title,
+      serviceType: g.service_type,
+      budgetCents: g.budget_cents,
+      address: g.address,
+      scheduledAt: g.scheduled_at,
+      status: g.status,
+      customerId: g.customer_id,
+      customerName: nameById.get(g.customer_id) ?? "—",
+      createdAt: g.created_at,
+    }));
 
-        <Card className="border-glass-border bg-glass backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-normal text-muted-foreground">
-              {t("dashboard.helper.stat.completionRate")}
-            </CardTitle>
-            <CheckCircle2 className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">
-              {stats.completionRate !== null
-                ? `${Math.round(stats.completionRate * 100)}%`
-                : "—"}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {stats.completionRate !== null
-                ? `${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`
-                : t("dashboard.helper.stat.completionSub")}
-            </p>
-          </CardContent>
-        </Card>
+    // Urlaubsmodus läuft automatisch aus, sobald das Rückkehrdatum erreicht ist
+    // (lazy, ohne Cronjob - wird beim nächsten Laden korrigiert).
+    const vacationReturnDate = profileRes.data?.vacation_return_date ?? null;
+    const vacationExpired =
+      vacationReturnDate !== null &&
+      new Date(vacationReturnDate).getTime() <= Date.now();
+    const vacationMode =
+      (profileRes.data?.vacation_mode ?? false) && !vacationExpired;
 
-        <Card className="border-glass-border bg-glass backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-normal text-muted-foreground">
-              {t("dashboard.helper.stat.completedTotal")}
-            </CardTitle>
-            <ClipboardList className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{stats.completedCount}</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("dashboard.helper.stat.total")}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+    if (vacationExpired && profileRes.data?.vacation_mode) {
+      await supabase
+        .from("profiles")
+        .update({ vacation_mode: false, vacation_return_date: null })
+        .eq("id", userId);
+    }
 
-      {/* Chart + PStTG monitor */}
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Card
-          id="earnings-chart"
-          className="border-glass-border bg-glass backdrop-blur"
-        >
-          <CardHeader>
-            <CardTitle className="font-brand text-lg">
-              {t("dashboard.helper.chart.title")}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {t("dashboard.helper.chart.sub")}
-            </p>
-          </CardHeader>
-          <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chart}>
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                />
-                <YAxis hide />
-                <Tooltip
-                  cursor={{ fill: "var(--color-glass)" }}
-                  contentStyle={{
-                    background: "var(--color-background)",
-                    border: "1px solid var(--color-glass-border)",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                  formatter={(value: number) => [
-                    `${value} €`,
-                    t("dashboard.helper.chart.title"),
-                  ]}
-                />
-                <Bar
-                  dataKey="euros"
-                  fill="var(--color-primary)"
-                  radius={[6, 6, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+    return {
+      profile: {
+        displayName: profileRes.data?.display_name ?? "",
+        availableToday: profileRes.data?.available_today ?? false,
+        vacationMode,
+        vacationReturnDate: vacationExpired ? null : vacationReturnDate,
+        hasTaxId: Boolean(privateRes.data?.tax_id),
+        birthdate: privateRes.data?.birthdate ?? null,
+      },
+      stats: {
+        earningsLast7Cents: last7Total,
+        earningsPrev7Cents: prev7Total,
+        earningsTrendPct:
+          prev7Total > 0
+            ? ((last7Total - prev7Total) / prev7Total) * 100
+            : null,
+        completionRate,
+        completedCount: completed.length,
+        finishedCount: finished.length,
+        avgRating,
+        ratingCount,
+      },
+      chart,
+      pstg,
+      recentGigs,
+      pendingBookings,
+    };
+  });
 
-        <Card className="border-glass-border bg-glass backdrop-blur">
-          <CardHeader>
-            <CardTitle className="font-brand text-lg">
-              {t("dashboard.helper.pstg.title")}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {t("dashboard.helper.pstg.sub")}
-            </p>
-          </CardHeader>
-          <CardContent>
-            <Progress value={Math.min(100, pstgRatio * 100)} className="h-2" />
-            <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground">
-              <span>
-                {pstg.txCount} / {pstg.txThreshold} Tx
-              </span>
-              <span>
-                {formatEuros(pstg.grossCents, intlLocale)} /{" "}
-                {formatEuros(pstg.grossThreshold, intlLocale)}
-              </span>
-            </div>
+export const setAvailability = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ availableToday: z.boolean() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("profiles")
+      .update({ available_today: data.availableToday })
+      .eq("id", context.userId);
+    if (error) throw error;
+    return { ok: true };
+  });
 
-            {pstg.thresholdReached && !profile.hasTaxId && (
-              <Alert variant="destructive" className="mt-4">
-                <AlertTitle>{t("dashboard.helper.pstg.locked")}</AlertTitle>
-                <AlertDescription>
-                  <form
-                    className="mt-3 flex gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (taxIdInput.trim())
-                        taxIdMutation.mutate(taxIdInput.trim());
-                    }}
-                  >
-                    <Input
-                      placeholder={t("dashboard.helper.pstg.taxIdLabel")}
-                      value={taxIdInput}
-                      onChange={(e) => setTaxIdInput(e.target.value)}
-                      className="h-9"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={taxIdMutation.isPending}
-                    >
-                      {t("dashboard.helper.pstg.taxIdSubmit")}
-                    </Button>
-                  </form>
-                  {taxIdMutation.isError && (
-                    <p className="mt-2 text-xs text-destructive">
-                      {t("dashboard.helper.error.generic")}
-                    </p>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+export const setVacationMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        vacationMode: z.boolean(),
+        returnDate: z.string().date().nullable().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const update: {
+      vacation_mode: boolean;
+      vacation_return_date: string | null;
+      available_today?: boolean;
+    } = {
+      vacation_mode: data.vacationMode,
+      vacation_return_date: data.vacationMode
+        ? (data.returnDate ?? null)
+        : null,
+    };
+    // Wer in den Urlaub geht, gilt automatisch auch nicht mehr als "heute verfügbar".
+    if (data.vacationMode) update.available_today = false;
 
-      {/* Recent orders */}
-      <Card
-        id="recent-gigs"
-        className="mt-6 border-glass-border bg-glass backdrop-blur"
-      >
-        <CardHeader>
-          <CardTitle className="font-brand text-lg">
-            {t("dashboard.helper.orders.title")}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {t("dashboard.helper.orders.sub")}
-          </p>
-        </CardHeader>
-        <CardContent>
-          {recentGigs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("dashboard.helper.orders.empty")}
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    {t("dashboard.helper.orders.col.title")}
-                  </TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    {t("dashboard.helper.orders.col.customer")}
-                  </TableHead>
-                  <TableHead className="hidden md:table-cell">
-                    {t("dashboard.helper.orders.col.date")}
-                  </TableHead>
-                  <TableHead>
-                    {t("dashboard.helper.orders.col.amount")}
-                  </TableHead>
-                  <TableHead>
-                    {t("dashboard.helper.orders.col.status")}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentGigs.map((gig) => (
-                  <TableRow
-                    key={gig.id}
-                    className="cursor-pointer"
-                    onClick={() => setSelectedGig(gig)}
-                  >
-                    <TableCell className="font-medium">{gig.title}</TableCell>
-                    <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {gig.customerName}
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground md:table-cell">
-                      {gig.scheduledAt
-                        ? new Date(gig.scheduledAt).toLocaleDateString(
-                            intlLocale,
-                          )
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {formatEuros(gig.budgetCents, intlLocale)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant[gig.status] ?? "outline"}>
-                        {t(`status.${gig.status}`)}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+    const { error } = await context.supabase
+      .from("profiles")
+      .update(update)
+      .eq("id", context.userId);
+    if (error) throw error;
 
-      <Sheet
-        open={selectedGig !== null}
-        onOpenChange={(open) => !open && setSelectedGig(null)}
-      >
-        <SheetContent>
-          {selectedGig && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{selectedGig.title}</SheetTitle>
-                <SheetDescription>
-                  {t("dashboard.helper.detail.title")}
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-6 space-y-4 px-1 text-sm">
-                <div className="flex items-center justify-between border-b border-glass-border pb-3">
-                  <span className="text-muted-foreground">
-                    {t("dashboard.helper.detail.customer")}
-                  </span>
-                  <span className="font-medium">
-                    {selectedGig.customerName}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-b border-glass-border pb-3">
-                  <span className="text-muted-foreground">
-                    {t("dashboard.helper.detail.date")}
-                  </span>
-                  <span className="font-medium">
-                    {selectedGig.scheduledAt
-                      ? new Date(selectedGig.scheduledAt).toLocaleString(
-                          intlLocale,
-                        )
-                      : "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-b border-glass-border pb-3">
-                  <span className="text-muted-foreground">
-                    {t("dashboard.helper.detail.address")}
-                  </span>
-                  <span className="font-medium">
-                    {selectedGig.address ?? "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-b border-glass-border pb-3">
-                  <span className="text-muted-foreground">
-                    {t("dashboard.helper.detail.amount")}
-                  </span>
-                  <span className="font-medium text-primary">
-                    {formatEuros(selectedGig.budgetCents, intlLocale)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between pb-3">
-                  <span className="text-muted-foreground">
-                    {t("dashboard.helper.orders.col.status")}
-                  </span>
-                  <Badge
-                    variant={statusVariant[selectedGig.status] ?? "outline"}
-                  >
-                    {t(`status.${selectedGig.status}`)}
-                  </Badge>
-                </div>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
-    </DashboardShell>
-  );
-}
+    return { ok: true };
+  });
+
+export const submitTaxId = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ taxId: z.string().min(4).max(40) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const year = new Date().getFullYear();
+    const { error: pErr } = await context.supabase
+      .from("profile_private")
+      .update({ tax_id: data.taxId })
+      .eq("id", context.userId);
+    if (pErr) throw pErr;
+
+    const { error: eErr } = await context.supabase
+      .from("earnings_tracker")
+      .update({ payouts_locked: false })
+      .eq("helper_id", context.userId)
+      .eq("year", year);
+    if (eErr) throw eErr;
+
+    return { ok: true };
+  });
