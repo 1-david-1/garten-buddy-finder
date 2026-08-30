@@ -125,7 +125,7 @@ const de: Dict = {
   "onboarding.submit": "Loslegen",
   "onboarding.back": "Zurück",
 
-  "dashboard.customer.title": "Meine Aufträge",
+  "dashboard.customer.title": "Helfer finden",
   "dashboard.helper.title": "Meine Helfer-Zentrale",
   "dashboard.empty": "Noch nichts hier. Bald geht's los.",
   "common.loading": "Lädt…",
@@ -397,7 +397,7 @@ const en: Dict = {
   "onboarding.submit": "Get started",
   "onboarding.back": "Back",
 
-  "dashboard.customer.title": "My jobs",
+  "dashboard.customer.title": "Find helpers",
   "dashboard.helper.title": "My helper hub",
   "dashboard.empty": "Nothing here yet. Coming soon.",
   "common.loading": "Loading…",
