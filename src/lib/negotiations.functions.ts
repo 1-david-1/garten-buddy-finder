@@ -96,7 +96,7 @@ export const createBid = createServerFn({ method: "POST" })
             `${helperProfile?.display_name ?? "Ein Helfer"} hat ${(data.bidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} für deinen Auftrag „${gig.title}“ geboten.`,
           ],
           ctaLabel: "Gebot ansehen",
-          ctaPath: "/gigs",
+          ctaPath: "/my-gigs",
         }),
       });
     }
@@ -287,7 +287,7 @@ export const declineBid = createServerFn({ method: "POST" })
         heading: "Gebot abgelehnt",
         bodyLines: ["Ein Gebot für einen deiner Aufträge wurde abgelehnt."],
         ctaLabel: isCustomer ? "Aufträge finden" : "Meine Aufträge",
-        ctaPath: isCustomer ? "/marketplace" : "/gigs",
+        ctaPath: isCustomer ? "/marketplace" : "/my-gigs",
       }),
     });
 
