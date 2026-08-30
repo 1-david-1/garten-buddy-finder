@@ -862,3 +862,42 @@ export const purchaseServiceListing = createServerFn({ method: "POST" })
     if (error) throw error;
     return data;
   });
+
+export const purchaseWithSchedule = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator(
+    (input: {
+      listingId: string;
+      scheduledAt: string;
+      scheduledEnd?: string;
+      message?: string;
+    }) => input,
+  )
+  .handler(async ({ context, data: input }) => {
+    const { supabase } = context;
+
+    const { data, error } = await supabase.rpc("purchase_with_schedule", {
+      p_listing_id: input.listingId,
+      p_scheduled_at: input.scheduledAt,
+      p_scheduled_end: input.scheduledEnd || null,
+      p_message: input.message || null,
+    });
+
+    if (error) throw error;
+    return data;
+  });
+
+export const respondToBooking = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { gigId: string; accept: boolean }) => input)
+  .handler(async ({ context, data: input }) => {
+    const { supabase } = context;
+
+    const { data, error } = await supabase.rpc("respond_to_booking", {
+      p_gig_id: input.gigId,
+      p_accept: input.accept,
+    });
+
+    if (error) throw error;
+    return data;
+  });
