@@ -15,6 +15,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       profileRes,
       privateRes,
       gigsRes,
+      pendingGigsRes,
       escrowRes,
       reviewsRes,
       earningsRes,
@@ -40,6 +41,14 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
         .order("scheduled_at", { ascending: false, nullsFirst: false })
         .limit(20),
       supabase
+        .from("gigs")
+        .select(
+          "id, title, service_type, budget_cents, address, scheduled_at, status, customer_id, created_at",
+        )
+        .eq("assigned_helper_id", userId)
+        .eq("status", "pending_helper")
+        .order("created_at", { ascending: false }),
+      supabase
         .from("escrow_transactions")
         .select(
           "id, gig_id, bid_cents, helper_fee_cents, state, paid_out_at, created_at",
@@ -59,16 +68,18 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
     if (profileRes.error) throw profileRes.error;
     if (privateRes.error) throw privateRes.error;
     if (gigsRes.error) throw gigsRes.error;
+    if (pendingGigsRes.error) throw pendingGigsRes.error;
     if (escrowRes.error) throw escrowRes.error;
     if (reviewsRes.error) throw reviewsRes.error;
     if (earningsRes.error) throw earningsRes.error;
 
     const gigs = gigsRes.data ?? [];
+    const pendingGigs = pendingGigsRes.data ?? [];
     const escrow = escrowRes.data ?? [];
     const reviews = reviewsRes.data ?? [];
 
-    // Customer display names for the recent-orders list
-    const customerIds = Array.from(new Set(gigs.map((g) => g.customer_id)));
+    // Customer display names for the recent-orders list and pending bookings
+    const customerIds = Array.from(new Set([...gigs.map((g) => g.customer_id), ...pendingGigs.map((g) => g.customer_id)]));
     const { data: customerProfiles } = customerIds.length
       ? await supabase
           .from("profiles")
@@ -160,6 +171,19 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       customerName: nameById.get(g.customer_id) ?? "—",
     }));
 
+    const pendingBookings = pendingGigs.map((g) => ({
+      id: g.id,
+      title: g.title,
+      serviceType: g.service_type,
+      budgetCents: g.budget_cents,
+      address: g.address,
+      scheduledAt: g.scheduled_at,
+      status: g.status,
+      customerId: g.customer_id,
+      customerName: nameById.get(g.customer_id) ?? "—",
+      createdAt: g.created_at,
+    }));
+
     // Urlaubsmodus läuft automatisch aus, sobald das Rückkehrdatum erreicht ist
     // (lazy, ohne Cronjob - wird beim nächsten Laden korrigiert).
     const vacationReturnDate = profileRes.data?.vacation_return_date ?? null;
@@ -201,6 +225,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       chart,
       pstg,
       recentGigs,
+      pendingBookings,
     };
   });
 
