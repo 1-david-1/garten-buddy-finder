@@ -928,6 +928,39 @@ export function HelperDashboard() {
                     {t(`status.${selectedGig.status}`)}
                   </Badge>
                 </div>
+                {selectedGig.status === "assigned" && (
+                  <div className="mt-6 flex gap-2">
+                    <Button
+                      className="flex-1 gap-1.5"
+                      size="sm"
+                      disabled={respondMutation.isPending}
+                      onClick={() =>
+                        respondMutation.mutate({
+                          gigId: selectedGig.id,
+                          accept: true,
+                          customerId: selectedGig.customerId,
+                        })
+                      }
+                    >
+                      <MessageSquare className="size-3.5" />
+                      Annehmen & Chatten
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={respondMutation.isPending}
+                      onClick={() =>
+                        respondMutation.mutate({
+                          gigId: selectedGig.id,
+                          accept: false,
+                          customerId: selectedGig.customerId,
+                        })
+                      }
+                    >
+                      Ablehnen
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}
