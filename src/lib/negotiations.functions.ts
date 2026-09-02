@@ -191,12 +191,13 @@ export const acceptBid = createServerFn({ method: "POST" })
 
     if (updateError) throw updateError;
 
-    // Update Gig: Helfer zuweisen und Status auf "assigned" setzen
+    // Update Gig: Helfer zuweisen und Status auf "pending_helper" setzen,
+    // damit der Helfer den Auftrag noch final bestätigen muss.
     const { error: gigError } = await supabase
       .from("gigs")
       .update({
         assigned_helper_id: negotiation.helper_id,
-        status: "assigned",
+        status: "pending_helper",
         budget_cents: negotiation.counter_bid_cents ?? negotiation.bid_cents,
       })
       .eq("id", negotiation.gig_id);
