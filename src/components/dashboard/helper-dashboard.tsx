@@ -928,7 +928,7 @@ export function HelperDashboard() {
                     {t(`status.${selectedGig.status}`)}
                   </Badge>
                 </div>
-                {selectedGig.status === "assigned" && (
+                {selectedGig.status === "pending_helper" && (
                   <div className="mt-6 flex gap-2">
                     <Button
                       className="flex-1 gap-1.5"
