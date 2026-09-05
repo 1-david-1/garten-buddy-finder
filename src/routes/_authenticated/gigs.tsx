@@ -22,7 +22,10 @@ import {
 } from "@/components/ui/table";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useAppNavItems } from "@/lib/use-app-nav";
-import { getHelperDashboard } from "@/lib/helper-dashboard.functions";
+import {
+  getHelperDashboard,
+  getHelperGigs,
+} from "@/lib/helper-dashboard.functions";
 import { respondToBooking } from "@/lib/service-listings.functions";
 import { startConversation } from "@/lib/messaging.functions";
 import { useI18n } from "@/lib/i18n";
@@ -77,10 +80,16 @@ function GigsPage() {
   const { t, locale } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const getFn = useServerFn(getHelperDashboard);
-  const q = useQuery({
+  const getDashboardFn = useServerFn(getHelperDashboard);
+  const qDashboard = useQuery({
     queryKey: ["helper-dashboard"],
-    queryFn: () => getFn(),
+    queryFn: () => getDashboardFn(),
+  });
+
+  const getGigsFn = useServerFn(getHelperGigs);
+  const qGigs = useQuery({
+    queryKey: ["helper-gigs"],
+    queryFn: () => getGigsFn(),
   });
 
   const { navItems } = useAppNavItems();
@@ -121,6 +130,7 @@ function GigsPage() {
     },
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["helper-gigs"] });
       if (variables.accept && result.conversationId) {
         toast.success("Buchungsanfrage angenommen! Chat wird geöffnet...");
         navigate({
@@ -134,8 +144,8 @@ function GigsPage() {
     onError: (err) => toast.error((err as Error).message),
   });
 
-  const pendingBookings: PendingBooking[] = q.data?.pendingBookings ?? [];
-  const recentGigs = q.data?.recentGigs ?? [];
+  const pendingBookings: PendingBooking[] = qDashboard.data?.pendingBookings ?? [];
+  const recentGigs = qGigs.data ?? [];
 
   return (
     <DashboardShell
@@ -247,13 +257,13 @@ function GigsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {q.isLoading ? (
+          {qGigs.isLoading ? (
             <p className="text-sm text-muted-foreground">
               {t("common.loading")}
             </p>
-          ) : q.isError ? (
+          ) : qGigs.isError ? (
             <p className="text-sm text-destructive">
-              {(q.error as Error)?.message ?? t("dashboard.helper.error.body")}
+              {(qGigs.error as Error)?.message ?? t("dashboard.helper.error.body")}
             </p>
           ) : !recentGigs.length ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center">
