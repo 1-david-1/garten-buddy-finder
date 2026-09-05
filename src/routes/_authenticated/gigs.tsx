@@ -307,20 +307,59 @@ function GigsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          messageMutation.mutate({
-                            otherUserId: gig.customerId,
-                            gigId: gig.id,
-                          })
-                        }
-                        disabled={messageMutation.isPending}
-                        title="Chat starten"
-                      >
-                        <MessageSquare className="size-4" />
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        {gig.status === "pending_helper" || gig.status === "assigned" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs gap-1"
+                              disabled={respondMutation.isPending}
+                              onClick={() =>
+                                respondMutation.mutate({
+                                  gigId: gig.id,
+                                  accept: true,
+                                  customerId: gig.customerId,
+                                })
+                              }
+                            >
+                              <CheckCircle2 className="size-3" />
+                              Annehmen
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                              disabled={respondMutation.isPending}
+                              onClick={() =>
+                                respondMutation.mutate({
+                                  gigId: gig.id,
+                                  accept: false,
+                                  customerId: gig.customerId,
+                                })
+                              }
+                            >
+                              <X className="size-3" />
+                              Ablehnen
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              messageMutation.mutate({
+                                otherUserId: gig.customerId,
+                                gigId: gig.id,
+                              })
+                            }
+                            disabled={messageMutation.isPending}
+                            title="Chat starten"
+                          >
+                            <MessageSquare className="size-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
