@@ -111,7 +111,7 @@ BEGIN
     RAISE EXCEPTION 'not_authorized';
   END IF;
 
-  IF v_gig.status <> 'pending_helper' THEN
+  IF v_gig.status NOT IN ('pending_helper', 'assigned') THEN
     RAISE EXCEPTION 'gig_not_pending_helper';
   END IF;
 
