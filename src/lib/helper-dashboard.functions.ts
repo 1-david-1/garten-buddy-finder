@@ -78,7 +78,6 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
     const escrow = escrowRes.data ?? [];
     const reviews = reviewsRes.data ?? [];
 
-    // Customer display names for the recent-orders list and pending bookings
     const customerIds = Array.from(new Set([...gigs.map((g) => g.customer_id), ...pendingGigs.map((g) => g.customer_id)]));
     const { data: customerProfiles } = customerIds.length
       ? await supabase
@@ -90,7 +89,6 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       (customerProfiles ?? []).map((p) => [p.id, p.display_name]),
     );
 
-    // Completion rate (Erfolgsquote): completed vs. completed+cancelled
     const finished = gigs.filter(
       (g) => g.status === "completed" || g.status === "cancelled",
     );
@@ -98,14 +96,12 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
     const completionRate =
       finished.length > 0 ? completed.length / finished.length : null;
 
-    // Average rating
     const ratingCount = reviews.length;
     const avgRating =
       ratingCount > 0
         ? reviews.reduce((s, r) => s + r.rating, 0) / ratingCount
         : null;
 
-    // Net earnings = bid - helper_fee, only for paid-out transactions
     const paidOut = escrow.filter(
       (e) => e.state === "paid_out" && e.paid_out_at,
     );
@@ -124,7 +120,6 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       })
       .reduce((s, e) => s + netCentsOf(e), 0);
 
-    // Daily buckets for the last 7 days (oldest -> newest) for the earnings chart
     const dayLabels = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
     const chart = Array.from({ length: 7 }, (_, i) => {
       const dayStart = new Date();
@@ -184,8 +179,6 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       createdAt: g.created_at,
     }));
 
-    // Urlaubsmodus läuft automatisch aus, sobald das Rückkehrdatum erreicht ist
-    // (lazy, ohne Cronjob - wird beim nächsten Laden korrigiert).
     const vacationReturnDate = profileRes.data?.vacation_return_date ?? null;
     const vacationExpired =
       vacationReturnDate !== null &&
@@ -231,7 +224,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
 
 export const setAvailability = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ availableToday: z.boolean() }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -245,7 +238,7 @@ export const setAvailability = createServerFn({ method: "POST" })
 
 export const setVacationMode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         vacationMode: z.boolean(),
@@ -264,7 +257,6 @@ export const setVacationMode = createServerFn({ method: "POST" })
         ? (data.returnDate ?? null)
         : null,
     };
-    // Wer in den Urlaub geht, gilt automatisch auch nicht mehr als "heute verfügbar".
     if (data.vacationMode) update.available_today = false;
 
     const { error } = await context.supabase
@@ -278,7 +270,7 @@ export const setVacationMode = createServerFn({ method: "POST" })
 
 export const submitTaxId = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ taxId: z.string().min(4).max(40) }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -297,4 +289,34 @@ export const submitTaxId = createServerFn({ method: "POST" })
     if (eErr) throw eErr;
 
     return { ok: true };
+  });
+
+export const getHelperGigs = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    const { data: gigs, error } = await supabase
+      .from("gigs")
+      .select("*")
+      .eq("assigned_helper_id", userId)
+      .order("scheduled_at", { ascending: false, nullsFirst: false });
+
+    if (error) throw error;
+
+    const customerIds = Array.from(new Set(gigs.map((g) => g.customer_id)));
+    const { data: customerProfiles } = customerIds.length
+      ? await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", customerIds)
+      : { data: [] as { id: string; display_name: string }[] };
+    const nameById = new Map(
+      (customerProfiles ?? []).map((p) => [p.id, p.display_name]),
+    );
+
+    return gigs.map((g) => ({
+      ...g,
+      customerName: nameById.get(g.customer_id) ?? "—",
+    }));
   });
