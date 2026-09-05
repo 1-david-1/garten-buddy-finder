@@ -173,6 +173,25 @@ export function HelperDashboard() {
       return { accepted: false, conversationId: null };
     },
     onSuccess: (result, variables) => {
+      // Optimistisch aktualisieren
+      queryClient.setQueryData(["helper-dashboard"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pendingBookings: old.pendingBookings?.filter((b: any) => b.id !== variables.gigId),
+          recentGigs: old.recentGigs?.map((gig: any) =>
+            gig.id === variables.gigId ? { ...gig, status: variables.accept ? "assigned" : "open" } : gig,
+          ),
+        };
+      });
+
+      queryClient.setQueryData(["helper-gigs"], (old: any[]) => {
+        if (!old) return old;
+        return old.map((gig: any) =>
+          gig.id === variables.gigId ? { ...gig, status: variables.accept ? "assigned" : "open" } : gig,
+        );
+      });
+
       if (variables.accept && result.conversationId) {
         toast.success("Buchungsanfrage angenommen! Chat wird geöffnet...");
         queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
