@@ -92,6 +92,7 @@ const statusColors: Record<string, string> = {
   completed: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10",
   in_progress: "text-primary border-primary/30 bg-primary/10",
   assigned: "text-sky-400 border-sky-400/30 bg-sky-400/10",
+  pending_helper: "text-sky-400 border-sky-400/30 bg-sky-400/10",
   negotiating: "text-amber-400 border-amber-400/30 bg-amber-400/10",
   open: "text-muted-foreground border-muted/30 bg-muted/10",
   cancelled: "text-red-400 border-red-400/30 bg-red-400/10",
@@ -928,7 +929,7 @@ export function HelperDashboard() {
                     {t(`status.${selectedGig.status}`)}
                   </Badge>
                 </div>
-                {selectedGig.status === "pending_helper" && (
+                {(selectedGig.status === "pending_helper" || selectedGig.status === "assigned") && (
                   <div className="mt-6 flex gap-2">
                     <Button
                       className="flex-1 gap-1.5"
