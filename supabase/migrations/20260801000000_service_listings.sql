@@ -235,7 +235,7 @@ BEGIN
     v_listing.postal_code,
     NULL,
     60,
-    'assigned',
+    'pending_helper',
     v_listing.helper_id,
     ARRAY['helper_youth', 'helper_adult', 'helper_pro']
   ) RETURNING * INTO v_gig;
@@ -318,7 +318,7 @@ BEGIN
     v_listing.postal_code,
     NULL,
     60,
-    'assigned',
+    'pending_helper',
     v_listing.helper_id,
     ARRAY['helper_youth', 'helper_adult', 'helper_pro']
   ) RETURNING * INTO v_gig;
@@ -387,7 +387,7 @@ BEGIN
     v_listing.postal_code,
     NULL,
     60,
-    'assigned',
+    'pending_helper',
     v_listing.helper_id,
     ARRAY['helper_youth', 'helper_adult', 'helper_pro']
   ) RETURNING * INTO v_gig;
