@@ -188,7 +188,7 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
       .from("gigs")
       .update({
         assigned_helper_id: data.helperId,
-        status: "assigned",
+        status: "pending_helper",
       })
       .eq("id", data.gigId)
       .eq("customer_id", userId)
