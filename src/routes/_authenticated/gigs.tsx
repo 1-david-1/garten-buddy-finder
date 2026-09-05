@@ -128,9 +128,28 @@ function GigsPage() {
       }
       return { accepted: false, conversationId: null };
     },
-    onSuccess: (result, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["helper-gigs"] });
+    onSuccess: async (result, variables) => {
+      // Optimistisch aus den Listen entfernen/aktualisieren
+      queryClient.setQueryData(["helper-dashboard"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pendingBookings: old.pendingBookings?.filter((b: any) => b.id !== variables.gigId),
+        };
+      });
+
+      queryClient.setQueryData(["helper-gigs"], (old: any[]) => {
+        if (!old) return old;
+        return old.map((gig: any) =>
+          gig.id === variables.gigId
+            ? { ...gig, status: variables.accept ? "assigned" : "open" }
+            : gig
+        );
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["helper-gigs"] });
+
       if (variables.accept && result.conversationId) {
         toast.success("Buchungsanfrage angenommen! Chat wird geöffnet...");
         navigate({
