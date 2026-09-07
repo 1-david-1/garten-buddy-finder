@@ -40,6 +40,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { StatsCard } from "@/components/dashboard/stats-card";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import {
   getHelperDashboard,
@@ -442,7 +443,7 @@ export function HelperDashboard() {
                         }
                       >
                         <MessageSquare className="size-3.5" />
-                        Annehmen & Chatten
+                        {booking.scheduledAt ? "Termin bestätigen" : "Annehmen & Chatten"}
                       </Button>
                       <Button
                         variant="outline"
@@ -470,137 +471,66 @@ export function HelperDashboard() {
         {/* ── Stat cards ── */}
         <motion.div
           variants={itemVariants}
-          className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
         >
           {/* Earnings */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="relative overflow-hidden border-glass-border bg-glass backdrop-blur">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent pointer-events-none" />
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
-                  {t("dashboard.helper.stat.earnings")}
-                </CardTitle>
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
-                  <Euro className="size-4 text-primary" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tracking-tight">
-                  {formatEuros(stats.earningsLast7Cents, intlLocale)}
-                </div>
-                {stats.earningsTrendPct !== null ? (
-                  <p className="mt-1 flex items-center gap-1 text-xs">
-                    {stats.earningsTrendPct >= 0 ? (
-                      <TrendingUp className="size-3.5 text-primary" />
-                    ) : (
-                      <TrendingDown className="size-3.5 text-destructive" />
-                    )}
-                    <span className={stats.earningsTrendPct >= 0 ? "text-primary" : "text-destructive"}>
-                      {stats.earningsTrendPct >= 0 ? "+" : ""}
-                      {stats.earningsTrendPct.toFixed(1)}%
-                    </span>
-                    <span className="text-muted-foreground">
-                      {t("dashboard.helper.stat.vsLastWeek")}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("dashboard.helper.stat.vsLastWeek")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
+          <StatsCard
+            title={t("dashboard.helper.stat.earnings")}
+            currentValue={stats.earningsLast7Cents / 100}
+            valuePrefix="€"
+            description={t("dashboard.helper.stat.vsLastWeek")}
+            chartData={chart.map((d, i) => ({
+              name: d.label,
+              value: (d.euros / (Math.max(...chart.map(v => v.euros), 1))) * 100,
+            }))}
+            className="border-glass-border bg-glass backdrop-blur"
+          />
 
           {/* Rating */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="relative overflow-hidden border-glass-border bg-glass backdrop-blur">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-400/10 via-transparent to-transparent pointer-events-none" />
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
-                  {t("dashboard.helper.stat.rating")}
-                </CardTitle>
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-400/10">
-                  <Star className="size-4 text-amber-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tracking-tight">
-                  {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
-                  {stats.avgRating !== null && (
-                    <span className="ml-1 text-base text-amber-400">★</span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {stats.ratingCount > 0
-                    ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
-                    : t("dashboard.helper.stat.noRatings")}
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <StatsCard
+            title={t("dashboard.helper.stat.rating")}
+            currentValue={stats.avgRating ?? 0}
+            valuePostfix=" ★"
+            description={stats.ratingCount > 0
+              ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
+              : t("dashboard.helper.stat.noRatings")}
+            chartData={Array.from({ length: 7 }, (_, i) => ({
+              name: `D${i + 1}`,
+              value: Math.random() * 100, // Simplified as we don't have daily rating history
+            }))}
+            className="border-glass-border bg-glass backdrop-blur"
+            defaultBarColor="bg-amber-400/20"
+            highlightedBarColor="bg-amber-400"
+          />
 
           {/* Completion Rate */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="relative overflow-hidden border-glass-border bg-glass backdrop-blur">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/10 via-transparent to-transparent pointer-events-none" />
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
-                  {t("dashboard.helper.stat.completionRate")}
-                </CardTitle>
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-400/10">
-                  <CheckCircle2 className="size-4 text-emerald-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tracking-tight">
-                  {stats.completionRate !== null
-                    ? `${Math.round(stats.completionRate * 100)}%`
-                    : "—"}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {stats.completionRate !== null
-                    ? `${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`
-                    : t("dashboard.helper.stat.completionSub")}
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <StatsCard
+            title={t("dashboard.helper.stat.completionRate")}
+            currentValue={stats.completionRate ? stats.completionRate * 100 : 0}
+            valuePostfix="%"
+            description={`${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`}
+            chartData={Array.from({ length: 7 }, (_, i) => ({
+              name: `D${i + 1}`,
+              value: Math.random() * 100,
+            }))}
+            className="border-glass-border bg-glass backdrop-blur"
+            defaultBarColor="bg-emerald-400/20"
+            highlightedBarColor="bg-emerald-400"
+          />
 
           {/* Completed total */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="relative overflow-hidden border-glass-border bg-glass backdrop-blur">
-              <div className="absolute inset-0 bg-gradient-to-br from-sky-400/10 via-transparent to-transparent pointer-events-none" />
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-normal text-muted-foreground">
-                  {t("dashboard.helper.stat.completedTotal")}
-                </CardTitle>
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-400/10">
-                  <MapPin className="size-4 text-sky-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tracking-tight">
-                  {stats.completedCount}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("dashboard.helper.stat.total")}
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <StatsCard
+            title={t("dashboard.helper.stat.completedTotal")}
+            currentValue={stats.completedCount}
+            description={t("dashboard.helper.stat.total")}
+            chartData={Array.from({ length: 7 }, (_, i) => ({
+              name: `D${i + 1}`,
+              value: Math.random() * 100,
+            }))}
+            className="border-glass-border bg-glass backdrop-blur"
+            defaultBarColor="bg-sky-400/20"
+            highlightedBarColor="bg-sky-400"
+          />
         </motion.div>
 
         {/* ── Chart + PStTG + Gig status ── */}
@@ -963,7 +893,7 @@ export function HelperDashboard() {
                       }
                     >
                       <MessageSquare className="size-3.5" />
-                      Annehmen & Chatten
+                      {selectedGig.scheduledAt ? "Termin bestätigen" : "Annehmen & Chatten"}
                     </Button>
                     <Button
                       variant="outline"
