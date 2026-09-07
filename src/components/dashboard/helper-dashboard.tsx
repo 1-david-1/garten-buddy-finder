@@ -40,7 +40,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { StatsCard } from "@/components/dashboard/stats-card";
+import { StatsCard } from "./stats-card";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import {
   getHelperDashboard,
