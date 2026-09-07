@@ -123,19 +123,26 @@ function EarningsPage() {
                       dataKey="label"
                       tickLine={false}
                       axisLine={false}
-                      fontSize={12}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                      width={40}
+                    <YAxis hide />
+                    <Tooltip
+                      cursor={{ fill: "var(--color-glass)" }}
+                      contentStyle={{
+                        background: "var(--color-background)",
+                        border: "1px solid var(--color-glass-border)",
+                        borderRadius: 12,
+                        fontSize: 12,
+                      }}
+                      formatter={(value: number) => [
+                        `${value} €`,
+                        t("dashboard.helper.chart.title"),
+                      ]}
                     />
-                    <Tooltip formatter={(v: number) => [`${v} €`, ""]} />
                     <Bar
                       dataKey="euros"
+                      fill="var(--color-primary)"
                       radius={[6, 6, 0, 0]}
-                      fill="hsl(var(--primary))"
                     />
                   </BarChart>
                 </ResponsiveContainer>
