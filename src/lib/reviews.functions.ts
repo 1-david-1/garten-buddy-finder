@@ -49,6 +49,40 @@ export const createReview = createServerFn({ method: "POST" })
   });
 
 /**
+ * Aktualisiert eine bestehende Bewertung
+ */
+export const updateReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: ReviewInput) => data)
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+
+    const { data: review, error: checkError } = await supabase
+      .from("reviews")
+      .select("customer_id")
+      .eq("gig_id", data.gigId)
+      .maybeSingle();
+
+    if (checkError) throw checkError;
+    if (!review || review.customer_id !== userId) {
+      throw new Error("Bewertung nicht gefunden oder nicht berechtigt");
+    }
+
+    const { data: updatedReview, error: updateError } = await supabase
+      .from("reviews")
+      .update({
+        rating: data.rating,
+        comment: data.comment,
+      })
+      .eq("gig_id", data.gigId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+    return { review: updatedReview };
+  });
+
+/**
  * Hole alle Reviews für einen Helper
  */
 export const getHelperReviews = createServerFn({ method: "GET" })
