@@ -176,6 +176,27 @@ export const updateGigStatus = createServerFn({ method: "POST" })
   });
 
 /**
+ * Schlägt ein Datum für einen existierenden Auftrag vor (Kunde)
+ */
+export const proposeGigDate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { gigId: string; scheduledAt: string }) => data)
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+
+    const { data: gig, error } = await supabase
+      .from("gigs")
+      .update({ scheduled_at: data.scheduledAt })
+      .eq("id", data.gigId)
+      .eq("customer_id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { gig };
+  });
+
+/**
  * Weist einen Helper einem Gig zu
  */
 export const assignHelperToGig = createServerFn({ method: "POST" })
@@ -219,7 +240,8 @@ export const completeGig = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
-    const { data: gig, error } = await supabase
+    // 1. Update Gig Status to completed
+    const { data: gig, error: gigError } = await supabase
       .from("gigs")
       .update({ status: "completed" })
       .eq("id", data.gigId)
@@ -227,9 +249,52 @@ export const completeGig = createServerFn({ method: "POST" })
       .select()
       .single();
 
-    if (error) throw error;
+    if (gigError) throw gigError;
+    if (!gig) throw new Error("Gig not found or not authorized");
 
+    // 2. Release Escrow Funds
     if (gig.assigned_helper_id) {
+      const { data: escrow, error: escrowError } = await supabase
+        .from("escrow_transactions")
+        .select("bid_cents, state")
+        .eq("gig_id", data.gigId)
+        .maybeSingle();
+
+      if (escrowError) throw escrowError;
+
+      if (escrow && escrow.state !== "paid_out") {
+        const { error: releaseError } = await supabase
+          .from("escrow_transactions")
+          .update({ state: "paid_out", paid_out_at: new Date().toISOString() })
+          .eq("gig_id", data.gigId);
+
+        if (releaseError) throw releaseError;
+
+        // 3. Update Earnings Tracker for the helper
+        const year = new Date().getFullYear();
+        const { data: tracker } = await supabase
+          .from("earnings_tracker")
+          .select("tx_count, gross_cents")
+          .eq("helper_id", gig.assigned_helper_id)
+          .eq("year", year)
+          .maybeSingle();
+
+        const newTxCount = (tracker?.tx_count ?? 0) + 1;
+        const newGrossCents = (tracker?.gross_cents ?? 0) + (escrow.bid_cents ?? 0);
+
+        const { error: trackerError } = await supabase
+          .from("earnings_tracker")
+          .upsert({
+            helper_id: gig.assigned_helper_id,
+            year,
+            tx_count: newTxCount,
+            gross_cents: newGrossCents,
+          }, { onConflict: "helper_id,year" });
+
+        if (trackerError) throw trackerError;
+      }
+
+      // Notifications
       const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
       const { emailTemplate } = await import("@/lib/server/email.server");
       await notifyUserByEmail({
