@@ -74,7 +74,7 @@ export const getMyGigs = createServerFn({ method: "GET" })
 
     const { data: gigs, error } = await supabase
       .from("gigs")
-      .select("*")
+      .select("*, reviews(id)")
       .eq("customer_id", userId)
       .order("created_at", { ascending: false });
 
