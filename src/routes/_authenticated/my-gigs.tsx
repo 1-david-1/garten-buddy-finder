@@ -32,14 +32,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getMyGigs, completeGig } from "@/lib/gigs.functions";
+import { getMyGigs, completeGig, proposeGigDate } from "@/lib/gigs.functions";
 import {
   getNegotiationsForGig,
   counterBid,
   acceptBid as acceptNegBid,
   declineBid,
 } from "@/lib/negotiations.functions";
-import { createReview } from "@/lib/reviews.functions";
+import { createReview, updateReview, getGigReview } from "@/lib/reviews.functions";
 import { startConversation } from "@/lib/messaging.functions";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
@@ -51,16 +51,18 @@ export const Route = createFileRoute("/_authenticated/my-gigs")({
 const STATUS_COLORS: Record<string, string> = {
   open: "text-blue-400 border-blue-400/30 bg-blue-400/10",
   negotiating: "text-amber-400 border-amber-400/30 bg-amber-400/10",
+  pending_helper: "text-sky-400 border-sky-400/30 bg-sky-400/10",
   assigned: "text-purple-400 border-purple-400/30 bg-purple-400/10",
   in_progress: "text-orange-400 border-orange-400/30 bg-orange-400/10",
   completed: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10",
   cancelled: "text-red-400 border-red-400/30 bg-red-400/10",
-  draft: "text-muted-foreground border-muted/30 bg-muted/10",
+  draft: "text-muted-foreground border-muted-foreground/30 bg-muted/10",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   open: "Offen",
   negotiating: "In Verhandlung",
+  pending_helper: "Preis geeinigt (Termin offen)",
   assigned: "Zugewiesen",
   in_progress: "In Bearbeitung",
   completed: "Abgeschlossen",
@@ -88,14 +90,19 @@ function MyGigsPage() {
   const [reviewComment, setReviewComment] = useState("");
   const [counterAmount, setCounterAmount] = useState("");
   const [counterNegId, setCounterNegId] = useState<string | null>(null);
+  const [dateProposal, setDateProposal] = useState("");
+  const [isEditingReview, setIsEditingReview] = useState(false);
 
   const getMyGigsFn = useServerFn(getMyGigs);
   const getNegotiationsFn = useServerFn(getNegotiationsForGig);
   const completeGigFn = useServerFn(completeGig);
+  const proposeDateFn = useServerFn(proposeGigDate);
   const counterBidFn = useServerFn(counterBid);
   const acceptBidFn = useServerFn(acceptNegBid);
   const declineBidFn = useServerFn(declineBid);
   const createReviewFn = useServerFn(createReview);
+  const updateReviewFn = useServerFn(updateReview);
+  const getGigReviewFn = useServerFn(getGigReview);
 
   const gigsQuery = useQuery({
     queryKey: ["my-gigs"],
@@ -118,6 +125,17 @@ function MyGigsPage() {
       toast.success("Auftrag als abgeschlossen markiert!");
       queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
       setSelectedGig(null);
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const proposeDateMutation = useMutation({
+    mutationFn: (input: { gigId: string; scheduledAt: string }) =>
+      proposeDateFn({ data: input }),
+    onSuccess: () => {
+      toast.success("Terminvorschlag gesendet!");
+      queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
+      setDateProposal("");
     },
     onError: (err) => toast.error((err as Error).message),
   });
@@ -178,23 +196,55 @@ function MyGigsPage() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: () =>
-      createReviewFn({
+    mutationFn: () => {
+      if (isEditingReview) {
+        return updateReviewFn({
+          data: {
+            gigId: reviewGig!.id,
+            helperId: reviewGig!.helperId,
+            rating: reviewRating,
+            comment: reviewComment,
+          },
+        });
+      }
+      return createReviewFn({
         data: {
           gigId: reviewGig!.id,
           helperId: reviewGig!.helperId,
           rating: reviewRating,
           comment: reviewComment,
         },
-      }),
+      });
+    },
     onSuccess: () => {
-      toast.success("Bewertung abgegeben!");
+      toast.success(isEditingReview ? "Bewertung aktualisiert!" : "Bewertung abgegeben!");
       setReviewGig(null);
       setReviewRating(5);
       setReviewComment("");
+      setIsEditingReview(false);
     },
     onError: (err) => toast.error((err as Error).message),
   });
+
+  const handleReview = async (helperId: string, helperName: string, gigId: string) => {
+    try {
+      const reviewData = await getGigReviewFn({ data: { gigId } });
+      const existingReview = reviewData.review;
+
+      if (existingReview) {
+        setReviewRating(existingReview.rating);
+        setReviewComment(existingReview.comment ?? "");
+        setIsEditingReview(true);
+      } else {
+        setReviewRating(5);
+        setReviewComment("");
+        setIsEditingReview(false);
+      }
+      setReviewGig({ id: gigId, helperId, helperName });
+    } catch (error) {
+      toast.error("Bewertung konnte nicht geladen werden.");
+    }
+  };
 
   const { navItems } = useAppNavItems();
 
@@ -275,7 +325,7 @@ function MyGigsPage() {
                     onComplete={() => completeMutation.mutate(gig.id)}
                     isCompleting={completeMutation.isPending}
                     onReview={(helperId, helperName) =>
-                      setReviewGig({ id: gig.id, helperId, helperName })
+                      handleReview(helperId, helperName, gig.id)
                     }
                   />
                 ))
@@ -298,7 +348,7 @@ function MyGigsPage() {
                     onComplete={() => {}}
                     isCompleting={false}
                     onReview={(helperId, helperName) =>
-                      setReviewGig({ id: gig.id, helperId, helperName })
+                      handleReview(helperId, helperName, gig.id)
                     }
                   />
                 ))
@@ -354,6 +404,36 @@ function MyGigsPage() {
                 <p className="text-sm text-muted-foreground rounded-lg border border-glass-border bg-glass/50 p-3">
                   {selectedGigData.description}
                 </p>
+              )}
+
+              {selectedGigData.status === "pending_helper" && !selectedGigData.scheduled_at && (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <h4 className="text-sm font-semibold text-primary">Terminvorschlag senden</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Der Helfer hat den Preis akzeptiert. Wähle nun einen Termin aus,
+                    damit der Helfer diesen bestätigen kann.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="datetime-local"
+                      value={dateProposal}
+                      onChange={(e) => setDateProposal(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!dateProposal || proposeDateMutation.isPending}
+                      onClick={() =>
+                        proposeDateMutation.mutate({
+                          gigId: selectedGigData.id,
+                          scheduledAt: new Date(dateProposal).toISOString(),
+                        })
+                      }
+                    >
+                      Senden
+                    </Button>
+                  </div>
+                </div>
               )}
 
               {selectedGigData.assigned_helper_id && (
