@@ -468,69 +468,80 @@ export function HelperDashboard() {
         )}
 
 
-        {/* ── Stat cards ── */}
+        {/* ── Stats Grid ── */}
         <motion.div
           variants={itemVariants}
           className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
         >
           {/* Earnings */}
-          <StatsCard
-            title={t("dashboard.helper.stat.earnings")}
-            currentValue={stats.earningsLast7Cents / 100}
-            valuePrefix="€"
-            description={t("dashboard.helper.stat.vsLastWeek")}
-            chartData={chart.map((d, i) => ({
-              name: d.label,
-              value: (d.euros / (Math.max(...chart.map(v => v.euros), 1))) * 100,
-            }))}
-            className="border-glass-border bg-glass backdrop-blur"
-          />
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.earnings")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatEuros(stats.earningsLast7Cents, intlLocale)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t("dashboard.helper.stat.vsLastWeek")}
+              </p>
+            </CardContent>
+          </Card>
 
           {/* Rating */}
-          <StatsCard
-            title={t("dashboard.helper.stat.rating")}
-            currentValue={stats.avgRating ?? 0}
-            valuePostfix=" ★"
-            description={stats.ratingCount > 0
-              ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
-              : t("dashboard.helper.stat.noRatings")}
-            chartData={Array.from({ length: 7 }, (_, i) => ({
-              name: `D${i + 1}`,
-              value: Math.random() * 100, // Simplified as we don't have daily rating history
-            }))}
-            className="border-glass-border bg-glass backdrop-blur"
-            defaultBarColor="bg-amber-400/20"
-            highlightedBarColor="bg-amber-400"
-          />
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.rating")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.avgRating ? `${stats.avgRating.toFixed(1)} ★` : "—"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats.ratingCount > 0
+                  ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
+                  : t("dashboard.helper.stat.noRatings")}
+              </p>
+            </CardContent>
+          </Card>
 
           {/* Completion Rate */}
-          <StatsCard
-            title={t("dashboard.helper.stat.completionRate")}
-            currentValue={stats.completionRate ? stats.completionRate * 100 : 0}
-            valuePostfix="%"
-            description={`${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`}
-            chartData={Array.from({ length: 7 }, (_, i) => ({
-              name: `D${i + 1}`,
-              value: Math.random() * 100,
-            }))}
-            className="border-glass-border bg-glass backdrop-blur"
-            defaultBarColor="bg-emerald-400/20"
-            highlightedBarColor="bg-emerald-400"
-          />
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.completionRate")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.completionRate ? `${Math.round(stats.completionRate * 100)}%` : "—"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {`${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`}
+              </p>
+            </CardContent>
+          </Card>
 
           {/* Completed total */}
-          <StatsCard
-            title={t("dashboard.helper.stat.completedTotal")}
-            currentValue={stats.completedCount}
-            description={t("dashboard.helper.stat.total")}
-            chartData={Array.from({ length: 7 }, (_, i) => ({
-              name: `D${i + 1}`,
-              value: Math.random() * 100,
-            }))}
-            className="border-glass-border bg-glass backdrop-blur"
-            defaultBarColor="bg-sky-400/20"
-            highlightedBarColor="bg-sky-400"
-          />
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.completedTotal")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.completedCount}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t("dashboard.helper.stat.total")}
+              </p>
+            </CardContent>
+          </Card>
         </motion.div>
 
         {/* ── Chart + PStTG + Gig status ── */}
