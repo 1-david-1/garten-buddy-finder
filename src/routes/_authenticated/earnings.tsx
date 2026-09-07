@@ -15,6 +15,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import { getHelperDashboard } from "@/lib/helper-dashboard.functions";
 import { useI18n } from "@/lib/i18n";
+import { StatsCard } from "@/components/dashboard/stats-card";
 
 export const Route = createFileRoute("/_authenticated/earnings")({
   component: EarningsPage,
@@ -60,18 +61,17 @@ function EarningsPage() {
         </p>
       ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.last7")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">
-                {formatEuros(q.data!.stats.earningsLast7Cents, intlLocale)}
-              </div>
-            </CardContent>
-          </Card>
+          <StatsCard
+            title={t("dashboard.helper.stat.last7")}
+            currentValue={q.data!.stats.earningsLast7Cents / 100}
+            valuePrefix="€"
+            description={t("dashboard.helper.stat.vsLastWeek")}
+            chartData={q.data!.chart.map((d) => ({
+              name: d.label,
+              value: (d.euros / (Math.max(...q.data!.chart.map((v) => v.euros), 1))) * 100,
+            }))}
+            className="border-glass-border bg-glass backdrop-blur"
+          />
           <Card className="border-glass-border bg-glass backdrop-blur">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-normal text-muted-foreground">
