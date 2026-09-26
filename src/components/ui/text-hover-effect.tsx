@@ -1,5 +1,4 @@
-import React, { useRef, useState, useEffect } from "react"
-import { useGSAP } from "@gsap/react"
+import React, { useRef, useState, useEffect, useLayoutEffect } from "react"
 import gsap from "gsap"
 
 export const TextHoverEffect = ({
@@ -18,8 +17,8 @@ export const TextHoverEffect = ({
   const [hovered, setHovered] = useState(false)
   const [maskPosition, setMaskPosition] = useState({ cx: "50%", cy: "50%" })
 
-  useGSAP(
-    () => {
+  useLayoutEffect(() => {
+    const context = gsap.context(() => {
       gsap.fromTo(
         animatedTextRef.current,
         { strokeDashoffset: 1000, strokeDasharray: 1000 },
@@ -30,9 +29,10 @@ export const TextHoverEffect = ({
           ease: "power2.inOut",
         }
       )
-    },
-    { scope: svgRef }
-  )
+    }, svgRef)
+
+    return () => context.revert()
+  }, [])
 
   const updateCursorPosition = (x: number, y: number) => {
     if (svgRef.current && x !== null && y !== null) {
