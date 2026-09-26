@@ -35,7 +35,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       supabase
         .from("gigs")
         .select(
-          "id, title, service_type, budget_cents, address, scheduled_at, status, customer_id",
+          "id, title, service_type, description, budget_cents, address, scheduled_at, status, customer_id",
         )
         .eq("assigned_helper_id", userId)
         .order("scheduled_at", { ascending: false, nullsFirst: false })
@@ -158,6 +158,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       id: g.id,
       title: g.title,
       serviceType: g.service_type,
+      description: g.description,
       budgetCents: g.budget_cents,
       address: g.address,
       scheduledAt: g.scheduled_at,
