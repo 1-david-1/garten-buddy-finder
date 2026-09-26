@@ -13,6 +13,8 @@ import { SiteNav } from "@/components/site-nav";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { useHeroAnimation } from "@/hooks/use-hero-animation";
+import { RuixenGradientFooter } from "@/components/ui/ruixen-gradient-footer";
+import { TextHoverEffect } from "@/components/ui/text-hover-effect";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -45,13 +47,16 @@ function Landing() {
       <Trust />
       <Features />
       <Flow />
+      <PromiseSection />
       <Cta />
-      <footer className="border-t border-glass-border py-8 text-center text-xs text-muted-foreground">
-        <p>
-          © {new Date().getFullYear()} GreenMatch · {t("hero.legal.jarbschg")} ·{" "}
-          {t("hero.legal.pstg")}
-        </p>
-      </footer>
+      <RuixenGradientFooter className="border-t border-glass-border pt-16 text-center text-xs text-muted-foreground relative">
+        <div className="relative z-10 inline-block bg-background/50 backdrop-blur-md py-3 px-6 rounded-full border border-white/5 shadow-sm mb-4">
+          <p>
+            © {new Date().getFullYear()} GreenMatch · {t("hero.legal.jarbschg")} ·{" "}
+            {t("hero.legal.pstg")}
+          </p>
+        </div>
+      </RuixenGradientFooter>
     </div>
   );
 }
@@ -421,6 +426,21 @@ function Cta() {
       <Button asChild size="lg" className="mt-8">
         <Link to="/auth">{t("cta.button")}</Link>
       </Button>
+    </section>
+  );
+}
+
+function PromiseSection() {
+  return (
+    <section className="mx-auto max-w-4xl px-4 py-20 text-center">
+      <div className="h-32 mb-4 sm:h-48">
+        <TextHoverEffect text="100% Kostenlos" fontSize={42} />
+      </div>
+      <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+        Die Nutzung von GreenMatch ist und bleibt vorerst <strong className="text-foreground font-semibold">komplett kostenlos</strong>. 
+        Jeder Euro kommt zu <strong className="text-foreground font-semibold">100% bei der jeweils anderen Seite an</strong>. 
+        Keine Provisionen, keine versteckten Gebühren.
+      </p>
     </section>
   );
 }
