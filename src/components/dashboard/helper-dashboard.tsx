@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -41,7 +41,15 @@ import {
 } from "@/components/ui/sheet";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { StatsCard } from "./stats-card";
+import {
+  DraggableWidgetGrid,
+  type WidgetItem,
+} from "@/components/dashboard/draggable-widget-grid";
+import { GrowthChecklistWidget } from "@/components/dashboard/growth-checklist-widget";
+import { PreJobChecklistWidget } from "@/components/dashboard/pre-job-checklist-widget";
 import { useAppNavItems } from "@/lib/use-app-nav";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
 import {
   getHelperDashboard,
   setAvailability,
@@ -57,6 +65,7 @@ interface RecentGig {
   id: string;
   title: string;
   serviceType: string;
+  description: string | null;
   budgetCents: number;
   address: string | null;
   scheduledAt: string | null;
@@ -100,6 +109,11 @@ const statusColors: Record<string, string> = {
   draft: "text-muted-foreground border-muted/30 bg-muted/10",
 };
 
+const HELPER_WIDGETS: WidgetItem[] = [
+  { id: "growth-checklist", size: "lg", label: "Mehr Kunden gewinnen" },
+  { id: "pre-job-checklist", size: "lg", label: "Vor dem Einsatz" },
+];
+
 function ageFromISO(iso: string): number {
   const d = new Date(iso);
   const now = new Date();
@@ -127,17 +141,42 @@ export function HelperDashboard() {
   const { t, locale } = useI18n();
   const intlLocale = locale === "de" ? "de-DE" : "en-GB";
   const navigate = useNavigate();
+  const { user } = useAuth();
   const q = useHelperDashboardData();
   const queryClient = useQueryClient();
   const [selectedGig, setSelectedGig] = useState<RecentGig | null>(null);
   const [taxIdInput, setTaxIdInput] = useState("");
 
+  const [widgetOrder, setWidgetOrder] = useState<WidgetItem[]>(() => {
+    if (typeof window === "undefined") return HELPER_WIDGETS;
+    try {
+      const raw = window.localStorage.getItem("helper-dashboard-widgets");
+      if (!raw) return HELPER_WIDGETS;
+      const savedIds = JSON.parse(raw) as string[];
+      const byId = new Map(HELPER_WIDGETS.map((w) => [w.id, w]));
+      const restored = savedIds
+        .map((id) => byId.get(id))
+        .filter((w): w is WidgetItem => Boolean(w));
+      for (const w of HELPER_WIDGETS)
+        if (!restored.some((r) => r.id === w.id)) restored.push(w);
+      return restored.length ? restored : HELPER_WIDGETS;
+    } catch {
+      return HELPER_WIDGETS;
+    }
+  });
+
   const availabilityFn = useServerFn(setAvailability);
   const availabilityMutation = useMutation({
     mutationFn: (availableToday: boolean) =>
       availabilityFn({ data: { availableToday } }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] }),
+    onSuccess: (_, availableToday) => {
+      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
+      toast.success(
+        availableToday
+          ? "Du bist jetzt online. Du wirst benachrichtigt, sobald eine neue Anfrage reinkommt."
+          : "Du bist jetzt offline.",
+      );
+    },
   });
 
   const [vacationReturnDateInput, setVacationReturnDateInput] = useState("");
@@ -210,6 +249,47 @@ export function HelperDashboard() {
 
   const { navItems } = useAppNavItems();
 
+  const isOnline = q.data?.profile.availableToday ?? false;
+  useEffect(() => {
+    if (!isOnline || !user?.id) return;
+
+    const notify = (payload: { new: { status: string; service_type: string } }) => {
+      if (payload.new.status !== "pending_helper") return;
+      toast.info(`Neue Buchungsanfrage: ${payload.new.service_type}`, {
+        description: "Ein Kunde möchte dich buchen. Sieh sie dir jetzt an.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
+    };
+
+    const channel = supabase
+      .channel(`helper-bookings:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "gigs",
+          filter: `assigned_helper_id=eq.${user.id}`,
+        },
+        notify,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "gigs",
+          filter: `assigned_helper_id=eq.${user.id}`,
+        },
+        notify,
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [isOnline, user?.id, queryClient]);
+
   if (q.isError) {
     return (
       <DashboardShell
@@ -261,6 +341,28 @@ export function HelperDashboard() {
   const inProgressCount = recentGigs.filter(g => g.status === "in_progress" || g.status === "assigned").length;
   const openCount = recentGigs.filter(g => g.status === "open" || g.status === "negotiating").length;
   const totalGigs = recentGigs.length;
+
+  // Für die "Vor dem Einsatz"-Checkliste: bestätigte, noch nicht erledigte
+  // Aufträge, die nächsten zuerst (kein Termin = ans Ende).
+  const upcomingJobs = recentGigs
+    .filter((g) => g.status === "assigned" || g.status === "in_progress")
+    .sort((a, b) => {
+      if (!a.scheduledAt && !b.scheduledAt) return 0;
+      if (!a.scheduledAt) return 1;
+      if (!b.scheduledAt) return -1;
+      return (
+        new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+      );
+    })
+    .slice(0, 5)
+    .map((g) => ({
+      id: g.id,
+      serviceType: g.serviceType,
+      description: g.description,
+      address: g.address,
+      scheduledAt: g.scheduledAt,
+      customerName: g.customerName,
+    }));
 
   return (
     <DashboardShell
@@ -467,6 +569,50 @@ export function HelperDashboard() {
           </motion.div>
         )}
 
+
+        {/* ── Werkzeuge: verschiebbare Widgets ── */}
+        <motion.div variants={itemVariants} className="mt-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="font-brand text-xl font-bold">Deine Werkzeuge</h2>
+              <p className="text-sm text-muted-foreground">
+                Zum Umsortieren gedrückt halten und ziehen.
+              </p>
+            </div>
+          </div>
+          <DraggableWidgetGrid
+            items={widgetOrder}
+            maxColumns={4}
+            cellSize={200}
+            gap={16}
+            radius={20}
+            onChange={(next) => {
+              setWidgetOrder(next);
+              try {
+                window.localStorage.setItem(
+                  "helper-dashboard-widgets",
+                  JSON.stringify(next.map((w) => w.id)),
+                );
+              } catch {
+                // localStorage evtl. blockiert - Reihenfolge gilt dann nur für diese Sitzung.
+              }
+            }}
+            renderItem={(item) => {
+              if (item.id === "growth-checklist") {
+                return <GrowthChecklistWidget userId={user?.id ?? "anon"} />;
+              }
+              if (item.id === "pre-job-checklist") {
+                return (
+                  <PreJobChecklistWidget
+                    jobs={upcomingJobs}
+                    intlLocale={intlLocale}
+                  />
+                );
+              }
+              return null;
+            }}
+          />
+        </motion.div>
 
         {/* ── Stats Grid ── */}
         <motion.div
