@@ -64,6 +64,69 @@ export const createGig = createServerFn({ method: "POST" })
     return { gig };
   });
 
+export interface DirectBookingInput {
+  helperId: string;
+  serviceType: string;
+  description: string;
+  address: string;
+  scheduledAt: string;
+  budgetCents: number;
+}
+
+/**
+ * Kunde bucht einen Helfer direkt (aus "Helfer finden"), ohne vorheriges
+ * Gebotsverfahren. Legt einen Gig mit status "pending_helper" an, damit er
+ * dieselbe Annehmen/Ablehnen-Strecke durchläuft wie ein angenommenes Gebot
+ * (siehe acceptBid in negotiations.functions.ts und respondToBooking in
+ * service-listings.functions.ts).
+ */
+export const createDirectBookingRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: DirectBookingInput) => data)
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+
+    if (data.helperId === userId) {
+      throw new Error("Du kannst dich nicht selbst buchen.");
+    }
+
+    const { data: gig, error } = await supabase
+      .from("gigs")
+      .insert({
+        customer_id: userId,
+        title: `Buchungsanfrage: ${data.serviceType}`,
+        description: data.description || null,
+        service_type: data.serviceType,
+        budget_cents: data.budgetCents,
+        address: data.address,
+        scheduled_at: data.scheduledAt,
+        assigned_helper_id: data.helperId,
+        status: "pending_helper",
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+    const { emailTemplate } = await import("@/lib/server/email.server");
+    await notifyUserByEmail({
+      userId: data.helperId,
+      category: "gig_updates",
+      subject: `Neue Buchungsanfrage: ${data.serviceType}`,
+      html: emailTemplate({
+        heading: "Neue Buchungsanfrage erhalten",
+        bodyLines: [
+          `Ein Kunde möchte dich direkt für „${data.serviceType}“ buchen. Bitte bestätige oder lehne die Anfrage ab.`,
+        ],
+        ctaLabel: "Anfrage ansehen",
+        ctaPath: "/dashboard",
+      }),
+    });
+
+    return { gig };
+  });
+
 /**
  * Lädt alle eigenen Gigs (als Customer)
  */
