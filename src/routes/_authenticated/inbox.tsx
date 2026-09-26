@@ -1,10 +1,13 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { createServerFn, useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { z } from "zod";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useAppNavItems } from "@/lib/use-app-nav";
+import { respondToBooking } from "@/lib/service-listings.functions";
+import { startConversation } from "@/lib/messaging.functions";
 
 interface BookingRequest {
   id: string;
@@ -15,6 +18,7 @@ interface BookingRequest {
   budget_cents: number;
   status: string;
   created_at: string;
+  customer_id: string;
   customer: {
     display_name: string | null;
   } | null;
@@ -26,16 +30,18 @@ export const getInboxDataFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
 
     // Buchungsanfragen = Gigs, die diesem Helfer zugeordnet sind und noch
-    // seine Bestätigung brauchen ("negotiating"). Es gibt keine separate
-    // "bookings"- oder "notifications"-Tabelle in der Datenbank - beides
-    // lief in Wirklichkeit schon immer über "gigs".
+    // seine Bestätigung brauchen ("pending_helper" - gesetzt sowohl bei
+    // Direktbuchungen als auch beim Annehmen eines Gebots, siehe
+    // negotiations.functions.ts/acceptBid und gigs.functions.ts/
+    // createDirectBookingRequest). Es gibt keine separate "bookings"- oder
+    // "notifications"-Tabelle in der Datenbank - beides läuft über "gigs".
     const { data: gigs } = await supabase
       .from("gigs")
       .select(
         "id, service_type, description, address, scheduled_at, budget_cents, status, created_at, customer_id",
       )
       .eq("assigned_helper_id", userId)
-      .eq("status", "negotiating")
+      .eq("status", "pending_helper")
       .order("created_at", { ascending: false });
 
     const customerIds = [...new Set((gigs || []).map((g) => g.customer_id))];
@@ -56,37 +62,11 @@ export const getInboxDataFn = createServerFn({ method: "GET" })
       budget_cents: g.budget_cents,
       status: g.status,
       created_at: g.created_at,
+      customer_id: g.customer_id,
       customer: profileById.get(g.customer_id) ?? null,
     }));
 
     return { bookingRequests };
-  });
-
-export const respondToBookingFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator(
-    z.object({
-      bookingId: z.string(),
-      action: z.enum(["accept", "decline"]),
-    }),
-  )
-  .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-
-    if (data.action === "accept") {
-      await supabase
-        .from("gigs")
-        .update({ status: "assigned" })
-        .eq("id", data.bookingId)
-        .eq("assigned_helper_id", userId);
-    } else {
-      // Ablehnen gibt den Gig zurück in den offenen Pool, statt ihn zu löschen.
-      await supabase
-        .from("gigs")
-        .update({ status: "open", assigned_helper_id: null })
-        .eq("id", data.bookingId)
-        .eq("assigned_helper_id", userId);
-    }
   });
 
 export const Route = createFileRoute("/_authenticated/inbox")({
@@ -107,6 +87,42 @@ export const Route = createFileRoute("/_authenticated/inbox")({
 function InboxPage() {
   const loaderData = Route.useLoaderData();
   const { navItems } = useAppNavItems();
+  const router = useRouter();
+  const navigate = useNavigate();
+  const respond = useServerFn(respondToBooking);
+  const startConversationFn = useServerFn(startConversation);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const handleRespond = async (booking: BookingRequest, accept: boolean) => {
+    setPendingId(booking.id);
+    try {
+      await respond({ data: { gigId: booking.id, accept } });
+
+      if (accept) {
+        const result = await startConversationFn({
+          data: { otherUserId: booking.customer_id, gigId: booking.id },
+        });
+        toast.success("Buchung angenommen! Chat wird geöffnet...");
+        await router.invalidate();
+        navigate({
+          to: "/messages/$conversationId",
+          params: { conversationId: result.conversationId },
+        });
+        return;
+      }
+
+      toast.success("Buchungsanfrage abgelehnt.");
+      await router.invalidate();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Aktion konnte nicht ausgeführt werden.",
+      );
+    } finally {
+      setPendingId(null);
+    }
+  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -233,24 +249,16 @@ function InboxPage() {
 
                   <div className="flex gap-3">
                     <button
-                      className="flex-1 py-2 px-4 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors font-medium"
-                      onClick={async () => {
-                        await respondToBookingFn({
-                          data: { bookingId: booking.id, action: "decline" },
-                        });
-                        window.location.reload();
-                      }}
+                      disabled={pendingId === booking.id}
+                      className="flex-1 py-2 px-4 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handleRespond(booking, false)}
                     >
                       Ablehnen
                     </button>
                     <button
-                      className="flex-1 py-2 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-                      onClick={async () => {
-                        await respondToBookingFn({
-                          data: { bookingId: booking.id, action: "accept" },
-                        });
-                        window.location.reload();
-                      }}
+                      disabled={pendingId === booking.id}
+                      className="flex-1 py-2 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handleRespond(booking, true)}
                     >
                       Annehmen
                     </button>
