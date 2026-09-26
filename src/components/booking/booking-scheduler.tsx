@@ -50,8 +50,7 @@ interface BookingSchedulerProps {
 
 interface BookingData {
   helperId: string;
-  date: string;
-  time: string;
+  scheduledAt: string; // ISO 8601
   serviceType: string;
   address: string;
   budgetCents: number;
@@ -77,6 +76,40 @@ const serviceTypes = [
   "Gartenarbeit allgemein",
 ];
 
+const STANDARD_SLOT_TIMES = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
+const WEEKDAY_NAMES = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+/**
+ * Es gibt aktuell keine echte Verfügbarkeits-Tabelle pro Helfer in der
+ * Datenbank - diese Slots sind ein generischer Platzhalter, ABER die Daten
+ * selbst sind reale Kalendertage (nicht "Aug 17" fest verdrahtet), damit
+ * daraus ein gültiges scheduled_at gebaut werden kann.
+ */
+function buildWeek(weekOffset: number): DaySchedule[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days: DaySchedule[] = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + weekOffset + i);
+    const iso = d.toISOString().slice(0, 10);
+    const isToday = weekOffset === 0 && i === 0;
+    days.push({
+      date: iso,
+      dayName: isToday ? "Heute" : WEEKDAY_NAMES[d.getDay()],
+      dayNumber: d.getDate(),
+      hasAvailability: d.getDay() !== 0, // sonntags standardmäßig frei
+      slots: STANDARD_SLOT_TIMES.map((time) => ({ time, available: true })),
+    });
+  }
+  return days;
+}
+
+function formatDayLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+}
+
 export function BookingScheduler({
   helper = defaultHelper,
   weekSchedule,
@@ -87,7 +120,7 @@ export function BookingScheduler({
 }: BookingSchedulerProps) {
   const [selectedLocation, setSelectedLocation] = useState("");
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
-  const [weekRange] = useState("Aug 17 - Aug 22");
+  const [weekOffset, setWeekOffset] = useState(0);
   const [showConfirmationView, setShowConfirmationView] = useState(false);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<{
     day: string;
@@ -101,80 +134,19 @@ export function BookingScheduler({
   const shouldAnimate = enableAnimations && !shouldReduceMotion;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Default week schedule
-  const defaultWeek: DaySchedule[] = [
-    {
-      date: "Aug 17",
-      dayName: "Heute",
-      dayNumber: 17,
-      hasAvailability: true,
-      slots: [
-        { time: "09:00", available: true },
-        { time: "10:00", available: true },
-        { time: "11:00", available: true },
-        { time: "12:00", available: true },
-        { time: "13:00", available: false },
-        { time: "14:00", available: true },
-        { time: "15:00", available: true },
-        { time: "16:00", available: true },
-      ],
-    },
-    {
-      date: "Aug 18",
-      dayName: "Di",
-      dayNumber: 18,
-      hasAvailability: true,
-      slots: [
-        { time: "09:00", available: true },
-        { time: "10:00", available: true },
-        { time: "14:00", available: true },
-        { time: "15:00", available: true },
-      ],
-    },
-    {
-      date: "Aug 19",
-      dayName: "Mi",
-      dayNumber: 19,
-      hasAvailability: true,
-      slots: [
-        { time: "10:00", available: true },
-        { time: "11:00", available: true },
-        { time: "13:00", available: true },
-        { time: "14:00", available: true },
-      ],
-    },
-    {
-      date: "Aug 20",
-      dayName: "Do",
-      dayNumber: 20,
-      hasAvailability: false,
-      slots: [],
-    },
-    {
-      date: "Aug 21",
-      dayName: "Fr",
-      dayNumber: 21,
-      hasAvailability: true,
-      slots: [
-        { time: "09:00", available: true },
-        { time: "10:00", available: true },
-        { time: "11:00", available: true },
-      ],
-    },
-    {
-      date: "Aug 22",
-      dayName: "Sa",
-      dayNumber: 22,
-      hasAvailability: true,
-      slots: [
-        { time: "10:00", available: true },
-        { time: "11:00", available: true },
-        { time: "12:00", available: true },
-      ],
-    },
-  ];
+  const schedule = weekSchedule || buildWeek(weekOffset);
+  const weekRange =
+    schedule.length > 0
+      ? `${formatDayLabel(schedule[0].date)} - ${formatDayLabel(schedule[schedule.length - 1].date)}`
+      : "";
 
-  const schedule = weekSchedule || defaultWeek;
+  const handleWeekChange = (direction: "prev" | "next") => {
+    if (onWeekChange) {
+      onWeekChange(direction);
+    } else {
+      setWeekOffset((offset) => offset + (direction === "next" ? 6 : -6));
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -210,10 +182,13 @@ export function BookingScheduler({
   const handleConfirmBooking = () => {
     if (!selectedTimeSlot || !serviceType || !address || !budget) return;
 
+    const scheduledAt = new Date(
+      `${selectedTimeSlot.day}T${selectedTimeSlot.time}:00`,
+    ).toISOString();
+
     onBookingRequest?.({
       helperId: helper.id,
-      date: selectedTimeSlot.day,
-      time: selectedTimeSlot.time,
+      scheduledAt,
       serviceType,
       address,
       budgetCents: parseInt(budget) * 100,
@@ -362,7 +337,7 @@ export function BookingScheduler({
             <motion.button
               whileHover={shouldAnimate ? { scale: 1.05 } : {}}
               whileTap={shouldAnimate ? { scale: 0.95 } : {}}
-              onClick={() => onWeekChange?.("prev")}
+              onClick={() => handleWeekChange("prev")}
               className="p-2 hover:bg-muted rounded-lg transition-colors"
             >
               <ChevronLeft className="w-5 h-5 text-muted-foreground" />
@@ -371,7 +346,7 @@ export function BookingScheduler({
             <motion.button
               whileHover={shouldAnimate ? { scale: 1.05 } : {}}
               whileTap={shouldAnimate ? { scale: 0.95 } : {}}
-              onClick={() => onWeekChange?.("next")}
+              onClick={() => handleWeekChange("next")}
               className="p-2 hover:bg-muted rounded-lg transition-colors"
             >
               <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -385,7 +360,7 @@ export function BookingScheduler({
             <motion.div key={day.date} className="space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="font-medium text-foreground">
-                  {day.dayName}, {day.date}
+                  {day.dayName}, {formatDayLabel(day.date)}
                 </h4>
                 {!day.hasAvailability && (
                   <span className="text-sm text-muted-foreground">Keine Verfügbarkeit</span>
@@ -470,7 +445,7 @@ export function BookingScheduler({
                 </p>
                 <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
                   <p className="text-lg font-semibold text-foreground">
-                    {selectedTimeSlot.dayName}, {selectedTimeSlot.day}
+                    {selectedTimeSlot.dayName}, {formatDayLabel(selectedTimeSlot.day)}
                   </p>
                   <p className="text-xl font-bold text-primary">
                     <Clock className="w-4 h-4 inline mr-1" />
