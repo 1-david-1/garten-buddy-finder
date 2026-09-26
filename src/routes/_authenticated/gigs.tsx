@@ -348,12 +348,12 @@ function GigsPage() {
                                 respondMutation.mutate({
                                   gigId: gig.id,
                                   accept: true,
-                                  customerId: gig.customerId,
+                                  customerId: gig.customer_id,
                                 })
                               }
                             >
                               <CheckCircle2 className="size-3" />
-                              Annehmen
+                              {gig.scheduled_at ? "Termin bestätigen" : "Anfrage annehmen"}
                             </Button>
                             <Button
                               size="sm"
@@ -364,7 +364,7 @@ function GigsPage() {
                                 respondMutation.mutate({
                                   gigId: gig.id,
                                   accept: false,
-                                  customerId: gig.customerId,
+                                  customerId: gig.customer_id,
                                 })
                               }
                             >
@@ -378,7 +378,7 @@ function GigsPage() {
                             variant="ghost"
                             onClick={() =>
                               messageMutation.mutate({
-                                otherUserId: gig.customerId,
+                                otherUserId: gig.customer_id,
                                 gigId: gig.id,
                               })
                             }
