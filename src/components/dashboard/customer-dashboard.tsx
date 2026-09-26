@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Star, MapPin, Search, SlidersHorizontal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import { useI18n } from "@/lib/i18n";
 import { getAvailableHelpers } from "@/lib/marketplace.functions";
+import { createDirectBookingRequest } from "@/lib/gigs.functions";
 
 type AgeBadge = "helper_youth" | "helper_adult" | "helper_pro";
 
@@ -38,116 +40,7 @@ interface DisplayHelper {
   ageBadge: AgeBadge;
   categories: string[];
   bio: string | null;
-  isDemo: boolean;
 }
-
-interface DemoHelper {
-  id: string;
-  name: string;
-  title: string;
-  location: string;
-  postalCode: string;
-  rating: number;
-  reviewCount: number;
-  imageUrl: string;
-  hourlyRate: number; // Cent
-  ageBadge: AgeBadge;
-  categories: string[];
-  bio: string;
-}
-
-const demoHelpers: DemoHelper[] = [
-  {
-    id: "sample-1",
-    name: "Lukas Berger",
-    title: "Rasen & Hecken-Profi",
-    location: "Freiburg",
-    postalCode: "79098",
-    rating: 4.9,
-    reviewCount: 34,
-    imageUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop",
-    hourlyRate: 2800,
-    ageBadge: "helper_pro",
-    categories: ["Rasenmähen", "Heckenschnitt"],
-    bio: "Selbstständiger Gärtner mit eigener Ausrüstung, 6 Jahre Erfahrung.",
-  },
-  {
-    id: "sample-2",
-    name: "Mara Schneider",
-    title: "Beete & Unkraut",
-    location: "Freiburg",
-    postalCode: "79100",
-    rating: 4.7,
-    reviewCount: 19,
-    imageUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&h=300&fit=crop",
-    hourlyRate: 1800,
-    ageBadge: "helper_adult",
-    categories: ["Unkraut jäten", "Blumenbeete"],
-    bio: "Zuverlässig, flexibel am Wochenende verfügbar.",
-  },
-  {
-    id: "sample-3",
-    name: "Finn Vogel",
-    title: "Laub & Gartenhilfe",
-    location: "Emmendingen",
-    postalCode: "79312",
-    rating: 4.6,
-    reviewCount: 8,
-    imageUrl:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&h=300&fit=crop",
-    hourlyRate: 1200,
-    ageBadge: "helper_youth",
-    categories: ["Laub entfernen", "Gartenarbeit allgemein"],
-    bio: "Schüler, hilft nachmittags und am Wochenende - mit Zustimmung der Eltern.",
-  },
-  {
-    id: "sample-4",
-    name: "Petra Lang",
-    title: "Gartendesign & Pflege",
-    location: "Freiburg",
-    postalCode: "79104",
-    rating: 5.0,
-    reviewCount: 52,
-    imageUrl:
-      "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300&h=300&fit=crop",
-    hourlyRate: 3500,
-    ageBadge: "helper_pro",
-    categories: ["Gartenarbeit allgemein", "Blumenbeete"],
-    bio: "Gewerblich angemeldet, Referenzen auf Anfrage.",
-  },
-  {
-    id: "sample-5",
-    name: "Jonas Wolf",
-    title: "Rasenmäh-Service",
-    location: "Denzlingen",
-    postalCode: "79211",
-    rating: 4.4,
-    reviewCount: 5,
-    imageUrl:
-      "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=300&h=300&fit=crop",
-    hourlyRate: 1500,
-    ageBadge: "helper_adult",
-    categories: ["Rasenmähen"],
-    bio: "Kurzfristig verfügbar, eigenes Werkzeug vorhanden.",
-  },
-  {
-    id: "sample-6",
-    name: "Hannah Fischer",
-    title: "Heckenschnitt & Hilfe",
-    location: "Freiburg",
-    postalCode: "79106",
-    rating: 4.8,
-    reviewCount: 27,
-    imageUrl:
-      "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&h=300&fit=crop",
-    hourlyRate: 2200,
-    ageBadge: "helper_adult",
-    categories: ["Heckenschnitt", "Laub entfernen"],
-    bio: "Bringt eigene Gartenschere und Leiter mit.",
-  },
-];
 
 const categories = [
   "Rasenmähen",
@@ -173,6 +66,33 @@ export function CustomerDashboard() {
     queryFn: () => getHelpers(),
   });
 
+  const queryClient = useQueryClient();
+  const createBookingRequest = useServerFn(createDirectBookingRequest);
+  const bookingMutation = useMutation({
+    mutationFn: (input: {
+      helperId: string;
+      serviceType: string;
+      description: string;
+      address: string;
+      scheduledAt: string;
+      budgetCents: number;
+    }) => createBookingRequest({ data: input }),
+    onSuccess: () => {
+      toast.success(
+        "Buchungsanfrage gesendet. Der Helfer muss sie noch bestätigen.",
+      );
+      setSelectedHelper(null);
+      queryClient.invalidateQueries({ queryKey: ["marketplace-helpers"] });
+    },
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Buchungsanfrage konnte nicht gesendet werden.",
+      );
+    },
+  });
+
   const [category, setCategory] = useState<string>("all");
   const [location, setLocation] = useState("");
   const [minRating, setMinRating] = useState<string>("0");
@@ -184,11 +104,7 @@ export function CustomerDashboard() {
   const { navItems } = useAppNavItems();
 
   const allHelpers: DisplayHelper[] = useMemo(() => {
-    const demo: DisplayHelper[] = demoHelpers.map((h) => ({
-      ...h,
-      isDemo: true,
-    }));
-    const real: DisplayHelper[] = (helpersQuery.data?.helpers ?? []).map(
+    return (helpersQuery.data?.helpers ?? []).map(
       (h) => ({
         id: h.id,
         name: h.displayName,
@@ -202,10 +118,8 @@ export function CustomerDashboard() {
         ageBadge: h.role,
         categories: [],
         bio: h.bio,
-        isDemo: false,
       }),
     );
-    return [...demo, ...real];
   }, [helpersQuery.data]);
 
   const filtered = useMemo(() => {
@@ -429,8 +343,16 @@ export function CustomerDashboard() {
                 imageUrl: selectedHelper.imageUrl ?? "",
                 hourlyRate: selectedHelper.hourlyRate ?? 0,
               }}
-              onBookingRequest={() => {
-                setSelectedHelper(null);
+              onBookingRequest={(data) => {
+                if (bookingMutation.isPending) return;
+                bookingMutation.mutate({
+                  helperId: data.helperId,
+                  serviceType: data.serviceType,
+                  description: `Direktbuchung über "Helfer finden": ${data.serviceType}`,
+                  address: data.address,
+                  scheduledAt: data.scheduledAt,
+                  budgetCents: data.budgetCents,
+                });
               }}
             />
           )}
