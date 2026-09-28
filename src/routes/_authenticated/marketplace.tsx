@@ -38,6 +38,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getAvailableGigs } from "@/lib/gigs.functions";
 import { createBid, getMyBids } from "@/lib/negotiations.functions";
 import { QueryErrorCard } from "@/components/query-error-card";
+import {
+  PLATFORM_FEES_ENABLED,
+  PLATFORM_FEE_HELPER_RATE,
+} from "@/lib/platform-fees";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/marketplace")({
@@ -503,22 +507,40 @@ function MarketplacePage() {
               </div>
 
               {/* Plattform-Fee Hinweis */}
-              {bidAmount && !isNaN(parseFloat(bidAmount)) && (
-                <div className="rounded-lg border border-glass-border bg-glass/50 p-3 text-xs space-y-1">
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Dein Angebot</span>
-                    <span>{parseFloat(bidAmount).toFixed(2)} €</span>
+              {bidAmount &&
+                !isNaN(parseFloat(bidAmount)) &&
+                (PLATFORM_FEES_ENABLED ? (
+                  <div className="rounded-lg border border-glass-border bg-glass/50 p-3 text-xs space-y-1">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Dein Angebot</span>
+                      <span>{parseFloat(bidAmount).toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>
+                        Plattform-Gebühr ({Math.round(PLATFORM_FEE_HELPER_RATE * 100)}%)
+                      </span>
+                      <span>
+                        -{(parseFloat(bidAmount) * PLATFORM_FEE_HELPER_RATE).toFixed(2)} €
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-primary border-t border-glass-border pt-1">
+                      <span>Du erhältst</span>
+                      <span>
+                        {(parseFloat(bidAmount) * (1 - PLATFORM_FEE_HELPER_RATE)).toFixed(2)} €
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Plattform-Gebühr (10%)</span>
-                    <span>-{(parseFloat(bidAmount) * 0.1).toFixed(2)} €</span>
+                ) : (
+                  <div className="rounded-lg border border-glass-border bg-glass/50 p-3 text-xs">
+                    <div className="flex justify-between font-semibold text-primary">
+                      <span>Du erhältst</span>
+                      <span>{parseFloat(bidAmount).toFixed(2)} €</span>
+                    </div>
+                    <p className="mt-1 text-muted-foreground">
+                      Keine Plattformgebühr – GreenMatch ist aktuell kostenlos.
+                    </p>
                   </div>
-                  <div className="flex justify-between font-semibold text-primary border-t border-glass-border pt-1">
-                    <span>Du erhältst</span>
-                    <span>{(parseFloat(bidAmount) * 0.9).toFixed(2)} €</span>
-                  </div>
-                </div>
-              )}
+                ))}
 
               <Button
                 className="w-full"
