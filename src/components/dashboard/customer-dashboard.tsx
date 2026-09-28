@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ interface DisplayHelper {
   ageBadge: AgeBadge;
   categories: string[];
   bio: string | null;
+  availableToday: boolean;
 }
 
 const categories = [
@@ -97,6 +99,7 @@ export function CustomerDashboard() {
   const [location, setLocation] = useState("");
   const [minRating, setMinRating] = useState<string>("0");
   const [maxPrice, setMaxPrice] = useState([50]);
+  const [onlyAvailableToday, setOnlyAvailableToday] = useState(false);
   const [selectedHelper, setSelectedHelper] = useState<DisplayHelper | null>(
     null,
   );
@@ -118,31 +121,35 @@ export function CustomerDashboard() {
         ageBadge: h.role,
         categories: [],
         bio: h.bio,
+        availableToday: h.availableToday,
       }),
     );
   }, [helpersQuery.data]);
 
   const filtered = useMemo(() => {
-    return allHelpers.filter((h) => {
-      if (
-        category !== "all" &&
-        h.categories.length > 0 &&
-        !h.categories.includes(category)
-      )
-        return false;
-      if (
-        location.trim() &&
-        !`${h.location ?? ""} ${h.postalCode ?? ""}`
-          .toLowerCase()
-          .includes(location.trim().toLowerCase())
-      )
-        return false;
-      if ((h.rating ?? 0) < Number(minRating)) return false;
-      if (h.hourlyRate !== null && h.hourlyRate / 100 > maxPrice[0])
-        return false;
-      return true;
-    });
-  }, [allHelpers, category, location, minRating, maxPrice]);
+    return allHelpers
+      .filter((h) => {
+        if (
+          category !== "all" &&
+          h.categories.length > 0 &&
+          !h.categories.includes(category)
+        )
+          return false;
+        if (
+          location.trim() &&
+          !`${h.location ?? ""} ${h.postalCode ?? ""}`
+            .toLowerCase()
+            .includes(location.trim().toLowerCase())
+        )
+          return false;
+        if ((h.rating ?? 0) < Number(minRating)) return false;
+        if (h.hourlyRate !== null && h.hourlyRate / 100 > maxPrice[0])
+          return false;
+        if (onlyAvailableToday && !h.availableToday) return false;
+        return true;
+      })
+      .sort((a, b) => Number(b.availableToday) - Number(a.availableToday));
+  }, [allHelpers, category, location, minRating, maxPrice, onlyAvailableToday]);
 
   return (
     <DashboardShell
@@ -225,6 +232,21 @@ export function CustomerDashboard() {
               className="mt-3"
             />
           </div>
+
+          <div className="flex items-end justify-between gap-2 sm:col-span-2 lg:col-span-1">
+            <Label
+              htmlFor="only-available-today"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <span className="size-2 rounded-full bg-emerald-500" />
+              Nur heute verfügbare Helfer
+            </Label>
+            <Switch
+              id="only-available-today"
+              checked={onlyAvailableToday}
+              onCheckedChange={setOnlyAvailableToday}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -256,9 +278,17 @@ export function CustomerDashboard() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="truncate font-semibold">{h.name}</h3>
-                      <Badge variant="outline" className="shrink-0 text-xs">
-                        {ageBadgeLabel[h.ageBadge]}
-                      </Badge>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {h.availableToday && (
+                          <Badge className="gap-1 border-emerald-500/30 bg-emerald-500/15 text-xs text-emerald-600 dark:text-emerald-400">
+                            <span className="size-1.5 rounded-full bg-emerald-500" />
+                            Heute verfügbar
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-xs">
+                          {ageBadgeLabel[h.ageBadge]}
+                        </Badge>
+                      </div>
                     </div>
                     {h.title && (
                       <p className="text-sm text-muted-foreground">{h.title}</p>
