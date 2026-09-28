@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import {
+  PLATFORM_FEE_CUSTOMER_RATE,
+  PLATFORM_FEE_HELPER_RATE,
+} from "@/lib/platform-fees";
 
 export interface NegotiationInput {
   gigId: string;
@@ -206,8 +210,8 @@ export const acceptBid = createServerFn({ method: "POST" })
 
     // Erstelle Escrow Transaction
     const finalAmount = negotiation.counter_bid_cents ?? negotiation.bid_cents;
-    const customerFee = Math.round(finalAmount * 0.05); // 5% Customer Fee
-    const helperFee = Math.round(finalAmount * 0.1); // 10% Helper Fee
+    const customerFee = Math.round(finalAmount * PLATFORM_FEE_CUSTOMER_RATE);
+    const helperFee = Math.round(finalAmount * PLATFORM_FEE_HELPER_RATE);
 
     const { error: escrowError } = await supabase
       .from("escrow_transactions")
