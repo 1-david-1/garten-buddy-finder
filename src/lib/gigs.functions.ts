@@ -377,3 +377,89 @@ export const completeGig = createServerFn({ method: "POST" })
 
     return { gig };
   });
+
+const CANCELLABLE_STATUSES = ["pending_helper", "assigned", "in_progress"];
+
+export interface CancelGigInput {
+  gigId: string;
+  reason: string;
+}
+
+/**
+ * Storniert einen laufenden Auftrag. Sowohl Kunde als auch zugewiesener
+ * Helfer dürfen stornieren (Annahmen, da bisher nicht festgelegt):
+ * - Keine zeitliche Frist (z.B. "nicht mehr < 2h vor Termin") - bewusst
+ *   einfach gehalten, kann bei Bedarf später ergänzt werden.
+ * - Ein Grund ist Pflicht, für Nachvollziehbarkeit im Streitfall.
+ * - Ein bestehender Escrow-Eintrag wird auf "cancelled" gesetzt statt
+ *   normal freigegeben - es fließt ohnehin kein echtes Geld (siehe
+ *   platform-fees.ts), das hält den Datensatz aber für später konsistent.
+ */
+export const cancelGig = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: CancelGigInput) => data)
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+
+    if (!data.reason?.trim()) {
+      throw new Error("Bitte gib einen Grund für die Stornierung an.");
+    }
+
+    const { data: gig, error: gigError } = await supabase
+      .from("gigs")
+      .select("id, title, service_type, status, customer_id, assigned_helper_id")
+      .eq("id", data.gigId)
+      .single();
+
+    if (gigError || !gig) throw new Error("Auftrag nicht gefunden.");
+
+    const isCustomer = gig.customer_id === userId;
+    const isHelper = gig.assigned_helper_id === userId;
+    if (!isCustomer && !isHelper) {
+      throw new Error("Nicht berechtigt, diesen Auftrag zu stornieren.");
+    }
+    if (!CANCELLABLE_STATUSES.includes(gig.status)) {
+      throw new Error("Dieser Auftrag kann in seinem aktuellen Status nicht storniert werden.");
+    }
+
+    const { error: updateError } = await supabase
+      .from("gigs")
+      .update({
+        status: "cancelled",
+        cancellation_reason: data.reason.trim(),
+        cancelled_by: userId,
+        cancelled_at: new Date().toISOString(),
+      })
+      .eq("id", data.gigId);
+    if (updateError) throw updateError;
+
+    await supabase
+      .from("escrow_transactions")
+      .update({ state: "cancelled" })
+      .eq("gig_id", data.gigId)
+      .in("state", ["pending", "held"]);
+
+    const otherUserId = isCustomer ? gig.assigned_helper_id : gig.customer_id;
+    if (otherUserId) {
+      const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+      const { emailTemplate } = await import("@/lib/server/email.server");
+      await notifyUserByEmail({
+        userId: otherUserId,
+        category: "gig_updates",
+        subject: `Auftrag storniert: ${gig.title}`,
+        html: emailTemplate({
+          heading: "Ein Auftrag wurde storniert",
+          bodyLines: [
+            `„${gig.title}“ (${gig.service_type}) wurde von ${
+              isCustomer ? "der Kundin/dem Kunden" : "der Helferin/dem Helfer"
+            } storniert.`,
+            `Grund: ${data.reason.trim()}`,
+          ],
+          ctaLabel: "Details ansehen",
+          ctaPath: "/dashboard",
+        }),
+      });
+    }
+
+    return { ok: true };
+  });
