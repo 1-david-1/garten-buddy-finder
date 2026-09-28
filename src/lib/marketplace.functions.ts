@@ -11,6 +11,7 @@ export interface MarketplaceHelper {
   businessName: string | null;
   rating: number | null;
   reviewCount: number;
+  availableToday: boolean;
 }
 
 /**
@@ -18,6 +19,12 @@ export interface MarketplaceHelper {
  * Arbeitgeber jeden registrierten Helfer sehen können (nicht nur eine
  * fest einprogrammierte Beispiel-Liste). Bewertungen werden aus der
  * reviews-Tabelle aggregiert.
+ *
+ * Helfer im Urlaubsmodus werden ausgeblendet - sie haben explizit
+ * angegeben, aktuell nicht verfügbar zu sein. "Heute verfügbar" wird
+ * zusätzlich mit ausgeliefert, damit die Kundenliste das auch zeigen
+ * und danach filtern kann (vorher wurde beides serverseitig gar nicht
+ * erst mitgeschickt).
  */
 export const getAvailableHelpers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -37,8 +44,11 @@ export const getAvailableHelpers = createServerFn({ method: "GET" })
 
     const { data: profiles, error: profilesErr } = await supabase
       .from("profiles")
-      .select("id, display_name, city, postal_code, bio, business_name")
-      .in("id", helperIds);
+      .select(
+        "id, display_name, city, postal_code, bio, business_name, available_today, vacation_mode",
+      )
+      .in("id", helperIds)
+      .or("vacation_mode.is.null,vacation_mode.eq.false");
     if (profilesErr) throw profilesErr;
 
     const { data: reviews, error: reviewsErr } = await supabase
@@ -67,6 +77,7 @@ export const getAvailableHelpers = createServerFn({ method: "GET" })
         businessName: p.business_name,
         rating: avg,
         reviewCount: ratings.length,
+        availableToday: p.available_today ?? false,
       };
     });
 
