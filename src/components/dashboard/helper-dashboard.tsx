@@ -15,6 +15,7 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
+  XCircle,
   Zap,
 } from "lucide-react";
 import {
@@ -31,6 +32,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -56,8 +58,10 @@ import {
   setVacationMode,
   submitTaxId,
 } from "@/lib/helper-dashboard.functions";
+import { cancelGig } from "@/lib/gigs.functions";
 import { respondToBooking } from "@/lib/service-listings.functions";
 import { startConversation } from "@/lib/messaging.functions";
+import { createReview, getGigReview, updateReview } from "@/lib/reviews.functions";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 
@@ -70,6 +74,7 @@ interface RecentGig {
   address: string | null;
   scheduledAt: string | null;
   status: string;
+  customerId: string;
   customerName: string;
 }
 
@@ -245,6 +250,77 @@ export function HelperDashboard() {
       }
     },
     onError: (err) => toast.error((err as Error).message),
+  });
+
+  // ── Kunde bewerten (nach abgeschlossenem Auftrag) ──
+  const [customerReviewRating, setCustomerReviewRating] = useState(5);
+  const [customerReviewComment, setCustomerReviewComment] = useState("");
+  const getGigReviewFn = useServerFn(getGigReview);
+  const createReviewFn = useServerFn(createReview);
+  const updateReviewFn = useServerFn(updateReview);
+
+  const customerReviewQuery = useQuery({
+    queryKey: ["gig-review-of-customer", selectedGig?.id],
+    queryFn: () =>
+      getGigReviewFn({
+        data: { gigId: selectedGig!.id, direction: "helper_to_customer" },
+      }),
+    enabled: !!selectedGig && selectedGig.status === "completed",
+  });
+
+  useEffect(() => {
+    const existing = customerReviewQuery.data?.review;
+    if (existing) {
+      setCustomerReviewRating(existing.rating);
+      setCustomerReviewComment(existing.comment ?? "");
+    } else {
+      setCustomerReviewRating(5);
+      setCustomerReviewComment("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGig?.id, customerReviewQuery.data]);
+
+  const customerReviewMutation = useMutation({
+    mutationFn: () => {
+      const payload = {
+        gigId: selectedGig!.id,
+        rating: customerReviewRating,
+        comment: customerReviewComment,
+      };
+      return customerReviewQuery.data?.review
+        ? updateReviewFn({ data: payload })
+        : createReviewFn({ data: payload });
+    },
+    onSuccess: () => {
+      toast.success("Bewertung gespeichert.");
+      queryClient.invalidateQueries({
+        queryKey: ["gig-review-of-customer", selectedGig?.id],
+      });
+    },
+    onError: (err) =>
+      toast.error(
+        err instanceof Error ? err.message : "Bewertung konnte nicht gespeichert werden.",
+      ),
+  });
+
+  // ── Auftrag stornieren ──
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  useEffect(() => {
+    setShowCancelForm(false);
+    setCancelReason("");
+  }, [selectedGig?.id]);
+  const cancelGigFn = useServerFn(cancelGig);
+  const cancelMutation = useMutation({
+    mutationFn: (input: { gigId: string; reason: string }) =>
+      cancelGigFn({ data: input }),
+    onSuccess: () => {
+      toast.success("Auftrag storniert.");
+      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
+      setSelectedGig(null);
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Stornierung fehlgeschlagen."),
   });
 
   const { navItems } = useAppNavItems();
@@ -1066,6 +1142,112 @@ export function HelperDashboard() {
                     >
                       Ablehnen
                     </Button>
+                  </div>
+                )}
+
+                {(selectedGig.status === "assigned" || selectedGig.status === "in_progress") && (
+                  <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                    <h4 className="mb-2 text-sm font-semibold text-destructive">
+                      Auftrag stornieren
+                    </h4>
+                    {showCancelForm ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          placeholder="Grund für die Stornierung..."
+                          value={cancelReason}
+                          onChange={(e) => setCancelReason(e.target.value)}
+                          rows={2}
+                          className="text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={cancelMutation.isPending || !cancelReason.trim()}
+                            onClick={() =>
+                              cancelMutation.mutate({
+                                gigId: selectedGig.id,
+                                reason: cancelReason,
+                              })
+                            }
+                          >
+                            Stornierung bestätigen
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowCancelForm(false)}
+                          >
+                            Abbrechen
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="mb-3 text-xs text-muted-foreground">
+                          {selectedGig.customerName} wird per E-Mail über die
+                          Stornierung informiert.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setShowCancelForm(true)}
+                        >
+                          <XCircle className="mr-2 size-4" />
+                          Auftrag stornieren
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {selectedGig.status === "completed" && (
+                  <div className="mt-6 border-t border-glass-border pt-4">
+                    <p className="mb-2 text-sm font-medium">
+                      {selectedGig.customerName} bewerten
+                    </p>
+                    {customerReviewQuery.isLoading ? (
+                      <p className="text-xs text-muted-foreground">Lädt...</p>
+                    ) : (
+                      <>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setCustomerReviewRating(star)}
+                              className="p-0.5"
+                              aria-label={`${star} Sterne`}
+                            >
+                              <Star
+                                className={`size-5 ${
+                                  star <= customerReviewRating
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-muted-foreground"
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <Textarea
+                          className="mt-2"
+                          placeholder="Wie war die Zusammenarbeit mit dem Kunden? (optional)"
+                          rows={2}
+                          value={customerReviewComment}
+                          onChange={(e) => setCustomerReviewComment(e.target.value)}
+                        />
+                        <Button
+                          size="sm"
+                          className="mt-2"
+                          disabled={customerReviewMutation.isPending}
+                          onClick={() => customerReviewMutation.mutate()}
+                        >
+                          {customerReviewQuery.data?.review
+                            ? "Bewertung aktualisieren"
+                            : "Bewertung abgeben"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
