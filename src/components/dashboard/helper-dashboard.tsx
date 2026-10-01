@@ -51,7 +51,6 @@ import { GrowthChecklistWidget } from "@/components/dashboard/growth-checklist-w
 import { PreJobChecklistWidget } from "@/components/dashboard/pre-job-checklist-widget";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
 import {
   getHelperDashboard,
   setAvailability,
@@ -277,7 +276,6 @@ export function HelperDashboard() {
       setCustomerReviewRating(5);
       setCustomerReviewComment("");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGig?.id, customerReviewQuery.data]);
 
   const customerReviewMutation = useMutation({
@@ -324,47 +322,6 @@ export function HelperDashboard() {
   });
 
   const { navItems } = useAppNavItems();
-
-  const isOnline = q.data?.profile.availableToday ?? false;
-  useEffect(() => {
-    if (!isOnline || !user?.id) return;
-
-    const notify = (payload: { new: { status: string; service_type: string } }) => {
-      if (payload.new.status !== "pending_helper") return;
-      toast.info(`Neue Buchungsanfrage: ${payload.new.service_type}`, {
-        description: "Ein Kunde möchte dich buchen. Sieh sie dir jetzt an.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
-    };
-
-    const channel = supabase
-      .channel(`helper-bookings:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "gigs",
-          filter: `assigned_helper_id=eq.${user.id}`,
-        },
-        notify,
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "gigs",
-          filter: `assigned_helper_id=eq.${user.id}`,
-        },
-        notify,
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [isOnline, user?.id, queryClient]);
 
   if (q.isError) {
     return (
