@@ -199,6 +199,7 @@ export const getConversationDetail = createServerFn({ method: "GET" })
     return {
       conversation: {
         id: conversation.id,
+        gigId: conversation.gig_id,
         otherUser: {
           id: otherUserId,
           displayName: profile?.display_name || "Unbekannt",
@@ -287,6 +288,11 @@ export const sendMessage = createServerFn({ method: "POST" })
         ctaLabel: "Nachricht lesen",
         ctaPath: `/messages/${data.conversationId}`,
       }),
+      inApp: {
+        title: `Neue Nachricht von ${sender?.display_name ?? "einem Nutzer"}`,
+        body: data.body.length > 100 ? `${data.body.slice(0, 100)}…` : data.body,
+        link: `/messages/${data.conversationId}`,
+      },
     });
     return {
       message: {

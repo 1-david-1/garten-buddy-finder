@@ -893,11 +893,45 @@ export const respondToBooking = createServerFn({ method: "POST" })
   .handler(async ({ context, data: input }) => {
     const { supabase } = context;
 
+    const { data: gigBefore } = await supabase
+      .from("gigs")
+      .select("customer_id, title, service_type")
+      .eq("id", input.gigId)
+      .maybeSingle();
+
     const { data, error } = await supabase.rpc("respond_to_booking", {
       p_gig_id: input.gigId,
       p_accept: input.accept,
     });
 
     if (error) throw error;
+
+    if (gigBefore) {
+      const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+      const { emailTemplate } = await import("@/lib/server/email.server");
+      await notifyUserByEmail({
+        userId: gigBefore.customer_id,
+        category: "gig_updates",
+        subject: input.accept
+          ? `Buchung bestätigt: ${gigBefore.title}`
+          : `Buchungsanfrage abgelehnt: ${gigBefore.title}`,
+        html: emailTemplate({
+          heading: input.accept ? "Buchung bestätigt" : "Buchungsanfrage abgelehnt",
+          bodyLines: [
+            input.accept
+              ? `Deine Buchungsanfrage für „${gigBefore.title}“ wurde bestätigt.`
+              : `Deine Buchungsanfrage für „${gigBefore.title}“ wurde leider abgelehnt.`,
+          ],
+          ctaLabel: "Details ansehen",
+          ctaPath: "/my-gigs",
+        }),
+        inApp: {
+          title: input.accept ? "Buchung bestätigt" : "Buchungsanfrage abgelehnt",
+          body: `„${gigBefore.title}“ (${gigBefore.service_type})`,
+          link: "/my-gigs",
+        },
+      });
+    }
+
     return data;
   });

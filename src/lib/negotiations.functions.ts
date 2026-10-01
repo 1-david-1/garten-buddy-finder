@@ -102,6 +102,11 @@ export const createBid = createServerFn({ method: "POST" })
           ctaLabel: "Gebot ansehen",
           ctaPath: "/my-gigs",
         }),
+        inApp: {
+          title: "Neues Gebot erhalten",
+          body: `${helperProfile?.display_name ?? "Ein Helfer"} hat ${(data.bidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} für „${gig.title}“ geboten.`,
+          link: "/my-gigs",
+        },
       });
     }
 
@@ -153,6 +158,11 @@ export const counterBid = createServerFn({ method: "POST" })
         ctaLabel: "Angebot ansehen",
         ctaPath: "/gigs",
       }),
+      inApp: {
+        title: "Gegenangebot erhalten",
+        body: `Der Kunde bietet dir ${(data.counterBidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}.`,
+        link: "/gigs",
+      },
     });
 
     return { negotiation };
@@ -242,6 +252,11 @@ export const acceptBid = createServerFn({ method: "POST" })
         ctaLabel: "Auftrag ansehen",
         ctaPath: "/gigs",
       }),
+      inApp: {
+        title: "Gebot angenommen",
+        body: `Dein Gebot für „${gig.title}“ wurde angenommen.`,
+        link: "/gigs",
+      },
     });
 
     return { success: true };
@@ -294,6 +309,11 @@ export const declineBid = createServerFn({ method: "POST" })
         ctaLabel: isCustomer ? "Aufträge finden" : "Meine Aufträge",
         ctaPath: isCustomer ? "/marketplace" : "/my-gigs",
       }),
+      inApp: {
+        title: "Gebot abgelehnt",
+        body: "Ein Gebot für einen deiner Aufträge wurde abgelehnt.",
+        link: isCustomer ? "/marketplace" : "/my-gigs",
+      },
     });
 
     return { negotiation };
