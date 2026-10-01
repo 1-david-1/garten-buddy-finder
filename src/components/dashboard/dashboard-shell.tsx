@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/lib/auth";
 import { useI18n, type Locale } from "@/lib/i18n";
 
@@ -151,6 +152,7 @@ export function DashboardShell({
               <span className="font-brand text-lg">{title}</span>
             </div>
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <Button
                 variant="outline"
                 size="sm"
