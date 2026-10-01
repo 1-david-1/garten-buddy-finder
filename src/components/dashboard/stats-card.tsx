@@ -46,7 +46,7 @@ const AnimatedValue = ({ value, prefix = "", postfix = "" }: { value: number; pr
         // For values < 1 (like ratings), we show 1 decimal point
         const formatted = value < 10 && value > 0
           ? latest.toFixed(1)
-          : Intl.NumberFormat('en-US').format(latest.toFixed(0));
+          : Intl.NumberFormat('en-US').format(Math.round(latest));
         ref.current.textContent = `${prefix}${formatted}${postfix}`;
       }
     });
