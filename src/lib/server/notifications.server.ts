@@ -1,4 +1,4 @@
-// Server-only: Orchestrierung von E-Mail-Benachrichtigungen.
+// Server-only: Orchestrierung von E-Mail- und In-App-Benachrichtigungen.
 // Nur aus Server-Function-Handlern importieren (idealerweise per dynamischem
 // `await import(...)`), niemals aus Routen/Komponenten - dieses Modul importiert
 // den Service-Role-Client aus client.server.ts.
@@ -16,27 +16,46 @@ interface NotificationPrefs {
   messages?: boolean;
 }
 
-interface NotifyEmailInput {
+interface InAppNotification {
+  title: string;
+  body?: string;
+  /** Relativer Pfad, z.B. "/messages/abc-123" */
+  link?: string;
+}
+
+interface NotifyUserInput {
   userId: string;
   category: NotificationCategory;
   subject: string;
   html: string;
+  /**
+   * Wenn gesetzt, wird zusätzlich zur E-Mail ein Eintrag in der Glocke
+   * (notifications-Tabelle) angelegt - unabhängig von den
+   * E-Mail-Präferenzen des Nutzers ("keine E-Mails" soll nicht
+   * automatisch "keine Glocke" bedeuten).
+   */
+  inApp?: InAppNotification;
 }
 
 /**
- * Sendet best-effort eine Benachrichtigungs-E-Mail an einen Nutzer, sofern
- * dieser die jeweilige Kategorie nicht abbestellt hat (notification_prefs
- * auf profiles). Wirft absichtlich nie einen Fehler - siehe email.server.ts.
+ * Benachrichtigt einen Nutzer best-effort per E-Mail (sofern die jeweilige
+ * Kategorie nicht abbestellt ist, siehe notification_prefs auf profiles)
+ * und optional zusätzlich per In-App-Benachrichtigung (Glocke). Wirft
+ * absichtlich nie einen Fehler - eine Benachrichtigung darf niemals die
+ * eigentliche Aktion (Gebot, Zusage, Nachricht, ...) zum Scheitern bringen.
  *
  * Nutzt den Service-Role-Client, weil E-Mail-Adressen in auth.users liegen
- * und nicht über den RLS-Client des aufrufenden Nutzers erreichbar sind.
+ * und nicht über den RLS-Client des aufrufenden Nutzers erreichbar sind;
+ * für "notifications" ist das zugleich der einzige Weg, Zeilen anzulegen -
+ * authenticated hat dort bewusst kein INSERT-Recht.
  */
 export async function notifyUserByEmail({
   userId,
   category,
   subject,
   html,
-}: NotifyEmailInput): Promise<void> {
+  inApp,
+}: NotifyUserInput): Promise<void> {
   try {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
@@ -46,25 +65,44 @@ export async function notifyUserByEmail({
     if (profileError) throw profileError;
 
     const prefs = (profile?.notification_prefs ?? {}) as NotificationPrefs;
-    if (prefs.enabled === false) return;
-    if (prefs[category] === false) return;
+    const emailAllowed = prefs.enabled !== false && prefs[category] !== false;
 
-    const { data: userRes, error: userError } =
-      await supabaseAdmin.auth.admin.getUserById(userId);
-    if (userError || !userRes?.user?.email) {
-      if (userError)
-        console.error(
-          "[notifications] Konnte Nutzer-E-Mail nicht laden:",
-          userError,
-        );
-      return;
+    if (emailAllowed) {
+      const { data: userRes, error: userError } =
+        await supabaseAdmin.auth.admin.getUserById(userId);
+      if (userError || !userRes?.user?.email) {
+        if (userError) {
+          console.error(
+            "[notifications] Konnte Nutzer-E-Mail nicht laden:",
+            userError,
+          );
+        }
+      } else {
+        await sendEmail({ to: userRes.user.email, subject, html });
+      }
     }
-
-    await sendEmail({ to: userRes.user.email, subject, html });
   } catch (err) {
     console.error(
       "[notifications] Konnte Benachrichtigung nicht versenden:",
       err,
     );
+  }
+
+  if (inApp) {
+    try {
+      const { error } = await supabaseAdmin.from("notifications").insert({
+        user_id: userId,
+        category,
+        title: inApp.title,
+        body: inApp.body ?? null,
+        link: inApp.link ?? null,
+      });
+      if (error) throw error;
+    } catch (err) {
+      console.error(
+        "[notifications] Konnte In-App-Benachrichtigung nicht anlegen:",
+        err,
+      );
+    }
   }
 }
