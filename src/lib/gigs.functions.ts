@@ -122,6 +122,11 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
         ctaLabel: "Anfrage ansehen",
         ctaPath: "/dashboard",
       }),
+      inApp: {
+        title: "Neue Buchungsanfrage",
+        body: `Ein Kunde möchte dich für „${data.serviceType}“ buchen.`,
+        link: "/dashboard",
+      },
     });
 
     return { gig };
@@ -293,6 +298,11 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
         ctaLabel: "Auftrag ansehen",
         ctaPath: "/gigs",
       }),
+      inApp: {
+        title: "Neuer Auftrag zugewiesen",
+        body: `Du wurdest dem Auftrag „${gig.title}“ zugewiesen.`,
+        link: "/gigs",
+      },
     });
 
     return { gig };
@@ -372,6 +382,11 @@ export const completeGig = createServerFn({ method: "POST" })
           ctaLabel: "Zum Dashboard",
           ctaPath: "/dashboard",
         }),
+        inApp: {
+          title: "Auftrag abgeschlossen",
+          body: `„${gig.title}“ wurde als abgeschlossen markiert.`,
+          link: "/dashboard",
+        },
       });
     }
 
@@ -458,6 +473,11 @@ export const cancelGig = createServerFn({ method: "POST" })
           ctaLabel: "Details ansehen",
           ctaPath: "/dashboard",
         }),
+        inApp: {
+          title: "Auftrag storniert",
+          body: `„${gig.title}“ wurde storniert. Grund: ${data.reason.trim()}`,
+          link: "/dashboard",
+        },
       });
     }
 
