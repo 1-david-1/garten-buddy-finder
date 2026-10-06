@@ -24,6 +24,7 @@ import { Route as AuthenticatedMyGigsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedSellRouteRouteImport } from './routes/_authenticated/sell/route'
+import { Route as ElternZustimmungTokenRouteImport } from './routes/eltern-zustimmung.$token'
 import { Route as AuthenticatedHelpersHelperIdRouteImport } from './routes/_authenticated/helpers/$helperId'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages/index'
 import { Route as AuthenticatedMessagesConversationIdRouteImport } from './routes/_authenticated/messages/$conversationId'
@@ -109,6 +110,11 @@ const AuthenticatedSellRouteRoute = AuthenticatedSellRouteRouteImport.update({
   path: '/sell',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ElternZustimmungTokenRoute = ElternZustimmungTokenRouteImport.update({
+  id: '/eltern-zustimmung/$token',
+  path: '/eltern-zustimmung/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedHelpersHelperIdRoute =
   AuthenticatedHelpersHelperIdRouteImport.update({
     id: '/helpers/$helperId',
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
   '/sell/create': typeof AuthenticatedSellCreateRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
   '/sell/create': typeof AuthenticatedSellCreateRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   '/_authenticated/my-gigs': typeof AuthenticatedMyGigsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/_authenticated/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/_authenticated/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
   '/_authenticated/sell/create': typeof AuthenticatedSellCreateRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
     | '/my-gigs'
     | '/onboarding'
     | '/profile'
+    | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
     | '/sell/create'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/my-gigs'
     | '/onboarding'
     | '/profile'
+    | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
     | '/sell/create'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/_authenticated/my-gigs'
     | '/_authenticated/onboarding'
     | '/_authenticated/profile'
+    | '/eltern-zustimmung/$token'
     | '/_authenticated/helpers/$helperId'
     | '/_authenticated/messages/$conversationId'
     | '/_authenticated/sell/create'
@@ -305,6 +317,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ElternZustimmungTokenRoute: typeof ElternZustimmungTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -413,6 +426,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sell'
       preLoaderRoute: typeof AuthenticatedSellRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/eltern-zustimmung/$token': {
+      id: '/eltern-zustimmung/$token'
+      path: '/eltern-zustimmung/$token'
+      fullPath: '/eltern-zustimmung/$token'
+      preLoaderRoute: typeof ElternZustimmungTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/helpers/$helperId': {
       id: '/_authenticated/helpers/$helperId'
@@ -552,6 +572,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ElternZustimmungTokenRoute: ElternZustimmungTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
