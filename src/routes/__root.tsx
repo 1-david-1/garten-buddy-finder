@@ -80,10 +80,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Marktplatz für Gartenhilfe im DACH-Raum. Jugendliche, Nachbarn und Profi-Gärtner. JArbSchG-konform, mit Treuhand & §35a-Rechnung.",
+          "Nachbarschaftliche Gartenhilfe: Gartenbesitzer finden Helfer von nebenan – Jugendliche mit Zustimmung der Eltern, Nachbarn und Profi-Gärtner.",
       },
       { property: "og:title", content: "GreenMatch — Gartenhilfe aus der Nachbarschaft" },
-      { property: "og:description", content: "Rechtssicher. Fair. Lokal." },
+      { property: "og:description", content: "Fair. Lokal. Verifiziert." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

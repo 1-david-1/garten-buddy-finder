@@ -10,8 +10,11 @@ import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Anmelden · GreenMatch" }] }),
-  validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { mode?: "signin" | "signup"; role?: "helper" | "customer" } => ({
     mode: search.mode === "signup" ? "signup" : undefined,
+    role: search.role === "helper" || search.role === "customer" ? search.role : undefined,
   }),
   component: AuthPage,
 });
@@ -20,12 +23,13 @@ function AuthPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { mode: initialMode } = Route.useSearch();
+  const { mode: initialMode, role: initialRole } = Route.useSearch();
+  // Kommt jemand von der Startseite mit vorgewählter Rolle, geht es direkt zur Registrierung.
   const [mode, setMode] = useState<"signin" | "signup">(
-    initialMode === "signup" ? "signup" : "signin",
+    initialMode === "signup" || initialRole ? "signup" : "signin",
   );
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"helper" | "customer" | null>(null);
+  const [role, setRole] = useState<"helper" | "customer" | null>(initialRole ?? null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,8 +124,12 @@ function AuthPage() {
     <div className="min-h-screen bg-background text-foreground">
       <SiteNav />
       <div className="mx-auto flex max-w-md flex-col px-4 py-16">
-        <h1 className="font-brand text-3xl">{t("auth.title")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("auth.subtitle")}</p>
+        <h1 className="font-brand text-3xl">
+          {mode === "signup" ? t("auth.title.signup") : t("auth.title.signin")}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {mode === "signup" ? t("auth.subtitle.signup") : t("auth.subtitle.signin")}
+        </p>
 
         <form
           onSubmit={onSubmit}
@@ -155,6 +163,9 @@ function AuthPage() {
                   label={t("auth.role.customer")}
                 />
               </div>
+              {role === "helper" && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("auth.hint.helper")}</p>
+              )}
             </div>
           )}
           <div>
