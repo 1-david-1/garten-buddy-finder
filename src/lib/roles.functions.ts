@@ -22,15 +22,24 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    // Age check for youth role
-    if (data.role === "helper_youth") {
+    // Altersprüfung für alle Helfer-Rollen. Das Geburtsdatum ist serverseitig Pflicht
+    // (vorher konnte man es per direktem Aufruf weglassen und als Minderjährige/r
+    // die Rolle "Nachbar 18+" wählen). Es bleibt eine Selbstauskunft - die
+    // eigentliche Absicherung für Jugendliche ist die Zustimmung der Eltern.
+    if (
+      data.role === "helper_youth" ||
+      data.role === "helper_adult" ||
+      data.role === "helper_pro"
+    ) {
       if (!data.birthdate) throw new Error("birthdate_required");
       const age = ageFromISO(data.birthdate);
-      if (age < 13 || age > 17) throw new Error("age_not_in_youth_range");
-      if (!data.guardianEmail) throw new Error("guardian_email_required");
-    }
-    if (data.role === "helper_adult" || data.role === "helper_pro") {
-      if (data.birthdate && ageFromISO(data.birthdate) < 18) throw new Error("must_be_adult");
+      if (Number.isNaN(age) || age < 13) throw new Error("age_below_minimum");
+      if (data.role === "helper_youth") {
+        if (age > 17) throw new Error("age_not_in_youth_range");
+        if (!data.guardianEmail) throw new Error("guardian_email_required");
+      } else if (age < 18) {
+        throw new Error("must_be_adult");
+      }
     }
     if (data.role === "helper_pro") {
       if (!data.businessName || !data.vatId) throw new Error("business_details_required");
@@ -68,7 +77,21 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       .insert({ user_id: userId, role: data.role });
     if (rErr && !String(rErr.message).includes("duplicate")) throw rErr;
 
-    return { ok: true, role: data.role };
+    // Jugendliche: Zustimmungs-Link sofort an die Eltern schicken. Scheitert der
+    // Versand, geht das Onboarding trotzdem durch - im Profil lässt sich die
+    // Mail jederzeit erneut anfordern.
+    let guardianMailSent = false;
+    if (data.role === "helper_youth") {
+      try {
+        const { issueGuardianConsent } = await import("@/lib/server/verification.server");
+        await issueGuardianConsent(userId);
+        guardianMailSent = true;
+      } catch (err) {
+        console.error("[onboarding] Eltern-Zustimmung konnte nicht gesendet werden:", err);
+      }
+    }
+
+    return { ok: true, role: data.role, guardianMailSent };
   });
 
 export const getMyRoles = createServerFn({ method: "GET" })

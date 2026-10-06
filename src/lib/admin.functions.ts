@@ -163,19 +163,33 @@ export const getAdminUsers = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase } = context;
 
-    const [profilesRes, rolesRes] = await Promise.all([
+    const [profilesRes, rolesRes, pendingRes] = await Promise.all([
       supabase
         .from("profiles")
         .select(
-          "id, display_name, city, trust_score, verified_at, business_name, ust_id, created_at",
+          "id, display_name, city, trust_score, verified_at, verification_method, business_name, ust_id, created_at",
         )
         .order("created_at", { ascending: false })
         .limit(200),
       supabase.from("user_roles").select("user_id, role"),
+      supabase
+        .from("verification_requests")
+        .select("user_id, kind")
+        .eq("status", "pending"),
     ]);
 
     if (profilesRes.error) throw profilesRes.error;
     if (rolesRes.error) throw rolesRes.error;
+    if (pendingRes.error) throw pendingRes.error;
+
+    // Offene Anfragen je Nutzer: "identity" wartet auf das Team, "guardian_consent"
+    // wartet auf die Eltern (nur zur Info, kein Admin-Eingriff nötig).
+    const pendingByUser = new Map<string, "identity" | "guardian_consent">();
+    for (const r of pendingRes.data ?? []) {
+      if (r.kind === "identity" || !pendingByUser.has(r.user_id)) {
+        pendingByUser.set(r.user_id, r.kind as "identity" | "guardian_consent");
+      }
+    }
 
     const rolesByUser = new Map<string, string[]>();
     for (const r of rolesRes.data ?? []) {
@@ -191,6 +205,8 @@ export const getAdminUsers = createServerFn({ method: "GET" })
         city: p.city,
         trustScore: p.trust_score,
         verifiedAt: p.verified_at,
+        verificationMethod: p.verification_method ?? null,
+        pendingVerification: pendingByUser.get(p.id) ?? null,
         businessName: p.business_name,
         ustId: p.ust_id,
         createdAt: p.created_at,
@@ -206,11 +222,27 @@ export const setUserVerified = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    const nowIso = new Date().toISOString();
     const { error } = await supabase
       .from("profiles")
-      .update({ verified_at: data.verified ? new Date().toISOString() : null })
+      .update({
+        verified_at: data.verified ? nowIso : null,
+        verification_method: data.verified ? "admin_review" : null,
+      })
       .eq("id", data.userId);
     if (error) throw error;
+
+    // Offene Identitäts-Anfrage des Nutzers mit erledigen (RLS: nur Lesen für Admins,
+    // daher über den Service-Client; die Admin-Rolle wurde oben schon geprüft).
+    if (data.verified) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin
+        .from("verification_requests")
+        .update({ status: "approved", decided_at: nowIso })
+        .eq("user_id", data.userId)
+        .eq("kind", "identity")
+        .eq("status", "pending");
+    }
 
     await supabase.rpc("log_admin_action", {
       _action: data.verified ? "user.verify" : "user.unverify",

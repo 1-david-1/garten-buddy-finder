@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 export type ListingType = "fixed_price" | "auction" | "negotiable";
 export type ListingStatus =
@@ -215,6 +217,30 @@ export function validateListingInput(data: ServiceListingInput): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Jugendschutz: Jugendliche (13-17) dürfen erst veröffentlichen, wenn die Eltern
+// zugestimmt haben (profiles.verification_method = 'guardian_consent'). Entwürfe
+// bleiben erlaubt. Gebote auf Aufträge sind zusätzlich per RLS-Policy gesperrt.
+// ---------------------------------------------------------------------------
+async function assertCanPublish(supabase: SupabaseClient<Database>, userId: string) {
+  const { data: isYouth } = await supabase.rpc("has_role", {
+    _user_id: userId,
+    _role: "helper_youth",
+  });
+  if (!isYouth) return;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("verified_at, verification_method")
+    .eq("id", userId)
+    .maybeSingle();
+  if (!profile?.verified_at || profile.verification_method !== "guardian_consent") {
+    throw new Error(
+      "Zum Veröffentlichen brauchst du zuerst die Zustimmung deiner Eltern (Profil → Verifizierung).",
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
 
@@ -234,6 +260,7 @@ export const createServiceListing = createServerFn({ method: "POST" })
     if (data.publish !== false && validationError) {
       throw new Error(validationError);
     }
+    if (data.publish !== false) await assertCanPublish(supabase, userId);
 
     const { data: listing, error } = await supabase
       .from("service_listings")
@@ -489,7 +516,8 @@ export const publishServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+    await assertCanPublish(supabase, userId);
 
     const { data: existing, error: fetchError } = await supabase
       .from("service_listings")
