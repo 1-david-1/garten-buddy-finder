@@ -352,6 +352,45 @@ export type Database = {
           }
         ];
       };
+      verification_requests: {
+        Row: {
+          created_at: string;
+          decided_at: string | null;
+          expires_at: string | null;
+          guardian_email: string | null;
+          id: string;
+          kind: string;
+          note: string | null;
+          status: string;
+          token_hash: string | null;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          decided_at?: string | null;
+          expires_at?: string | null;
+          guardian_email?: string | null;
+          id?: string;
+          kind: string;
+          note?: string | null;
+          status?: string;
+          token_hash?: string | null;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          decided_at?: string | null;
+          expires_at?: string | null;
+          guardian_email?: string | null;
+          id?: string;
+          kind?: string;
+          note?: string | null;
+          status?: string;
+          token_hash?: string | null;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           available_today: boolean;
@@ -370,6 +409,7 @@ export type Database = {
           vacation_mode: boolean;
           vacation_return_date: string | null;
           verified_at: string | null;
+          verification_method: string | null;
         };
         Insert: {
           available_today?: boolean;
@@ -388,6 +428,7 @@ export type Database = {
           vacation_mode?: boolean;
           vacation_return_date?: string | null;
           verified_at?: string | null;
+          verification_method?: string | null;
         };
         Update: {
           available_today?: boolean;
@@ -406,6 +447,7 @@ export type Database = {
           vacation_mode?: boolean;
           vacation_return_date?: string | null;
           verified_at?: string | null;
+          verification_method?: string | null;
         };
         Relationships: [];
       };
