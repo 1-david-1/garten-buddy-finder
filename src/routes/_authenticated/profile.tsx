@@ -31,6 +31,7 @@ import {
   updateNotificationPrefs,
 } from "@/lib/profile.functions";
 import { toast } from "sonner";
+import { VerificationCard } from "@/components/verification-card";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -410,32 +411,6 @@ function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      E-Mail bestätigt
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] border-emerald-400/40 text-emerald-400"
-                    >
-                      ✓
-                    </Badge>
-                  </div>
-
-                  {profile.verified_at && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Verifiziert</span>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] border-emerald-400/40 text-emerald-400"
-                      >
-                        ✓{" "}
-                        {new Date(profile.verified_at).toLocaleDateString(
-                          "de-DE",
-                        )}
-                      </Badge>
-                    </div>
-                  )}
                 </div>
 
                 <Separator className="bg-glass-border" />
@@ -449,6 +424,8 @@ function ProfilePage() {
                 </p>
               </CardContent>
             </Card>
+
+            <VerificationCard />
 
             <Card className="border-glass-border bg-glass backdrop-blur">
               <CardContent className="pt-5 space-y-3">
