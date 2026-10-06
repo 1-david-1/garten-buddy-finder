@@ -21,6 +21,12 @@ export function SiteNav() {
           <a href="/#helpers" className="hover:text-foreground">
             {t("nav.helpers")}
           </a>
+          <a href="/#trust" className="hover:text-foreground">
+            {t("nav.trust")}
+          </a>
+          <a href="/#faq" className="hover:text-foreground">
+            {t("nav.faq")}
+          </a>
         </nav>
         <div className="flex items-center gap-2">
           <LocaleToggle locale={locale} setLocale={setLocale} />
@@ -47,7 +53,7 @@ export function SiteNav() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => navigate({ to: "/auth", search: { mode: "signup" } as never })}
+                onClick={() => navigate({ to: "/auth", search: { mode: "signup" } })}
               >
                 {t("nav.signup")}
               </Button>
