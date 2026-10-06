@@ -63,6 +63,7 @@ import { startConversation } from "@/lib/messaging.functions";
 import { createReview, getGigReview, updateReview } from "@/lib/reviews.functions";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
+import { GuardianConsentBanner } from "@/components/verification-card";
 
 interface RecentGig {
   id: string;
@@ -506,6 +507,11 @@ export function HelperDashboard() {
               <AlertTitle>{t("dashboard.helper.vacation.bannerTitle")}</AlertTitle>
               <AlertDescription>{t("dashboard.helper.vacation.bannerBody")}</AlertDescription>
             </Alert>
+          </motion.div>
+        )}
+        {isYouth && (
+          <motion.div variants={itemVariants} className="mt-6 empty:hidden">
+            <GuardianConsentBanner />
           </motion.div>
         )}
         {isYouth && (

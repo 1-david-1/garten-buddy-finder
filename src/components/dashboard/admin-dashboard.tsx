@@ -634,7 +634,14 @@ export function AdminDashboard() {
                               <Badge className="gap-1">
                                 <ShieldCheck className="size-3" />
                                 {formatDate(u.verifiedAt, intlLocale)}
+                                {u.verificationMethod === "guardian_consent" && " · Eltern"}
                               </Badge>
+                            ) : u.pendingVerification === "identity" ? (
+                              <Badge variant="outline" className="border-amber-400/50 text-amber-400">
+                                Prüfung angefragt
+                              </Badge>
+                            ) : u.pendingVerification === "guardian_consent" ? (
+                              <Badge variant="outline">Wartet auf Eltern</Badge>
                             ) : (
                               <Badge variant="outline">—</Badge>
                             )}
