@@ -919,7 +919,14 @@ export const respondToBooking = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { gigId: string; accept: boolean }) => input)
   .handler(async ({ context, data: input }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+
+    // Jugendschutz: Jugendliche dürfen einen Auftrag erst annehmen, wenn die Eltern
+    // genau diesen Auftrag freigegeben haben (sonst geht die Anfrage per Mail an die Eltern).
+    if (input.accept) {
+      const { ensureJobApproval } = await import("@/lib/server/verification.server");
+      await ensureJobApproval(userId, input.gigId);
+    }
 
     const { data: gigBefore } = await supabase
       .from("gigs")
