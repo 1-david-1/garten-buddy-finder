@@ -38,7 +38,7 @@ const AGE_GROUPS = [
   {
     value: "helper_youth",
     label: "Jugendliche (13–17)",
-    desc: "Leichte Arbeit, max. 2h/Tag, Mo–Fr 08–18 Uhr",
+    desc: "Leichte Arbeit, max. 2 Std./Tag, 08–18 Uhr – Eltern geben jeden Auftrag frei",
   },
   {
     value: "helper_adult",
@@ -432,19 +432,27 @@ function CreateGigPage() {
               <ul className="space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-1.5">
                   <span className="text-primary mt-0.5">✓</span>
-                  Geld liegt auf Treuhand bis Abnahme
+                  Kostenlos – keine Gebühren
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-primary mt-0.5">✓</span>
-                  JArbSchG-Prüfung für Jugendliche
+                  Jugendliche: Eltern-Freigabe für jeden Auftrag
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-primary mt-0.5">✓</span>
-                  §35a-Rechnung optional
+                  Automatische Zeitgrenzen für Jugendliche
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-primary mt-0.5">✓</span>
                   Bewertungssystem nach Abschluss
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-primary mt-0.5">⏳</span>
+                  Bald: Geld auf Treuhand, Freigabe nach getaner Arbeit
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-primary mt-0.5">⏳</span>
+                  Bald: §35a-Rechnung
                 </li>
               </ul>
             </CardContent>

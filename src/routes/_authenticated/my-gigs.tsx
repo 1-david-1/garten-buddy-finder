@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getMyGigs, completeGig, proposeGigDate, cancelGig } from "@/lib/gigs.functions";
+import { getMyGigs, completeGig, proposeGigDate } from "@/lib/gigs.functions";
 import {
   getNegotiationsForGig,
   counterBid,
@@ -96,7 +96,6 @@ function MyGigsPage() {
   const getMyGigsFn = useServerFn(getMyGigs);
   const getNegotiationsFn = useServerFn(getNegotiationsForGig);
   const completeGigFn = useServerFn(completeGig);
-  const cancelGigFn = useServerFn(cancelGig);
   const proposeDateFn = useServerFn(proposeGigDate);
   const counterBidFn = useServerFn(counterBid);
   const acceptBidFn = useServerFn(acceptNegBid);
@@ -125,25 +124,6 @@ function MyGigsPage() {
     onSuccess: () => {
       toast.success("Auftrag als abgeschlossen markiert!");
       queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
-      setSelectedGig(null);
-    },
-    onError: (err) => toast.error((err as Error).message),
-  });
-
-  const [showCancelForm, setShowCancelForm] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  useEffect(() => {
-    setShowCancelForm(false);
-    setCancelReason("");
-  }, [selectedGig]);
-  const cancelMutation = useMutation({
-    mutationFn: (input: { gigId: string; reason: string }) =>
-      cancelGigFn({ data: input }),
-    onSuccess: () => {
-      toast.success("Auftrag storniert.");
-      queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
-      setShowCancelForm(false);
-      setCancelReason("");
       setSelectedGig(null);
     },
     onError: (err) => toast.error((err as Error).message),
@@ -221,6 +201,7 @@ function MyGigsPage() {
         return updateReviewFn({
           data: {
             gigId: reviewGig!.id,
+            helperId: reviewGig!.helperId,
             rating: reviewRating,
             comment: reviewComment,
           },
@@ -229,6 +210,7 @@ function MyGigsPage() {
       return createReviewFn({
         data: {
           gigId: reviewGig!.id,
+          helperId: reviewGig!.helperId,
           rating: reviewRating,
           comment: reviewComment,
         },
@@ -639,8 +621,8 @@ function MyGigsPage() {
                     Arbeit erledigt?
                   </h4>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Bestätige den Abschluss, um die Zahlung aus dem
-                    Treuhandkonto freizugeben.
+                    Bestätige den Abschluss, damit der Auftrag als erledigt
+                    gilt und ihr euch gegenseitig bewerten könnt.
                   </p>
                   <Button
                     size="sm"
@@ -651,67 +633,6 @@ function MyGigsPage() {
                     <CheckCircle2 className="size-4 mr-2" />
                     Auftrag abschließen & Zahlung freigeben
                   </Button>
-                </div>
-              )}
-
-              {/* Auftrag stornieren */}
-              {["pending_helper", "assigned", "in_progress"].includes(
-                selectedGigData.status,
-              ) && (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-                  <h4 className="text-sm font-semibold text-destructive mb-2">
-                    Auftrag stornieren
-                  </h4>
-                  {showCancelForm ? (
-                    <div className="space-y-2">
-                      <Textarea
-                        placeholder="Grund für die Stornierung..."
-                        value={cancelReason}
-                        onChange={(e) => setCancelReason(e.target.value)}
-                        rows={2}
-                        className="text-sm"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={
-                            cancelMutation.isPending || !cancelReason.trim()
-                          }
-                          onClick={() =>
-                            cancelMutation.mutate({
-                              gigId: selectedGigData.id,
-                              reason: cancelReason,
-                            })
-                          }
-                        >
-                          Stornierung bestätigen
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setShowCancelForm(false)}
-                        >
-                          Abbrechen
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Der Helfer wird per E-Mail über die Stornierung
-                        informiert.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setShowCancelForm(true)}
-                      >
-                        <XCircle className="size-4 mr-2" />
-                        Auftrag stornieren
-                      </Button>
-                    </>
-                  )}
                 </div>
               )}
             </div>
