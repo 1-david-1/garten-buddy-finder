@@ -21,7 +21,7 @@ export function SiteNav() {
           <a href="/#helpers" className="hover:text-foreground">
             {t("nav.helpers")}
           </a>
-          <a href="/#trust" className="hover:text-foreground">
+          <a href="/#safety" className="hover:text-foreground">
             {t("nav.trust")}
           </a>
           <a href="/#faq" className="hover:text-foreground">
