@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as EinverstaendniserklaerungRouteImport } from './routes/einverstaendniserklaerung'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedCreateGigRouteImport } from './routes/_authenticated/create-gig'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -24,6 +25,7 @@ import { Route as AuthenticatedMyGigsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedSellRouteRouteImport } from './routes/_authenticated/sell/route'
+import { Route as AuftragFreigabeTokenRouteImport } from './routes/auftrag-freigabe.$token'
 import { Route as ElternZustimmungTokenRouteImport } from './routes/eltern-zustimmung.$token'
 import { Route as AuthenticatedHelpersHelperIdRouteImport } from './routes/_authenticated/helpers/$helperId'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages/index'
@@ -48,6 +50,12 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EinverstaendniserklaerungRoute =
+  EinverstaendniserklaerungRouteImport.update({
+    id: '/einverstaendniserklaerung',
+    path: '/einverstaendniserklaerung',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -110,6 +118,11 @@ const AuthenticatedSellRouteRoute = AuthenticatedSellRouteRouteImport.update({
   path: '/sell',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuftragFreigabeTokenRoute = AuftragFreigabeTokenRouteImport.update({
+  id: '/auftrag-freigabe/$token',
+  path: '/auftrag-freigabe/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ElternZustimmungTokenRoute = ElternZustimmungTokenRouteImport.update({
   id: '/eltern-zustimmung/$token',
   path: '/eltern-zustimmung/$token',
@@ -164,6 +177,7 @@ const AuthenticatedSellEditIdRoute = AuthenticatedSellEditIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/einverstaendniserklaerung': typeof EinverstaendniserklaerungRoute
   '/messages': typeof AuthenticatedMessagesRouteRouteWithChildren
   '/sell': typeof AuthenticatedSellRouteRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
@@ -176,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -189,6 +204,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/einverstaendniserklaerung': typeof EinverstaendniserklaerungRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/create-gig': typeof AuthenticatedCreateGigRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -199,6 +215,7 @@ export interface FileRoutesByTo {
   '/my-gigs': typeof AuthenticatedMyGigsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -214,6 +231,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/einverstaendniserklaerung': typeof EinverstaendniserklaerungRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRouteRouteWithChildren
   '/_authenticated/sell': typeof AuthenticatedSellRouteRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
@@ -226,6 +244,7 @@ export interface FileRoutesById {
   '/_authenticated/my-gigs': typeof AuthenticatedMyGigsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/_authenticated/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/_authenticated/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -241,6 +260,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/einverstaendniserklaerung'
     | '/messages'
     | '/sell'
     | '/admin'
@@ -253,6 +273,7 @@ export interface FileRouteTypes {
     | '/my-gigs'
     | '/onboarding'
     | '/profile'
+    | '/auftrag-freigabe/$token'
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
@@ -266,6 +287,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/einverstaendniserklaerung'
     | '/admin'
     | '/create-gig'
     | '/dashboard'
@@ -276,6 +298,7 @@ export interface FileRouteTypes {
     | '/my-gigs'
     | '/onboarding'
     | '/profile'
+    | '/auftrag-freigabe/$token'
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
@@ -290,6 +313,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/einverstaendniserklaerung'
     | '/_authenticated/messages'
     | '/_authenticated/sell'
     | '/_authenticated/admin'
@@ -302,6 +326,7 @@ export interface FileRouteTypes {
     | '/_authenticated/my-gigs'
     | '/_authenticated/onboarding'
     | '/_authenticated/profile'
+    | '/auftrag-freigabe/$token'
     | '/eltern-zustimmung/$token'
     | '/_authenticated/helpers/$helperId'
     | '/_authenticated/messages/$conversationId'
@@ -317,6 +342,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  EinverstaendniserklaerungRoute: typeof EinverstaendniserklaerungRoute
+  AuftragFreigabeTokenRoute: typeof AuftragFreigabeTokenRoute
   ElternZustimmungTokenRoute: typeof ElternZustimmungTokenRoute
 }
 
@@ -341,6 +368,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/einverstaendniserklaerung': {
+      id: '/einverstaendniserklaerung'
+      path: '/einverstaendniserklaerung'
+      fullPath: '/einverstaendniserklaerung'
+      preLoaderRoute: typeof EinverstaendniserklaerungRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -426,6 +460,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sell'
       preLoaderRoute: typeof AuthenticatedSellRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/auftrag-freigabe/$token': {
+      id: '/auftrag-freigabe/$token'
+      path: '/auftrag-freigabe/$token'
+      fullPath: '/auftrag-freigabe/$token'
+      preLoaderRoute: typeof AuftragFreigabeTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/eltern-zustimmung/$token': {
       id: '/eltern-zustimmung/$token'
@@ -572,6 +613,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  EinverstaendniserklaerungRoute: EinverstaendniserklaerungRoute,
+  AuftragFreigabeTokenRoute: AuftragFreigabeTokenRoute,
   ElternZustimmungTokenRoute: ElternZustimmungTokenRoute,
 }
 export const routeTree = rootRouteImport
