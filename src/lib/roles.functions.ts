@@ -77,21 +77,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       .insert({ user_id: userId, role: data.role });
     if (rErr && !String(rErr.message).includes("duplicate")) throw rErr;
 
-    // Jugendliche: Zustimmungs-Link sofort an die Eltern schicken. Scheitert der
-    // Versand, geht das Onboarding trotzdem durch - im Profil lässt sich die
-    // Mail jederzeit erneut anfordern.
-    let guardianMailSent = false;
-    if (data.role === "helper_youth") {
-      try {
-        const { issueGuardianConsent } = await import("@/lib/server/verification.server");
-        await issueGuardianConsent(userId);
-        guardianMailSent = true;
-      } catch (err) {
-        console.error("[onboarding] Eltern-Zustimmung konnte nicht gesendet werden:", err);
-      }
-    }
-
-    return { ok: true, role: data.role, guardianMailSent };
+    // Jugendliche werden über Unterlagen verifiziert (Profil → Verifizierung).
+    return { ok: true, role: data.role };
   });
 
 export const getMyRoles = createServerFn({ method: "GET" })

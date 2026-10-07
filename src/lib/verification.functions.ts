@@ -27,6 +27,7 @@ export interface MyVerification {
     emailMasked: string | null;
     sentAt: string | null;
     expiresAt: string | null;
+    reason: string | null;
   } | null;
   identity: { state: RequestState; sentAt: string | null } | null;
 }
@@ -65,7 +66,7 @@ export const getMyVerification = createServerFn({ method: "GET" })
       supabase.from("profile_private").select("guardian_email").eq("id", userId).maybeSingle(),
       supabase
         .from("verification_requests")
-        .select("kind, status, created_at, expires_at, guardian_email")
+        .select("kind, status, created_at, expires_at, guardian_email, note")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(10),
@@ -93,9 +94,9 @@ export const getMyVerification = createServerFn({ method: "GET" })
     }
 
     const requests = (reqRes.data ?? []).filter((r) => r.status !== "cancelled");
-    const latestGuardian = requests.find((r) => r.kind === "guardian_consent");
+    const latestGuardian = requests.find((r) => r.kind === "youth_documents");
     const latestIdentity = requests.find((r) => r.kind === "identity");
-    const guardianEmail = latestGuardian?.guardian_email ?? privRes.data?.guardian_email ?? null;
+    const guardianEmail = privRes.data?.guardian_email ?? null;
 
     return {
       kind,
@@ -109,7 +110,8 @@ export const getMyVerification = createServerFn({ method: "GET" })
               state: effectiveState(latestGuardian?.status, latestGuardian?.expires_at),
               emailMasked: guardianEmail ? maskEmail(guardianEmail) : null,
               sentAt: latestGuardian?.created_at ?? null,
-              expiresAt: latestGuardian?.expires_at ?? null,
+              expiresAt: null,
+              reason: latestGuardian?.status === "declined" ? (latestGuardian.note ?? null) : null,
             }
           : null,
       identity:
@@ -120,15 +122,6 @@ export const getMyVerification = createServerFn({ method: "GET" })
             }
           : null,
     };
-  });
-
-/** Jugendliche/r: Mail mit Zustimmungs-Link (erneut) an die Eltern senden. */
-export const requestGuardianConsent = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { issueGuardianConsent } = await import("@/lib/server/verification.server");
-    const { emailMasked } = await issueGuardianConsent(context.userId);
-    return { ok: true as const, emailMasked };
   });
 
 /** Erwachsene/Profis/Kunden: Verifizierung durch das Team beantragen. */
@@ -192,4 +185,23 @@ export const decideGuardianConsentFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { decideGuardianConsent } = await import("@/lib/server/verification.server");
     return decideGuardianConsent(data.token, data.decision);
+  });
+
+// Freigabe pro Auftrag (öffentlich, Zugriff nur mit Token aus der Eltern-Mail)
+export const getJobApprovalRequest = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) => z.object({ token: tokenSchema }).parse(input))
+  .handler(async ({ data }) => {
+    const { lookupJobApproval } = await import("@/lib/server/verification.server");
+    return lookupJobApproval(data.token);
+  });
+
+export const decideJobApprovalFn = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({ token: tokenSchema, decision: z.enum(["approve", "decline", "revoke"]) })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { decideJobApproval } = await import("@/lib/server/verification.server");
+    return decideJobApproval(data.token, data.decision);
   });

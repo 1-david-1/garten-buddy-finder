@@ -183,11 +183,11 @@ export const getAdminUsers = createServerFn({ method: "GET" })
     if (pendingRes.error) throw pendingRes.error;
 
     // Offene Anfragen je Nutzer: "identity" wartet auf das Team, "guardian_consent"
-    // wartet auf die Eltern (nur zur Info, kein Admin-Eingriff nötig).
-    const pendingByUser = new Map<string, "identity" | "guardian_consent">();
+    // "youth_documents" wartet ebenfalls auf das Team (Tab "Jugend-Prüfung").
+    const pendingByUser = new Map<string, "identity" | "youth_documents">();
     for (const r of pendingRes.data ?? []) {
-      if (r.kind === "identity" || !pendingByUser.has(r.user_id)) {
-        pendingByUser.set(r.user_id, r.kind as "identity" | "guardian_consent");
+      if (r.kind === "identity" || r.kind === "youth_documents") {
+        pendingByUser.set(r.user_id, r.kind);
       }
     }
 
