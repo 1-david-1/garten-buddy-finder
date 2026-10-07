@@ -3,6 +3,8 @@ import { forwardRef, useRef, type ReactNode, type RefObject } from "react";
 import {
   BadgeCheck,
   CalendarClock,
+  Gift,
+  Users,
   FileEdit,
   Gavel,
   Handshake,
@@ -50,7 +52,9 @@ function Landing() {
       <Hero />
       <Paths />
       <Ways />
+      <FreeAndPay />
       <Levels />
+      <Safety />
       <Trust />
       <Faq />
       <FinalCta />
@@ -121,9 +125,17 @@ function Hero() {
               </>
             )}
           </div>
-          {!user && (
-            <p className="mt-4 text-xs text-muted-foreground">{t("lp.hero.note")}</p>
-          )}
+          <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
+            {[1, 2, 3].map((n) => (
+              <span
+                key={n}
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary"
+              >
+                <BadgeCheck className="size-3.5" />
+                {t(`lp.hero.chip.${n}`)}
+              </span>
+            ))}
+          </div>
         </div>
 
         <PhoneMockup
@@ -402,6 +414,97 @@ function IconBubble({ children }: { children: ReactNode }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Kostenlos + Bezahlung                                               */
+/* ------------------------------------------------------------------ */
+
+function FreeAndPay() {
+  const { t } = useI18n();
+  const cards = [
+    { key: "cost", icon: Gift, status: "live" },
+    { key: "pay", icon: Lock, status: "soon" },
+  ] as const;
+  return (
+    <section id="free" className="border-y border-glass-border bg-card/40 py-20">
+      <div className="mx-auto max-w-4xl px-4">
+        <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.free.title")}</h2>
+        <p className="mb-12 text-center text-muted-foreground">{t("lp.free.sub")}</p>
+        <div className="grid gap-6 md:grid-cols-2">
+          {cards.map(({ key, icon: Icon, status }) => (
+            <div
+              key={key}
+              className={`rounded-3xl border p-8 backdrop-blur ${
+                status === "live"
+                  ? "border-primary/40 bg-glass"
+                  : "border-dashed border-glass-border bg-transparent"
+              }`}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <IconBubble>
+                  <Icon className="size-6" />
+                </IconBubble>
+                <StatusChip status={status} label={t(`lp.status.${status}`)} />
+              </div>
+              <h3 className="mb-2 text-xl font-semibold">{t(`lp.free.${key}.title`)}</h3>
+              <p className="text-sm text-muted-foreground">{t(`lp.free.${key}.body`)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatusChip({ status, label }: { status: "live" | "soon"; label: string }) {
+  return (
+    <span
+      className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+        status === "live"
+          ? "bg-primary/15 text-primary"
+          : "border border-amber-400/40 text-amber-400"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Kindersicherheit: so läuft ein Auftrag für Jugendliche              */
+/* ------------------------------------------------------------------ */
+
+function Safety() {
+  const { t } = useI18n();
+  return (
+    <section id="safety" className="mx-auto max-w-4xl px-4 py-20">
+      <div className="mb-3 flex justify-center">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-primary">
+          <Users className="size-3.5" />
+          {t("lp.levels.youth.title")}
+        </span>
+      </div>
+      <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.safety.title")}</h2>
+      <p className="mb-12 text-center text-muted-foreground">{t("lp.safety.sub")}</p>
+      <ol className="space-y-4">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <li
+            key={n}
+            className="flex gap-4 rounded-2xl border border-glass-border bg-glass p-5 backdrop-blur"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-brand text-primary">
+              {n}
+            </span>
+            <div>
+              <h3 className="font-semibold">{t(`lp.safety.${n}.title`)}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{t(`lp.safety.${n}.body`)}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Drei Helfer-Stufen                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -451,9 +554,9 @@ const TRUST_ITEMS = [
   { key: "youth", icon: ShieldCheck, status: "live" },
   { key: "chat", icon: MessageSquare, status: "live" },
   { key: "reviews", icon: Star, status: "live" },
+  { key: "calendar", icon: CalendarClock, status: "live" },
   { key: "escrow", icon: Lock, status: "soon" },
   { key: "invoice", icon: Receipt, status: "soon" },
-  { key: "calendar", icon: CalendarClock, status: "soon" },
 ] as const;
 
 function Trust() {
@@ -512,7 +615,7 @@ function Faq() {
       <div className="mx-auto max-w-3xl px-4">
         <h2 className="mb-10 text-center font-brand text-4xl">{t("lp.faq.title")}</h2>
         <Accordion type="single" collapsible className="w-full">
-          {[1, 2, 3, 4, 5, 6].map((n) => (
+          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
             <AccordionItem key={n} value={`q${n}`}>
               <AccordionTrigger className="text-left">{t(`lp.faq.${n}.q`)}</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
@@ -570,7 +673,7 @@ function Footer() {
   const links = [
     { href: "/#how", label: t("nav.how") },
     { href: "/#helpers", label: t("nav.helpers") },
-    { href: "/#trust", label: t("nav.trust") },
+    { href: "/#safety", label: t("nav.trust") },
     { href: "/#faq", label: t("nav.faq") },
   ];
   return (
