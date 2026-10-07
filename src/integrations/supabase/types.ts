@@ -356,7 +356,9 @@ export type Database = {
         Row: {
           created_at: string;
           decided_at: string | null;
+          documents: Json | null;
           expires_at: string | null;
+          gig_id: string | null;
           guardian_email: string | null;
           id: string;
           kind: string;
@@ -368,7 +370,9 @@ export type Database = {
         Insert: {
           created_at?: string;
           decided_at?: string | null;
+          documents?: Json | null;
           expires_at?: string | null;
+          gig_id?: string | null;
           guardian_email?: string | null;
           id?: string;
           kind: string;
@@ -380,7 +384,9 @@ export type Database = {
         Update: {
           created_at?: string;
           decided_at?: string | null;
+          documents?: Json | null;
           expires_at?: string | null;
+          gig_id?: string | null;
           guardian_email?: string | null;
           id?: string;
           kind?: string;
