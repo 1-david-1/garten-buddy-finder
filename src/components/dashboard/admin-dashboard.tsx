@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { YouthVerificationAdmin } from "@/components/dashboard/youth-verification-admin";
 import {
   Select,
   SelectContent,
@@ -268,6 +269,10 @@ export function AdminDashboard() {
           <TabsTrigger value="settings" className="gap-1.5">
             <SettingsIcon className="size-3.5" />
             {t("admin.nav.settings")}
+          </TabsTrigger>
+          <TabsTrigger value="youth" className="gap-1.5">
+            <ShieldCheck className="size-4" />
+            Jugend-Prüfung
           </TabsTrigger>
           <TabsTrigger value="audit" className="gap-1.5">
             <ScrollText className="size-3.5" />
@@ -634,14 +639,16 @@ export function AdminDashboard() {
                               <Badge className="gap-1">
                                 <ShieldCheck className="size-3" />
                                 {formatDate(u.verifiedAt, intlLocale)}
-                                {u.verificationMethod === "guardian_consent" && " · Eltern"}
+                                {u.verificationMethod === "guardian_consent" && " · Unterlagen"}
                               </Badge>
                             ) : u.pendingVerification === "identity" ? (
                               <Badge variant="outline" className="border-amber-400/50 text-amber-400">
                                 Prüfung angefragt
                               </Badge>
-                            ) : u.pendingVerification === "guardian_consent" ? (
-                              <Badge variant="outline">Wartet auf Eltern</Badge>
+                            ) : u.pendingVerification === "youth_documents" ? (
+                              <Badge variant="outline" className="border-amber-400/50 text-amber-400">
+                                Unterlagen prüfen
+                              </Badge>
                             ) : (
                               <Badge variant="outline">—</Badge>
                             )}
@@ -882,6 +889,10 @@ export function AdminDashboard() {
         {/* ------------------------------------------------------------ */}
         {/* Audit-Log                                                     */}
         {/* ------------------------------------------------------------ */}
+        <TabsContent value="youth" className="mt-6">
+          <YouthVerificationAdmin />
+        </TabsContent>
+
         <TabsContent value="audit" className="mt-6">
           <Card className="border-glass-border bg-glass backdrop-blur">
             <CardHeader>
