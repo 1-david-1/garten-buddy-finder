@@ -141,6 +141,9 @@ export function DashboardShell({
                 EN
               </button>
             </div>
+            <span className="w-fit rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+              {t("app.free.chip")}
+            </span>
             <span>© {new Date().getFullYear()} GreenMatch</span>
           </SidebarFooter>
         </Sidebar>
@@ -171,6 +174,10 @@ export function DashboardShell({
             </div>
           </header>
           <main className="mx-auto w-full max-w-6xl px-4 py-8">{children}</main>
+          <footer className="mx-auto w-full max-w-6xl space-y-1 px-4 pb-8 text-center text-xs text-muted-foreground">
+            <p>{t("app.free.note")}</p>
+            <p>{t("app.pay.soon")}</p>
+          </footer>
         </SidebarInset>
       </SidebarProvider>
     </DashboardShellContext.Provider>
