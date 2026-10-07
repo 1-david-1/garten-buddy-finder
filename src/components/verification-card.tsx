@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle2, Clock, Loader2, MailCheck, ShieldAlert } from "lucide-react";
@@ -7,10 +8,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { YouthDocumentsForm } from "@/components/youth-documents-form";
 import { updateProfile } from "@/lib/profile.functions";
 import {
   getMyVerification,
-  requestGuardianConsent,
   requestIdentityVerification,
   type MyVerification,
   type RequestState,
@@ -19,14 +20,8 @@ import {
 const QUERY_KEY = ["my-verification"] as const;
 
 const ERROR_TEXTS: Record<string, string> = {
-  recently_sent:
-    "Die Mail wurde gerade erst verschickt. Bitte warte ein paar Minuten, bevor du sie erneut sendest.",
-  guardian_email_missing:
-    "Es ist noch keine E-Mail-Adresse deiner Eltern hinterlegt. Trage sie unten ein.",
-  already_consented: "Deine Eltern haben bereits zugestimmt.",
   already_verified: "Dein Profil ist bereits verifiziert.",
-  not_youth: "Diese Funktion gilt nur für Jugendliche.",
-  not_available_for_youth: "Für Jugendliche läuft die Verifizierung über die Eltern-Zustimmung.",
+  not_available_for_youth: "Für Jugendliche läuft die Verifizierung über Einverständnis und Ausweise.",
 };
 
 function errorText(e: unknown): string {
@@ -70,38 +65,41 @@ function StatusRow({
   );
 }
 
-function guardianRow(g: NonNullable<MyVerification["guardian"]>) {
-  const to = g.emailMasked ? ` an ${g.emailMasked}` : "";
+function youthRow(g: NonNullable<MyVerification["guardian"]>): {
+  tone: "ok" | "wait" | "todo";
+  detail: string;
+} {
   const map: Record<RequestState, { tone: "ok" | "wait" | "todo"; detail: string }> = {
-    none: { tone: "todo", detail: "Noch nicht angefragt." },
+    none: { tone: "todo", detail: "Noch keine Unterlagen eingereicht." },
     pending: {
       tone: "wait",
-      detail: `Mail${to} gesendet${g.expiresAt ? ` – Link gültig bis ${formatDate(g.expiresAt)}` : ""}.`,
+      detail: `Eingereicht${g.sentAt ? ` am ${formatDate(g.sentAt)}` : ""} – unser Team prüft die Unterlagen.`,
     },
-    approved: { tone: "ok", detail: "Deine Eltern haben zugestimmt." },
-    declined: { tone: "todo", detail: "Die Eltern haben abgelehnt oder die Zustimmung widerrufen." },
-    expired: { tone: "todo", detail: "Der Link ist abgelaufen. Du kannst eine neue Mail senden." },
+    approved: { tone: "ok", detail: "Unterlagen geprüft." },
+    declined: {
+      tone: "todo",
+      detail: g.reason ? `Nicht bestätigt: ${g.reason}` : "Nicht bestätigt. Bitte reiche die Unterlagen erneut ein.",
+    },
+    expired: { tone: "todo", detail: "Bitte reiche die Unterlagen erneut ein." },
   };
   return map[g.state];
 }
 
-function useRequestMutations() {
+/** Vollständige Karte für die Profilseite. */
+export function VerificationCard() {
   const queryClient = useQueryClient();
-  const guardianFn = useServerFn(requestGuardianConsent);
+  const { data, isLoading, isError } = useVerification();
   const identityFn = useServerFn(requestIdentityVerification);
+  const updateProfileFn = useServerFn(updateProfile);
   const refresh = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
-  const guardian = useMutation({
-    mutationFn: () => guardianFn(),
-    onSuccess: (res) => {
-      toast.success(`Mail an ${res.emailMasked} gesendet.`);
-      refresh();
-    },
-    onError: (e) => toast.error(errorText(e)),
-  });
+  const [showNote, setShowNote] = useState(false);
+  const [note, setNote] = useState("");
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [guardianEmail, setGuardianEmail] = useState("");
 
   const identity = useMutation({
-    mutationFn: (note: string) => identityFn({ data: { note: note || undefined } }),
+    mutationFn: (n: string) => identityFn({ data: { note: n || undefined } }),
     onSuccess: (res) => {
       toast.success(
         res.alreadyPending
@@ -113,30 +111,19 @@ function useRequestMutations() {
     onError: (e) => toast.error(errorText(e)),
   });
 
-  return { guardian, identity };
-}
-
-/** Vollständige Karte für die Profilseite. */
-export function VerificationCard() {
-  const { data, isLoading, isError } = useVerification();
-  const { guardian, identity } = useRequestMutations();
-  const [showNote, setShowNote] = useState(false);
-  const [note, setNote] = useState("");
-  const [editingEmail, setEditingEmail] = useState(false);
-  const [guardianEmail, setGuardianEmail] = useState("");
-  const updateProfileFn = useServerFn(updateProfile);
   const changeEmail = useMutation({
     mutationFn: (email: string) => updateProfileFn({ data: { guardianEmail: email } }),
     onSuccess: () => {
       setEditingEmail(false);
-      guardian.mutate();
+      toast.success("Eltern-E-Mail gespeichert.");
+      refresh();
     },
     onError: () => toast.error("Die Adresse konnte nicht gespeichert werden."),
   });
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(guardianEmail.trim());
 
   return (
-    <Card className="border-glass-border bg-glass backdrop-blur">
+    <Card id="verification" className="border-glass-border bg-glass backdrop-blur">
       <CardContent className="space-y-4 pt-5">
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <BadgeCheck className="size-3.5" />
@@ -157,7 +144,7 @@ export function VerificationCard() {
                   <p className="text-sm font-semibold text-primary">Verifiziert</p>
                   <p className="text-xs text-muted-foreground">
                     {data.method === "guardian_consent"
-                      ? "Deine Eltern haben zugestimmt"
+                      ? "Einverständnis und Ausweise geprüft"
                       : "Von GreenMatch geprüft"}
                     {" · "}
                     {formatDate(data.verifiedAt)}
@@ -167,7 +154,7 @@ export function VerificationCard() {
             ) : (
               <p className="text-xs text-muted-foreground">
                 {data.kind === "youth"
-                  ? "Du brauchst die Zustimmung deiner Eltern, bevor du bieten kannst. Einen Ausweis brauchst du dafür nicht."
+                  ? "Du brauchst die unterschriebene Einverständniserklärung deiner Eltern sowie Vorder- und Rückseite der Ausweise von Eltern und dir. Nach der Prüfung durch unser Team bist du verifiziert und kannst bieten."
                   : "Verifizierte Profile bekommen das Häkchen „Verifiziert“ bei Angeboten und auf dem Helferprofil."}
               </p>
             )}
@@ -193,9 +180,9 @@ export function VerificationCard() {
                       <ShieldAlert className="size-4" />
                     )
                   }
-                  title="Zustimmung der Eltern"
-                  detail={guardianRow(data.guardian).detail}
-                  tone={guardianRow(data.guardian).tone}
+                  title="Einverständnis & Ausweise"
+                  detail={youthRow(data.guardian).detail}
+                  tone={youthRow(data.guardian).tone}
                 />
               )}
 
@@ -220,27 +207,24 @@ export function VerificationCard() {
                           ? "Halte Gewerbeanmeldung und USt-IdNr. bereit – wir melden uns bei Rückfragen."
                           : "Noch nicht beantragt."
                   }
-                  tone={
-                    data.verifiedAt ? "ok" : data.identity.state === "pending" ? "wait" : "todo"
-                  }
+                  tone={data.verifiedAt ? "ok" : data.identity.state === "pending" ? "wait" : "todo"}
                 />
               )}
             </div>
 
-            {/* Der eine Button – je nach Alter ein anderer Weg */}
-            {data.guardian && data.guardian.state !== "approved" && (
-              <div className="space-y-2">
-                <Button
-                  className="w-full"
-                  disabled={guardian.isPending}
-                  onClick={() => guardian.mutate()}
-                >
-                  {guardian.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                  {data.guardian.state === "none"
-                    ? "Eltern-Zustimmung anfordern"
-                    : "Mail an Eltern erneut senden"}
-                </Button>
+            {/* Jugendliche: Unterlagen einreichen */}
+            {data.guardian &&
+              !data.verifiedAt &&
+              data.guardian.state !== "pending" &&
+              data.guardian.state !== "approved" && <YouthDocumentsForm onSubmitted={refresh} />}
 
+            {/* Eltern-E-Mail: dorthin gehen die Freigabe-Anfragen für einzelne Aufträge */}
+            {data.guardian && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Freigabe-Anfragen für einzelne Aufträge gehen an{" "}
+                  <strong>{data.guardian.emailMasked ?? "—"}</strong>.
+                </p>
                 {editingEmail ? (
                   <div className="space-y-2">
                     <Input
@@ -256,7 +240,7 @@ export function VerificationCard() {
                         disabled={!emailLooksValid || changeEmail.isPending}
                         onClick={() => changeEmail.mutate(guardianEmail.trim())}
                       >
-                        Speichern & Mail senden
+                        Speichern
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setEditingEmail(false)}>
                         Abbrechen
@@ -267,9 +251,9 @@ export function VerificationCard() {
                   <button
                     type="button"
                     onClick={() => setEditingEmail(true)}
-                    className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                    className="text-xs text-muted-foreground underline hover:text-foreground"
                   >
-                    Falsche Adresse? Eltern-E-Mail ändern
+                    Eltern-E-Mail ändern
                   </button>
                 )}
               </div>
@@ -315,12 +299,11 @@ export function VerificationCard() {
 }
 
 /**
- * Schmaler Hinweis fürs Dashboard. Erscheint nur für Jugendliche ohne Eltern-Zustimmung,
- * weil sie bis dahin nicht bieten können - alle anderen sollen nicht genervt werden.
+ * Hinweis fürs Dashboard: nur für Jugendliche, die noch nicht verifiziert sind,
+ * weil sie bis dahin nicht bieten können. Führt zur Unterlagen-Einreichung im Profil.
  */
 export function GuardianConsentBanner() {
   const { data } = useVerification();
-  const { guardian } = useRequestMutations();
 
   if (!data || data.kind !== "youth" || data.verifiedAt || !data.guardian) return null;
   const pending = data.guardian.state === "pending";
@@ -331,24 +314,22 @@ export function GuardianConsentBanner() {
         <ShieldAlert className="mt-0.5 size-5 shrink-0 text-amber-400" />
         <div>
           <p className="text-sm font-semibold">
-            {pending ? "Warten auf deine Eltern" : "Zustimmung deiner Eltern fehlt"}
+            {pending ? "Wir prüfen deine Unterlagen" : "Verifizierung fehlt"}
           </p>
           <p className="text-xs text-muted-foreground">
             {pending
-              ? `Wir haben eine Mail${data.guardian.emailMasked ? ` an ${data.guardian.emailMasked}` : ""} geschickt. Sobald sie zustimmen, kannst du bieten.`
-              : "Ohne Zustimmung kannst du noch keine Gebote abgeben oder Angebote einstellen."}
+              ? "Sobald unser Team alles geprüft hat, kannst du bieten und Angebote einstellen."
+              : "Reiche die Einverständniserklärung deiner Eltern und die Ausweise ein – erst nach der Prüfung kannst du bieten und Angebote einstellen."}
           </p>
         </div>
       </div>
-      <Button
-        size="sm"
-        variant={pending ? "outline" : "default"}
-        disabled={guardian.isPending}
-        onClick={() => guardian.mutate()}
-      >
-        {guardian.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-        {pending ? "Mail erneut senden" : "Eltern-Zustimmung anfordern"}
-      </Button>
+      {!pending && (
+        <Button asChild size="sm">
+          <Link to="/profile" hash="verification">
+            Unterlagen einreichen
+          </Link>
+        </Button>
+      )}
     </div>
   );
 }
