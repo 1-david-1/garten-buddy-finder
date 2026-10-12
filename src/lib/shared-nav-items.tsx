@@ -5,6 +5,7 @@ import {
   Package,
   Plus,
   Search,
+  ShieldCheck,
   ShoppingBag,
   Wallet,
 } from "lucide-react";
@@ -74,7 +75,18 @@ export function buildSharedNavItems(
         },
       ];
 
-  return [...base, ...roleItems, extra];
+  const adminItems: DashboardNavItem[] = (roles ?? []).includes("admin")
+    ? [
+        {
+          key: "admin",
+          label: "Admin-Zentrale",
+          href: "/admin",
+          icon: <ShieldCheck className="size-4" />,
+        },
+      ]
+    : [];
+
+  return [...adminItems, ...base, ...roleItems, extra];
 }
 
 export const SERVICE_LISTINGS_NAV_EXTRA: DashboardNavItem = {

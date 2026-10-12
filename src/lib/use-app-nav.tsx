@@ -8,6 +8,7 @@ import {
   Package,
   Plus,
   Search,
+  ShieldCheck,
   ShoppingBag,
   User,
   Wallet,
@@ -38,6 +39,9 @@ export function useAppNavItems(): {
 
   const roles = rolesQuery.data?.roles ?? [];
   const isHelper = roles.some((r) => r.startsWith("helper_"));
+  const isAdmin = roles.includes("admin");
+  // Reine Admin-Konten haben weder Kunden- noch Helfer-Menüs.
+  const hasMarketRole = isHelper || roles.includes("customer");
 
   const base: DashboardNavItem[] = [
     {
@@ -54,7 +58,20 @@ export function useAppNavItems(): {
     },
   ];
 
-  const roleItems: DashboardNavItem[] = isHelper
+  const adminItems: DashboardNavItem[] = isAdmin
+    ? [
+        {
+          key: "admin",
+          label: "Admin-Zentrale",
+          href: "/admin",
+          icon: <ShieldCheck className="size-4" />,
+        },
+      ]
+    : [];
+
+  const roleItems: DashboardNavItem[] = isAdmin && !hasMarketRole
+    ? []
+    : isHelper
     ? [
         {
           key: "marketplace",
@@ -118,7 +135,7 @@ export function useAppNavItems(): {
   ];
 
   return {
-    navItems: [...base, ...roleItems, ...shared],
+    navItems: [...adminItems, ...base, ...roleItems, ...shared],
     isLoading: rolesQuery.isLoading,
   };
 }

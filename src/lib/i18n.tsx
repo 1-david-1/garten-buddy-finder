@@ -346,6 +346,12 @@ const de: Dict = {
   "admin.error.generic": "Das hat nicht geklappt. Bitte erneut versuchen.",
   "admin.forbidden.title": "Kein Zugriff",
   "admin.forbidden.body": "Dieser Bereich ist nur für Administratoren.",
+  "admin.attention.title": "Handlungsbedarf",
+  "admin.attention.sub": "Das wartet auf dich.",
+  "admin.attention.reports": "Offene Meldungen",
+  "admin.attention.urgent": "davon dringend",
+  "admin.attention.verifications": "Offene Verifizierungen",
+  "admin.attention.nothing": "Alles erledigt.",
 };
 
 const en: Dict = {
@@ -677,6 +683,12 @@ const en: Dict = {
   "admin.error.generic": "That didn't work. Please try again.",
   "admin.forbidden.title": "No access",
   "admin.forbidden.body": "This area is for administrators only.",
+  "admin.attention.title": "Needs attention",
+  "admin.attention.sub": "Waiting for you.",
+  "admin.attention.reports": "Open reports",
+  "admin.attention.urgent": "of which urgent",
+  "admin.attention.verifications": "Open verifications",
+  "admin.attention.nothing": "All caught up.",
 };
 
 const dicts: Record<Locale, Dict> = { de, en };

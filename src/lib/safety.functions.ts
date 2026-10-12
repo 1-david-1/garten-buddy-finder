@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireAdminAuth } from "@/lib/admin-middleware";
+import { logAdminAction } from "@/lib/admin-audit";
 
 /**
  * Melden, Blockieren und Sperren.
@@ -356,6 +357,10 @@ export const resolveReport = createServerFn({ method: "POST" })
       action: data.status,
       note: [data.restriction ? `Sperre: ${data.restriction}` : null, data.note].filter(Boolean).join(" · ") || null,
     });
+    await logAdminAction(context.supabase, `report.${data.status}`, "report", data.reportId, {
+      reported_user_id: report.reported_user_id,
+      restriction: data.restriction ?? null,
+    });
     return { ok: true as const };
   });
 
@@ -374,6 +379,7 @@ export const setRestriction = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { applyRestriction } = await import("@/lib/server/safety.server");
     await applyRestriction({ userId: data.userId, kind: data.kind, reason: data.reason, actorId: context.userId });
+    await logAdminAction(context.supabase, "restriction.set", "user", data.userId, { kind: data.kind });
     return { ok: true as const };
   });
 
@@ -389,6 +395,7 @@ export const liftRestriction = createServerFn({ method: "POST" })
       .eq("id", data.restrictionId)
       .is("lifted_at", null);
     if (error) throw error;
+    await logAdminAction(context.supabase, "restriction.lift", "restriction", data.restrictionId);
     return { ok: true as const };
   });
 
@@ -398,7 +405,7 @@ export const setReverificationRequired = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ userId: z.string().uuid(), required: z.boolean() }).parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("profiles")
@@ -409,6 +416,12 @@ export const setReverificationRequired = createServerFn({ method: "POST" })
       .from("verification_results")
       .update({ status: data.required ? "reverification_required" : "verified" })
       .eq("user_id", data.userId);
+    await logAdminAction(
+      context.supabase,
+      data.required ? "user.reverification.require" : "user.reverification.clear",
+      "user",
+      data.userId,
+    );
     return { ok: true as const };
   });
 
@@ -460,12 +473,18 @@ export const setUserSuspended = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ userId: z.string().uuid(), suspended: z.boolean() }).parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ suspended_at: data.suspended ? new Date().toISOString() : null })
       .eq("id", data.userId);
     if (error) throw error;
+    await logAdminAction(
+      context.supabase,
+      data.suspended ? "user.suspend" : "user.unsuspend",
+      "user",
+      data.userId,
+    );
     return { ok: true as const };
   });
