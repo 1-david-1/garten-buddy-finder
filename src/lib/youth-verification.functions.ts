@@ -7,6 +7,8 @@ import { requireAdminAuth } from "@/lib/admin-middleware";
  * Verifizierung Jugendlicher (13-17) über Unterlagen:
  * Einverständniserklärung der Eltern + Ausweise (Eltern und Kind, je Vorder-/Rückseite).
  * Das Team prüft und verifiziert; erst dann gelten die Sperren für Jugendliche als aufgehoben.
+ * Zusätzlich ist ein verknüpftes Eltern-Konto Pflicht (siehe guardian.functions.ts): ohne aktive
+ * Verknüpfung kann nicht freigegeben werden.
  */
 
 export const YOUTH_DOC_BUCKET = "verification-docs";
@@ -106,6 +108,8 @@ export interface YouthVerificationItem {
   statedBirthdate: string | null;
   guardianName: string;
   guardianEmail: string | null;
+  /** Verknüpftes Eltern-Konto (Name und Login-E-Mail) - zum Abgleich mit den Ausweisen */
+  guardianAccount: { name: string; email: string | null } | null;
   submittedAt: string;
   documents: { key: YouthDocKey; url: string | null; isPdf: boolean }[];
 }
@@ -126,14 +130,32 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
     const items: YouthVerificationItem[] = [];
     for (const r of requests ?? []) {
       const docs = (r.documents ?? {}) as StoredDocuments;
-      const [{ data: profile }, { data: priv }] = await Promise.all([
+      const [{ data: profile }, { data: priv }, { data: link }] = await Promise.all([
         supabaseAdmin.from("profiles").select("display_name").eq("id", r.user_id).maybeSingle(),
         supabaseAdmin
           .from("profile_private")
           .select("birthdate, guardian_email")
           .eq("id", r.user_id)
           .maybeSingle(),
+        supabaseAdmin
+          .from("guardian_links")
+          .select("guardian_user_id")
+          .eq("child_id", r.user_id)
+          .eq("status", "active")
+          .maybeSingle(),
       ]);
+
+      let guardianAccount: YouthVerificationItem["guardianAccount"] = null;
+      if (link?.guardian_user_id) {
+        const [{ data: gp }, { data: gAuth }] = await Promise.all([
+          supabaseAdmin.from("profiles").select("display_name").eq("id", link.guardian_user_id).maybeSingle(),
+          supabaseAdmin.auth.admin.getUserById(link.guardian_user_id),
+        ]);
+        guardianAccount = {
+          name: gp?.display_name?.trim() || "—",
+          email: gAuth?.user?.email ?? null,
+        };
+      }
 
       const paths = YOUTH_DOC_KEYS.map((k) => docs.files?.[k]).filter((p): p is string => !!p);
       const { data: signed } = await supabaseAdmin.storage
@@ -148,6 +170,7 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
         statedBirthdate: priv?.birthdate ?? null,
         guardianName: docs.guardianName ?? "—",
         guardianEmail: priv?.guardian_email ?? null,
+        guardianAccount,
         submittedAt: r.created_at,
         documents: YOUTH_DOC_KEYS.map((key) => {
           const path = docs.files?.[key];
@@ -188,6 +211,17 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
     if (request.status !== "pending") throw new Error("already_decided");
     if (data.decision === "reject" && !data.reason) throw new Error("reason_required");
 
+    // Pflicht: Eltern-Zusatzkonto muss verknüpft sein, sonst keine Freigabe.
+    if (data.decision === "approve") {
+      const { data: link } = await supabaseAdmin
+        .from("guardian_links")
+        .select("id")
+        .eq("child_id", request.user_id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!link) throw new Error("guardian_account_missing");
+    }
+
     const nowIso = new Date().toISOString();
     const docs = (request.documents ?? {}) as StoredDocuments;
     const approved = data.decision === "approve";
@@ -199,6 +233,20 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
         .eq("id", request.user_id);
       if (error) throw error;
     }
+
+    // Datensparsam: nur Ergebnis, geprüfte Rolle, Altersstatus, Datum und Verfahren bleiben.
+    await supabaseAdmin.from("verification_results").upsert(
+      {
+        user_id: request.user_id,
+        status: approved ? "verified" : "rejected",
+        checked_role: "helper_youth",
+        age_status: "minor_13_17",
+        checked_at: nowIso,
+        method: "guardian_consent_documents",
+        document_deleted_at: DELETE_DOCS_AFTER_REVIEW ? nowIso : null,
+      },
+      { onConflict: "user_id" },
+    );
 
     let remaining: StoredDocuments = docs;
     if (DELETE_DOCS_AFTER_REVIEW) {
@@ -228,7 +276,7 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
         heading: approved ? "Verifizierung abgeschlossen" : "Bitte reiche die Unterlagen erneut ein",
         bodyLines: [
           approved
-            ? "Wir haben deine Unterlagen geprüft. Du bist jetzt verifiziert und kannst bieten und Angebote einstellen. Für jeden einzelnen Auftrag fragen wir zusätzlich deine Eltern."
+            ? "Wir haben deine Unterlagen geprüft. Du bist jetzt verifiziert und kannst bieten und Angebote einstellen. Für jeden einzelnen Auftrag fragen wir zusätzlich deine Eltern in ihrem Eltern-Konto."
             : `Wir konnten deine Unterlagen leider nicht bestätigen. Grund: ${(data.reason ?? "").replace(/</g, "&lt;")}. Du kannst sie im Profil erneut einreichen.`,
         ],
         ctaLabel: approved ? "Zum Dashboard" : "Zum Profil",

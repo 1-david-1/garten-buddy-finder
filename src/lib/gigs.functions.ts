@@ -1,3 +1,4 @@
+import { CUSTOMER_RULES_VERSION, GIG_SAFETY_VERSION } from "@/lib/consent-texts";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
@@ -13,6 +14,8 @@ export interface GigInput {
   scheduledAt: string | null;
   durationMinutes: number;
   allowedAgeGroups: string[];
+  /** Bestätigung "Tätigkeit geeignet, leicht und ungefährlich" - vor JEDER Veröffentlichung Pflicht */
+  safetyConfirmed: boolean;
 }
 
 export interface Gig {
@@ -42,6 +45,23 @@ export const createGig = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
+    // Kinderschutz: Regeln akzeptiert + Eignung der Tätigkeit bestätigt (mit Auftrags-ID und Zeitpunkt gespeichert).
+    if (data.safetyConfirmed !== true) {
+      throw new Error("Bitte bestätige, dass die Tätigkeit geeignet, leicht und ungefährlich ist.");
+    }
+    const { data: rulesRow } = await supabase
+      .from("user_consents")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("kind", "customer_child_protection_rules")
+      .eq("text_version", CUSTOMER_RULES_VERSION)
+      .maybeSingle();
+    if (!rulesRow) {
+      throw new Error(
+        "Bitte akzeptiere zuerst die Kinderschutzregeln und die verbotenen Tätigkeiten (Profil → Verifizierung).",
+      );
+    }
+
     const { data: gig, error } = await supabase
       .from("gigs")
       .insert({
@@ -61,6 +81,17 @@ export const createGig = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw error;
+
+    const { error: confirmError } = await supabase.from("gig_safety_confirmations").insert({
+      gig_id: gig.id,
+      user_id: userId,
+      text_version: GIG_SAFETY_VERSION,
+    });
+    if (confirmError) {
+      // Ohne gespeicherte Bestätigung darf der Auftrag nicht stehen bleiben.
+      await supabase.from("gigs").delete().eq("id", gig.id);
+      throw confirmError;
+    }
     return { gig };
   });
 

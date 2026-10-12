@@ -238,6 +238,13 @@ async function assertCanPublish(supabase: SupabaseClient<Database>, userId: stri
       "Zum Veröffentlichen brauchst du zuerst die Zustimmung deiner Eltern (Profil → Verifizierung).",
     );
   }
+  // Außerdem: Eltern-Konto verknüpft, nicht pausiert, Konto nicht gesperrt.
+  const { data: active } = await supabase.rpc("has_guardian_consent", { _user_id: userId });
+  if (!active) {
+    throw new Error(
+      "Dein Eltern-Konto ist nicht aktiv (nicht verknüpft oder pausiert) oder dein Konto ist gesperrt. Bitte prüfe Profil → Verifizierung.",
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

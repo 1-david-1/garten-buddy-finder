@@ -36,7 +36,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       if (Number.isNaN(age) || age < 13) throw new Error("age_below_minimum");
       if (data.role === "helper_youth") {
         if (age > 17) throw new Error("age_not_in_youth_range");
-        if (!data.guardianEmail) throw new Error("guardian_email_required");
+        // Die E-Mail der Eltern ist hier optional: Beim Verifizieren kann sie eingegeben
+        // werden - oder man wählt "ohne E-Mail" und gibt den Einladungslink selbst weiter.
       } else if (age < 18) {
         throw new Error("must_be_adult");
       }

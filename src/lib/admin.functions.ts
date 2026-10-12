@@ -236,12 +236,32 @@ export const setUserVerified = createServerFn({ method: "POST" })
     // daher über den Service-Client; die Admin-Rolle wurde oben schon geprüft).
     if (data.verified) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: pendingIdentity } = await supabaseAdmin
+        .from("verification_requests")
+        .select("id, documents")
+        .eq("user_id", data.userId)
+        .eq("kind", "identity")
+        .eq("status", "pending");
       await supabaseAdmin
         .from("verification_requests")
         .update({ status: "approved", decided_at: nowIso })
         .eq("user_id", data.userId)
         .eq("kind", "identity")
         .eq("status", "pending");
+
+      // Ausweiskopie nach der Prüfung löschen (nur Ergebnis, Datum und Verfahren bleiben).
+      for (const req of pendingIdentity ?? []) {
+        const files = ((req.documents ?? {}) as { files?: Record<string, string> }).files ?? {};
+        const paths = Object.values(files);
+        if (paths.length === 0) continue;
+        const { error: removeError } = await supabaseAdmin.storage.from("verification-docs").remove(paths);
+        if (!removeError) {
+          await supabaseAdmin
+            .from("verification_requests")
+            .update({ documents: { deletedAt: nowIso } })
+            .eq("id", req.id);
+        }
+      }
     }
 
     await supabase.rpc("log_admin_action", {

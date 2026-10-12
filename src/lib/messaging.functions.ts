@@ -261,7 +261,16 @@ export const sendMessage = createServerFn({ method: "POST" })
       })
       .select("id, sender_id, body, created_at")
       .single();
-    if (error) throw error;
+    if (error) {
+      // Der Datenbank-Schutz verwirft Nachrichten mit privaten Kontaktdaten in Chats mit
+      // Jugendlichen (keine Zeile -> PGRST116). Verständliche Meldung statt Technik-Fehler.
+      if (error.code === "PGRST116") {
+        throw new Error(
+          "Private Kontaktdaten (Telefonnummer, E-Mail, Messenger, Links) dürfen in Chats mit Jugendlichen nicht ausgetauscht werden. Bitte nutze die Plattform für die Kommunikation.",
+        );
+      }
+      throw error;
+    }
 
     const recipientId = otherParticipant(conversation, userId);
     const [{ data: sender }, contextLabel] = await Promise.all([
