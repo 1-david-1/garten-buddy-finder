@@ -352,6 +352,246 @@ export type Database = {
           }
         ];
       };
+      account_restrictions: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          kind: string;
+          lifted_at: string | null;
+          lifted_by: string | null;
+          reason: string | null;
+          source: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          kind: string;
+          lifted_at?: string | null;
+          lifted_by?: string | null;
+          reason?: string | null;
+          source?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          kind?: string;
+          lifted_at?: string | null;
+          lifted_by?: string | null;
+          reason?: string | null;
+          source?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      user_consents: {
+        Row: { accepted_at: string; id: string; kind: string; text_version: string; user_id: string };
+        Insert: { accepted_at?: string; id?: string; kind: string; text_version: string; user_id: string };
+        Update: { accepted_at?: string; id?: string; kind?: string; text_version?: string; user_id?: string };
+        Relationships: [];
+      };
+      gig_safety_confirmations: {
+        Row: { confirmed_at: string; gig_id: string; text_version: string; user_id: string };
+        Insert: { confirmed_at?: string; gig_id: string; text_version: string; user_id: string };
+        Update: { confirmed_at?: string; gig_id?: string; text_version?: string; user_id?: string };
+        Relationships: [];
+      };
+      job_consents: {
+        Row: {
+          child_id: string;
+          consent_text_version: string;
+          decided_at: string;
+          gig_id: string;
+          guardian_user_id: string;
+          id: string;
+          job_snapshot: Json;
+          request_id: string | null;
+          result: string;
+        };
+        Insert: {
+          child_id: string;
+          consent_text_version: string;
+          decided_at?: string;
+          gig_id: string;
+          guardian_user_id: string;
+          id?: string;
+          job_snapshot: Json;
+          request_id?: string | null;
+          result: string;
+        };
+        Update: {
+          child_id?: string;
+          consent_text_version?: string;
+          decided_at?: string;
+          gig_id?: string;
+          guardian_user_id?: string;
+          id?: string;
+          job_snapshot?: Json;
+          request_id?: string | null;
+          result?: string;
+        };
+        Relationships: [];
+      };
+      contact_attempts: {
+        Row: { conversation_id: string | null; created_at: string; id: string; user_id: string };
+        Insert: { conversation_id?: string | null; created_at?: string; id?: string; user_id: string };
+        Update: { conversation_id?: string | null; created_at?: string; id?: string; user_id?: string };
+        Relationships: [];
+      };
+      user_report_events: {
+        Row: { action: string; actor_id: string | null; created_at: string; id: string; note: string | null; report_id: string };
+        Insert: { action: string; actor_id?: string | null; created_at?: string; id?: string; note?: string | null; report_id: string };
+        Update: { action?: string; actor_id?: string | null; created_at?: string; id?: string; note?: string | null; report_id?: string };
+        Relationships: [];
+      };
+      verification_results: {
+        Row: {
+          age_status: string | null;
+          checked_at: string;
+          checked_role: string | null;
+          document_deleted_at: string | null;
+          external_check_id: string | null;
+          method: string;
+          status: string;
+          user_id: string;
+        };
+        Insert: {
+          age_status?: string | null;
+          checked_at?: string;
+          checked_role?: string | null;
+          document_deleted_at?: string | null;
+          external_check_id?: string | null;
+          method: string;
+          status: string;
+          user_id: string;
+        };
+        Update: {
+          age_status?: string | null;
+          checked_at?: string;
+          checked_role?: string | null;
+          document_deleted_at?: string | null;
+          external_check_id?: string | null;
+          method?: string;
+          status?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      guardian_links: {
+        Row: {
+          accepted_at: string | null;
+          child_id: string;
+          created_at: string;
+          guardian_user_id: string | null;
+          id: string;
+          invited_email: string | null;
+          last_sent_at: string | null;
+          paused_at: string | null;
+          status: string;
+          token_hash: string | null;
+          consent_given_at: string | null;
+          consent_text_version: string | null;
+          ended_at: string | null;
+          ended_by: string | null;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          child_id: string;
+          created_at?: string;
+          guardian_user_id?: string | null;
+          id?: string;
+          invited_email?: string | null;
+          last_sent_at?: string | null;
+          paused_at?: string | null;
+          status?: string;
+          token_hash?: string | null;
+          consent_given_at?: string | null;
+          consent_text_version?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+        };
+        Update: {
+          accepted_at?: string | null;
+          child_id?: string;
+          created_at?: string;
+          guardian_user_id?: string | null;
+          id?: string;
+          invited_email?: string | null;
+          last_sent_at?: string | null;
+          paused_at?: string | null;
+          status?: string;
+          token_hash?: string | null;
+          consent_given_at?: string | null;
+          consent_text_version?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+        };
+        Relationships: [];
+      };
+      user_blocks: {
+        Row: { blocked_id: string; blocker_id: string; created_at: string };
+        Insert: { blocked_id: string; blocker_id: string; created_at?: string };
+        Update: { blocked_id?: string; blocker_id?: string; created_at?: string };
+        Relationships: [];
+      };
+      user_reports: {
+        Row: {
+          context_child_id: string | null;
+          created_at: string;
+          details: string | null;
+          gig_id: string | null;
+          id: string;
+          reason: string;
+          reported_user_id: string;
+          reporter_id: string;
+          resolution_note: string | null;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          status: string;
+          severity: string;
+          message_id: string | null;
+          attachments: string[];
+        };
+        Insert: {
+          context_child_id?: string | null;
+          created_at?: string;
+          details?: string | null;
+          gig_id?: string | null;
+          id?: string;
+          reason: string;
+          reported_user_id: string;
+          reporter_id: string;
+          resolution_note?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          status?: string;
+          severity?: string;
+          message_id?: string | null;
+          attachments?: string[];
+        };
+        Update: {
+          context_child_id?: string | null;
+          created_at?: string;
+          details?: string | null;
+          gig_id?: string | null;
+          id?: string;
+          reason?: string;
+          reported_user_id?: string;
+          reporter_id?: string;
+          resolution_note?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          status?: string;
+          severity?: string;
+          message_id?: string | null;
+          attachments?: string[];
+        };
+        Relationships: [];
+      };
       verification_requests: {
         Row: {
           created_at: string;
@@ -416,6 +656,8 @@ export type Database = {
           vacation_return_date: string | null;
           verified_at: string | null;
           verification_method: string | null;
+          suspended_at: string | null;
+          reverification_required_at: string | null;
         };
         Insert: {
           available_today?: boolean;
@@ -435,6 +677,8 @@ export type Database = {
           vacation_return_date?: string | null;
           verified_at?: string | null;
           verification_method?: string | null;
+          suspended_at?: string | null;
+          reverification_required_at?: string | null;
         };
         Update: {
           available_today?: boolean;
@@ -454,6 +698,8 @@ export type Database = {
           vacation_return_date?: string | null;
           verified_at?: string | null;
           verification_method?: string | null;
+          suspended_at?: string | null;
+          reverification_required_at?: string | null;
         };
         Relationships: [];
       };
@@ -515,6 +761,11 @@ export type Database = {
         Returns: boolean;
       };
       is_helper: { Args: { _user_id: string }; Returns: boolean };
+      is_suspended: { Args: { _user_id: string }; Returns: boolean };
+      is_verified: { Args: { _user_id: string }; Returns: boolean };
+      is_restricted: { Args: { _user_id: string; _scope: string }; Returns: boolean };
+      users_blocked: { Args: { _a: string; _b: string }; Returns: boolean };
+      has_guardian_consent: { Args: { _user_id: string }; Returns: boolean };
     };
     Enums: {
       app_role: "customer" | "helper_youth" | "helper_adult" | "helper_pro" | "admin";
