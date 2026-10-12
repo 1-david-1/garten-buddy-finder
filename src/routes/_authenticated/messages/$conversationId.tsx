@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { SafetyActions } from "@/components/safety-actions";
+import { CONTACT_WARNING, containsPrivateContact } from "@/lib/contact-detection";
 import {
   getConversationDetail,
   getConversationMessages,
@@ -189,7 +191,7 @@ function ConversationDetail() {
             <div className="flex size-10 items-center justify-center rounded-full bg-primary/15 font-medium text-primary">
               {conversation.otherUser.displayName.slice(0, 2).toUpperCase()}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="truncate font-medium">
                 {conversation.otherUser.displayName}
               </h1>
@@ -199,6 +201,11 @@ function ConversationDetail() {
                 </p>
               )}
             </div>
+            <SafetyActions
+              userId={conversation.otherUser.id}
+              userName={conversation.otherUser.displayName}
+              gigId={conversation.gigId ?? undefined}
+            />
           </div>
           {gigQuery.data?.gig && (
             <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2">
@@ -320,6 +327,15 @@ function ConversationDetail() {
           )}
           <div ref={messagesEndRef} />
         </main>
+        {containsPrivateContact(input) ? (
+          <p className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+            {CONTACT_WARNING}
+          </p>
+        ) : (
+          <p className="border-t border-border/50 bg-muted/20 px-4 py-1.5 text-[11px] text-muted-foreground">
+            Tausche keine privaten Kontaktdaten aus. Bei akuter Gefahr: Notruf 112.
+          </p>
+        )}
         <form
           className="flex items-end gap-3 border-t border-border/50 bg-muted/30 p-3"
           onSubmit={handleSubmit}
