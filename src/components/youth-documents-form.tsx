@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { IdCheckNotice, YouthProtectionRules } from "@/components/youth-protection-rules";
+import { ID_REDACTION_CONFIRMATION } from "@/lib/consent-texts";
 import { supabase } from "@/integrations/supabase/client";
 import {
   submitYouthVerification,
@@ -95,7 +97,7 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
   return (
     <div className="space-y-4 rounded-xl border border-glass-border p-4">
       <div className="space-y-1">
-        <p className="text-sm font-semibold">Unterlagen einreichen</p>
+        <p className="text-sm font-semibold">Schritt 2: Unterlagen einreichen</p>
         <p className="text-xs text-muted-foreground">
           Lass deine Eltern die{" "}
           <a
@@ -106,10 +108,13 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
           >
             Einverständniserklärung
           </a>{" "}
-          ausfüllen und unterschreiben. Du darfst die Zugangs- und Seriennummer auf den Ausweisen
+          ausfüllen und unterschreiben. Ausweise von Elternteil und Kind: bitte nach den Hinweisen unten
           schwärzen.
         </p>
       </div>
+
+      <YouthProtectionRules />
+      <IdCheckNotice />
 
       <div className="space-y-1.5">
         <Label htmlFor="guardian-name" className="text-xs">
@@ -149,8 +154,7 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
           className="mt-0.5"
         />
         <Label htmlFor="docs-privacy" className="text-xs font-normal leading-relaxed">
-          Ich weiß, dass die Unterlagen nur zur Prüfung durch das GreenMatch-Team verwendet und
-          nach der Entscheidung gelöscht werden.
+          {ID_REDACTION_CONFIRMATION}
         </Label>
       </div>
 

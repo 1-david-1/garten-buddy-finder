@@ -2,35 +2,25 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, CheckCircle2, Clock, Loader2, MailCheck, ShieldAlert } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Clock, Loader2, MailCheck, ShieldAlert, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { YouthDocumentsForm } from "@/components/youth-documents-form";
-import { updateProfile } from "@/lib/profile.functions";
+import { GuardianInviteStep } from "@/components/guardian-invite-step";
+import { IdentityDocumentForm } from "@/components/identity-document-form";
+import { YouthProtectionRules } from "@/components/youth-protection-rules";
+import { ConsentAcknowledgement } from "@/components/consent-acknowledgement";
+import { VERIFICATION_STATUS_LABEL } from "@/lib/verification-status";
+import { changeGuardianEmailFn } from "@/lib/guardian.functions";
 import {
   getMyVerification,
-  requestIdentityVerification,
   type MyVerification,
   type RequestState,
 } from "@/lib/verification.functions";
 
 const QUERY_KEY = ["my-verification"] as const;
-
-const ERROR_TEXTS: Record<string, string> = {
-  already_verified: "Dein Profil ist bereits verifiziert.",
-  not_available_for_youth: "Für Jugendliche läuft die Verifizierung über Einverständnis und Ausweise.",
-};
-
-function errorText(e: unknown): string {
-  const message = (e as Error)?.message ?? "";
-  for (const [code, text] of Object.entries(ERROR_TEXTS)) {
-    if (message.includes(code)) return text;
-  }
-  return "Das hat nicht geklappt. Bitte versuche es später noch einmal.";
-}
 
 function useVerification() {
   const fn = useServerFn(getMyVerification);
@@ -89,33 +79,18 @@ function youthRow(g: NonNullable<MyVerification["guardian"]>): {
 export function VerificationCard() {
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useVerification();
-  const identityFn = useServerFn(requestIdentityVerification);
-  const updateProfileFn = useServerFn(updateProfile);
+  const changeEmailFn = useServerFn(changeGuardianEmailFn);
   const refresh = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
-  const [showNote, setShowNote] = useState(false);
-  const [note, setNote] = useState("");
+  const [showIdForm, setShowIdForm] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [guardianEmail, setGuardianEmail] = useState("");
 
-  const identity = useMutation({
-    mutationFn: (n: string) => identityFn({ data: { note: n || undefined } }),
-    onSuccess: (res) => {
-      toast.success(
-        res.alreadyPending
-          ? "Deine Anfrage liegt bereits bei uns."
-          : "Anfrage gesendet. Wir prüfen dein Profil und melden uns.",
-      );
-      refresh();
-    },
-    onError: (e) => toast.error(errorText(e)),
-  });
-
   const changeEmail = useMutation({
-    mutationFn: (email: string) => updateProfileFn({ data: { guardianEmail: email } }),
+    mutationFn: (email: string) => changeEmailFn({ data: { email } }),
     onSuccess: () => {
       setEditingEmail(false);
-      toast.success("Eltern-E-Mail gespeichert.");
+      toast.success("Eltern-E-Mail gespeichert. Offene Freigabe-Anfragen gehen beim nächsten Annehmen an die neue Adresse.");
       refresh();
     },
     onError: () => toast.error("Die Adresse konnte nicht gespeichert werden."),
@@ -141,11 +116,11 @@ export function VerificationCard() {
               <div className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3">
                 <BadgeCheck className="mt-0.5 size-5 text-primary" />
                 <div>
-                  <p className="text-sm font-semibold text-primary">Verifiziert</p>
+                  <p className="text-sm font-semibold text-primary">Verifizierung abgeschlossen</p>
                   <p className="text-xs text-muted-foreground">
                     {data.method === "guardian_consent"
-                      ? "Einverständnis und Ausweise geprüft"
-                      : "Von GreenMatch geprüft"}
+                      ? "Identität geprüft · Alter geprüft (Einverständnis und Ausweise)"
+                      : "Identität geprüft · Alter geprüft"}
                     {" · "}
                     {formatDate(data.verifiedAt)}
                   </p>
@@ -154,10 +129,15 @@ export function VerificationCard() {
             ) : (
               <p className="text-xs text-muted-foreground">
                 {data.kind === "youth"
-                  ? "Du brauchst die unterschriebene Einverständniserklärung deiner Eltern sowie Vorder- und Rückseite der Ausweise von Eltern und dir. Nach der Prüfung durch unser Team bist du verifiziert und kannst bieten."
-                  : "Verifizierte Profile bekommen das Häkchen „Verifiziert“ bei Angeboten und auf dem Helferprofil."}
+                  ? "Zwei Schritte: (1) Deine Eltern legen ein Eltern-Konto an – das ist Pflicht für deine Sicherheit. (2) Du reichst die unterschriebene Einverständniserklärung sowie Vorder- und Rückseite der Ausweise von Eltern und dir ein. Nach der Prüfung durch unser Team bist du verifiziert und kannst bieten."
+                  : "Nach erfolgreicher Prüfung erscheint die Kennzeichnung „Identität geprüft“ bei Angeboten und auf dem Profil. Ohne abgeschlossene Verifizierung kannst du keine Aufträge erstellen oder annehmen und keine Nachrichten senden."}
               </p>
             )}
+
+            <p className="text-xs">
+              <span className="text-muted-foreground">Status: </span>
+              <strong>{VERIFICATION_STATUS_LABEL[data.status]}</strong>
+            </p>
 
             <div className="space-y-3">
               {data.emailConfirmed !== null && (
@@ -166,6 +146,41 @@ export function VerificationCard() {
                   title="E-Mail-Adresse"
                   detail={data.emailConfirmed ? "Bestätigt." : "Noch nicht bestätigt."}
                   tone={data.emailConfirmed ? "ok" : "todo"}
+                />
+              )}
+
+              {data.guardianAccount && (
+                <StatusRow
+                  icon={
+                    data.guardianAccount.state === "active" ? (
+                      <CheckCircle2 className="size-4" />
+                    ) : data.guardianAccount.state === "invited" ? (
+                      <Clock className="size-4" />
+                    ) : (
+                      <Users className="size-4" />
+                    )
+                  }
+                  title="Eltern-Konto"
+                  detail={
+                    data.guardianAccount.state === "active"
+                      ? data.guardianAccount.paused
+                        ? "Verknüpft – von deinen Eltern pausiert."
+                        : data.guardianAccount.parentConfirmation === "complete"
+                          ? "Verknüpft, verifiziert, Einwilligung liegt vor."
+                          : "Elternbestätigung ausstehend: Deine Eltern müssen ihr Konto noch verifizieren lassen und die Einwilligung abgeben."
+                      : data.guardianAccount.state === "invited"
+                        ? "Eingeladen – deine Eltern haben das Konto noch nicht angelegt."
+                        : "Noch nicht angelegt (Pflicht)."
+                  }
+                  tone={
+                    data.guardianAccount.state === "active" && data.guardianAccount.parentConfirmation === "complete"
+                      ? "ok"
+                      : data.guardianAccount.state === "active"
+                        ? "wait"
+                      : data.guardianAccount.state === "invited"
+                        ? "wait"
+                        : "todo"
+                  }
                 />
               )}
 
@@ -212,7 +227,28 @@ export function VerificationCard() {
               )}
             </div>
 
-            {/* Jugendliche: Unterlagen einreichen */}
+            {/* Jugendliche, Schritt 1: Eltern-Konto (Pflicht) */}
+            {data.guardianAccount && data.guardianAccount.state !== "active" && (
+              <GuardianInviteStep account={data.guardianAccount} onChanged={refresh} />
+            )}
+
+            {/* Sicherheitsinformationen (Helfer) bzw. Kinderschutzregeln (Auftraggeber) */}
+            {(data.kind === "youth" || data.kind === "adult" || data.kind === "pro") && (
+              <ConsentAcknowledgement
+                kind="helper_safety_info"
+                accepted={data.consents.helperSafetyAccepted}
+                onAccepted={refresh}
+              />
+            )}
+            {data.kind === "customer" && (
+              <ConsentAcknowledgement
+                kind="customer_child_protection_rules"
+                accepted={data.consents.customerRulesAccepted}
+                onAccepted={refresh}
+              />
+            )}
+
+            {/* Jugendliche, Schritt 2: Unterlagen einreichen */}
             {data.guardian &&
               !data.verifiedAt &&
               data.guardian.state !== "pending" &&
@@ -223,7 +259,11 @@ export function VerificationCard() {
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Freigabe-Anfragen für einzelne Aufträge gehen an{" "}
-                  <strong>{data.guardian.emailMasked ?? "—"}</strong>.
+                  <strong>{data.guardian.emailMasked ?? "die Login-Adresse des Eltern-Kontos"}</strong>
+                  {data.guardian.emailMasked && data.guardianAccount?.state === "active"
+                    ? " und an die Login-Adresse des Eltern-Kontos"
+                    : ""}
+                  . Entschieden wird im Eltern-Konto.
                 </p>
                 {editingEmail ? (
                   <div className="space-y-2">
@@ -261,36 +301,27 @@ export function VerificationCard() {
 
             {data.identity && !data.verifiedAt && data.identity.state !== "pending" && (
               <>
-                {showNote ? (
-                  <div className="space-y-2">
-                    <Textarea
-                      value={note}
-                      maxLength={500}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Optional: Hinweis für unser Team (z. B. Link zu deiner Website)"
-                      className="min-h-20 text-sm"
+                {showIdForm ? (
+                  <div className="space-y-3">
+                    <IdentityDocumentForm
+                      onSubmitted={() => {
+                        setShowIdForm(false);
+                        refresh();
+                      }}
                     />
-                    <div className="flex gap-2">
-                      <Button
-                        className="flex-1"
-                        disabled={identity.isPending}
-                        onClick={() => identity.mutate(note.trim())}
-                      >
-                        {identity.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                        Anfrage senden
-                      </Button>
-                      <Button variant="ghost" onClick={() => setShowNote(false)}>
-                        Abbrechen
-                      </Button>
-                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setShowIdForm(false)}>
+                      Abbrechen
+                    </Button>
                   </div>
                 ) : (
-                  <Button className="w-full" onClick={() => setShowNote(true)}>
-                    Verifizierung beantragen
+                  <Button className="w-full" onClick={() => setShowIdForm(true)}>
+                    Ausweisprüfung starten
                   </Button>
                 )}
               </>
             )}
+
+            {data.guardianAccount && <YouthProtectionRules />}
           </>
         )}
       </CardContent>
@@ -319,14 +350,14 @@ export function GuardianConsentBanner() {
           <p className="text-xs text-muted-foreground">
             {pending
               ? "Sobald unser Team alles geprüft hat, kannst du bieten und Angebote einstellen."
-              : "Reiche die Einverständniserklärung deiner Eltern und die Ausweise ein – erst nach der Prüfung kannst du bieten und Angebote einstellen."}
+              : "Lade deine Eltern zum Eltern-Konto ein und reiche die Einverständniserklärung und die Ausweise ein – erst nach der Prüfung kannst du bieten und Angebote einstellen."}
           </p>
         </div>
       </div>
       {!pending && (
         <Button asChild size="sm">
           <Link to="/profile" hash="verification">
-            Unterlagen einreichen
+            Jetzt starten
           </Link>
         </Button>
       )}
