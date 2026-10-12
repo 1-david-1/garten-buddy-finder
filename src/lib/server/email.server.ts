@@ -8,7 +8,7 @@ function getEnv(key: string): string | undefined {
   return fromProcess || fromVite || undefined;
 }
 
-const SITE_URL = getEnv("PUBLIC_SITE_URL") || "http://localhost:3000";
+export const SITE_URL = getEnv("PUBLIC_SITE_URL") || "http://localhost:3000";
 
 interface SendEmailInput {
   to: string;
@@ -61,8 +61,13 @@ export function emailTemplate(options: {
   bodyLines: string[];
   ctaLabel?: string;
   ctaPath?: string;
+  /** Eigener Fußzeilen-Text, z.B. für Eltern, die (noch) kein Nutzerkonto haben. */
+  footer?: string;
 }): string {
-  const { heading, bodyLines, ctaLabel, ctaPath } = options;
+  const { heading, bodyLines, ctaLabel, ctaPath, footer } = options;
+  const footerText =
+    footer ??
+    "Du erhältst diese E-Mail, weil du bei GreenMatch für dieses Ereignis benachrichtigt werden möchtest. Du kannst das jederzeit in deinen Profileinstellungen ändern.";
 
   const paragraphs = bodyLines
     .map(
@@ -86,8 +91,7 @@ export function emailTemplate(options: {
         ${paragraphs}
         ${cta}
         <p style="margin:28px 0 0;font-size:12px;color:#8a948d;line-height:1.5;">
-          Du erhältst diese E-Mail, weil du bei GreenMatch für dieses Ereignis benachrichtigt werden möchtest.
-          Du kannst das jederzeit in deinen Profileinstellungen ändern.
+          ${footerText}
         </p>
       </div>
     </div>
