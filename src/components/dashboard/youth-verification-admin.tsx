@@ -72,7 +72,12 @@ function ReviewCard({ item, onDone }: { item: YouthVerificationItem; onDone: () 
       toast.success(decision === "approve" ? "Verifiziert." : "Abgelehnt – das Kind wurde informiert.");
       onDone();
     },
-    onError: () => toast.error("Das hat nicht geklappt."),
+    onError: (e) =>
+      toast.error(
+        (e as Error).message?.includes("guardian_account_missing")
+          ? "Verifizieren nicht möglich: Das Eltern-Konto ist noch nicht verknüpft."
+          : "Das hat nicht geklappt.",
+      ),
   });
 
   return (
@@ -94,6 +99,21 @@ function ReviewCard({ item, onDone }: { item: YouthVerificationItem; onDone: () 
           <p>
             <span className="text-muted-foreground">Eltern-E-Mail: </span>
             {item.guardianEmail ?? "—"}
+          </p>
+          <p className="sm:col-span-2">
+            <span className="text-muted-foreground">Eltern-Konto: </span>
+            {item.guardianAccount ? (
+              <>
+                <strong>{item.guardianAccount.name}</strong>
+                {item.guardianAccount.email ? ` (${item.guardianAccount.email})` : ""}
+                <span className="text-xs text-muted-foreground">
+                  {" "}
+                  – Name mit dem Ausweis des Elternteils abgleichen
+                </span>
+              </>
+            ) : (
+              <span className="text-amber-400">noch nicht verknüpft – Verifizieren erst danach möglich</span>
+            )}
           </p>
           <p className="text-xs text-muted-foreground sm:col-span-2">
             Eingereicht am {new Date(item.submittedAt).toLocaleString("de-DE")}
@@ -153,7 +173,10 @@ function ReviewCard({ item, onDone }: { item: YouthVerificationItem; onDone: () 
           </div>
         ) : (
           <div className="flex gap-2">
-            <Button disabled={decide.isPending} onClick={() => decide.mutate("approve")}>
+            <Button
+              disabled={decide.isPending || !item.guardianAccount}
+              onClick={() => decide.mutate("approve")}
+            >
               {decide.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
               Verifizieren
             </Button>

@@ -9,6 +9,7 @@ import {
   ScrollText,
   Search,
   Settings as SettingsIcon,
+  Flag,
   ShieldCheck,
   ShieldOff,
   Users as UsersIcon,
@@ -33,6 +34,8 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { YouthVerificationAdmin } from "@/components/dashboard/youth-verification-admin";
+import { ReportsAdmin } from "@/components/dashboard/reports-admin";
+import { IdentityVerificationAdmin } from "@/components/dashboard/identity-verification-admin";
 import {
   Select,
   SelectContent,
@@ -272,7 +275,11 @@ export function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="youth" className="gap-1.5">
             <ShieldCheck className="size-4" />
-            Jugend-Prüfung
+            Verifizierung
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-1.5">
+            <Flag className="size-3.5" />
+            Meldungen
           </TabsTrigger>
           <TabsTrigger value="audit" className="gap-1.5">
             <ScrollText className="size-3.5" />
@@ -890,7 +897,14 @@ export function AdminDashboard() {
         {/* Audit-Log                                                     */}
         {/* ------------------------------------------------------------ */}
         <TabsContent value="youth" className="mt-6">
-          <YouthVerificationAdmin />
+          <div className="space-y-10">
+            <IdentityVerificationAdmin />
+            <YouthVerificationAdmin />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6">
+          <ReportsAdmin />
         </TabsContent>
 
         <TabsContent value="audit" className="mt-6">

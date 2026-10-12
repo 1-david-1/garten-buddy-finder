@@ -57,6 +57,7 @@ import {
   setVacationMode,
   submitTaxId,
 } from "@/lib/helper-dashboard.functions";
+import { SafetyAbortButton } from "@/components/safety-abort-button";
 import { cancelGig } from "@/lib/gigs.functions";
 import { respondToBooking } from "@/lib/service-listings.functions";
 import { startConversation } from "@/lib/messaging.functions";
@@ -1106,6 +1107,18 @@ export function HelperDashboard() {
                       Ablehnen
                     </Button>
                   </div>
+                )}
+
+                {(selectedGig.status === "pending_helper" ||
+                  selectedGig.status === "assigned" ||
+                  selectedGig.status === "in_progress") && (
+                  <SafetyAbortButton
+                    gigId={selectedGig.id}
+                    onDone={() => {
+                      queryClient.invalidateQueries({ queryKey: ["helper-dashboard"] });
+                      setSelectedGig(null);
+                    }}
+                  />
                 )}
 
                 {(selectedGig.status === "assigned" || selectedGig.status === "in_progress") && (
