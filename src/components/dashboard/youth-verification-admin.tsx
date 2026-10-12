@@ -53,7 +53,12 @@ export function YouthVerificationAdmin() {
         <ReviewCard
           key={item.requestId}
           item={item}
-          onDone={() => queryClient.invalidateQueries({ queryKey: ["admin-youth-verifications"] })}
+          onDone={() => {
+            queryClient.invalidateQueries({ queryKey: ["admin-youth-verifications"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-attention"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-audit"] });
+          }}
         />
       ))}
     </div>

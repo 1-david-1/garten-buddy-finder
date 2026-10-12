@@ -34,7 +34,11 @@ export function ReportsAdmin() {
   const items = query.data?.items ?? [];
   const open = items.filter((i) => i.status === "open" || i.status === "escalated");
   const closed = items.filter((i) => i.status === "resolved" || i.status === "dismissed");
-  const refresh = () => queryClient.invalidateQueries({ queryKey: KEY });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: KEY });
+    queryClient.invalidateQueries({ queryKey: ["admin-attention"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-audit"] });
+  };
 
   return (
     <div className="space-y-4">

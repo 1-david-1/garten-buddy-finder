@@ -42,7 +42,12 @@ export function IdentityVerificationAdmin() {
         <ReviewCard
           key={item.requestId}
           item={item}
-          onDone={() => queryClient.invalidateQueries({ queryKey: KEY })}
+          onDone={() => {
+            queryClient.invalidateQueries({ queryKey: KEY });
+            queryClient.invalidateQueries({ queryKey: ["admin-attention"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-audit"] });
+          }}
         />
       ))}
     </div>
