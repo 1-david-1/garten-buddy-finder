@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QueryErrorCard } from "@/components/query-error-card";
+import { SafetyActions } from "@/components/safety-actions";
 import { useAuth } from "@/lib/auth";
 import { getHelperProfile } from "@/lib/profile.functions";
 import { startConversation } from "@/lib/messaging.functions";
@@ -293,6 +294,12 @@ function HelperProfilePage() {
                   <MessageSquare className="size-4 mr-2" />
                   Nachricht schreiben
                 </Button>
+              )}
+              {!isOwnProfile && (
+                <div className="border-t border-glass-border pt-3">
+                  <p className="mb-2 text-xs text-muted-foreground">Sicherheit</p>
+                  <SafetyActions userId={helperId} userName={profile.display_name || "Helfer"} />
+                </div>
               )}
             </CardContent>
           </Card>
