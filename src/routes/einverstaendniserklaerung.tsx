@@ -64,7 +64,7 @@ function ConsentTemplatePage() {
           <h2 className="font-semibold">Angaben zum/zur Erziehungsberechtigten</h2>
           <Line label="Vor- und Nachname:" />
           <Line label="Anschrift:" />
-          <Line label="E-Mail (für Freigaben einzelner Aufträge):" />
+          <Line label="E-Mail (Eltern-Konto, Freigaben einzelner Aufträge):" />
           <Line label="Telefon:" />
         </section>
 
@@ -78,11 +78,18 @@ function ConsentTemplatePage() {
             </li>
             <li>
               dabei die Regeln für Jugendliche einhält: höchstens 2 Stunden pro Tag, nur zwischen
-              08:00 und 18:00 Uhr, keine schweren oder gefährlichen Maschinen;
+              08:00 und 18:00 Uhr, nicht während des Schulunterrichts, nur leichte, geeignete und
+              ungefährliche Tätigkeiten (keine schweren oder gefährlichen Maschinen);
             </li>
             <li>
-              Aufträge erst annehmen kann, nachdem ich den jeweiligen Auftrag per E-Mail
-              freigegeben habe. Mir ist bewusst, dass ich jeden Auftrag einzeln freigeben muss.
+              Aufträge erst annehmen kann, nachdem ich den jeweiligen Auftrag in meinem
+              Eltern-Konto freigegeben habe. Mir ist bewusst, dass ich jeden Auftrag einzeln
+              freigeben muss. Die Anfrage enthält Ort, Zeit, Auftraggeber und Art der Tätigkeit.
+            </li>
+            <li>
+              nur mit einem verknüpften Eltern-Konto aktiv sein kann. Ich lege dieses
+              Eltern-Konto bei GreenMatch an; dort kann ich das Konto meines Kindes jederzeit
+              pausieren sowie Auftraggeber melden und blockieren.
             </li>
           </ol>
           <p>

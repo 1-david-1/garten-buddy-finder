@@ -12,9 +12,21 @@ export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Anmelden · GreenMatch" }] }),
   validateSearch: (
     search: Record<string, unknown>,
-  ): { mode?: "signin" | "signup"; role?: "helper" | "customer" } => ({
+  ): {
+    mode?: "signin" | "signup";
+    role?: "helper" | "customer" | "guardian";
+    invite?: string;
+  } => ({
     mode: search.mode === "signup" ? "signup" : undefined,
-    role: search.role === "helper" || search.role === "customer" ? search.role : undefined,
+    role:
+      search.role === "helper" || search.role === "customer" || search.role === "guardian"
+        ? search.role
+        : undefined,
+    // Einladungslink der Eltern (Eltern-Konto): danach geht es zurück zur Einladung.
+    invite:
+      typeof search.invite === "string" && /^[a-f0-9]{64}$/.test(search.invite)
+        ? search.invite
+        : undefined,
   }),
   component: AuthPage,
 });
@@ -23,13 +35,15 @@ function AuthPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { mode: initialMode, role: initialRole } = Route.useSearch();
+  const { mode: initialMode, role: initialRole, invite } = Route.useSearch();
   // Kommt jemand von der Startseite mit vorgewählter Rolle, geht es direkt zur Registrierung.
   const [mode, setMode] = useState<"signin" | "signup">(
     initialMode === "signup" || initialRole ? "signup" : "signin",
   );
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"helper" | "customer" | null>(initialRole ?? null);
+  const [role, setRole] = useState<"helper" | "customer" | "guardian" | null>(initialRole ?? null);
+  const isGuardianSignup = role === "guardian";
+  const afterAuthUrl = invite ? `/eltern-einladung/${invite}` : "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,8 +51,10 @@ function AuthPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) navigate({ to: "/dashboard" });
-  }, [user, navigate]);
+    if (!user) return;
+    if (invite) navigate({ to: "/eltern-einladung/$token", params: { token: invite } });
+    else navigate({ to: "/dashboard" });
+  }, [user, navigate, invite]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +69,7 @@ function AuthPage() {
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin + "/dashboard",
+            emailRedirectTo: window.location.origin + afterAuthUrl,
             data: { full_name: fullName.trim(), signup_role: role },
           },
         });
@@ -107,7 +123,7 @@ function AuthPage() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin + "/dashboard" },
+        options: { redirectTo: window.location.origin + afterAuthUrl },
       });
       if (error) throw error;
     } catch (err) {
@@ -148,7 +164,13 @@ function AuthPage() {
               />
             </div>
           )}
-          {mode === "signup" && (
+          {mode === "signup" && isGuardianSignup && (
+            <p className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs">
+              Du legst ein <strong>Eltern-Konto</strong> an. Damit gibst du Aufträge deines Kindes frei
+              und siehst alle Auftragsdaten. Bitte bestätige danach deine E-Mail-Adresse.
+            </p>
+          )}
+          {mode === "signup" && !isGuardianSignup && (
             <div>
               <Label>{t("auth.role")}</Label>
               <div className="mt-1 grid grid-cols-2 gap-2">

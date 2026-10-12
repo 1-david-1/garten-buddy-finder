@@ -691,6 +691,9 @@ function Footer() {
               {l.label}
             </a>
           ))}
+          <a href="/vermittler" className="hover:text-foreground">
+            Unsere Rolle als Vermittler
+          </a>
         </nav>
       </div>
       <div className="border-t border-glass-border py-4 text-center text-xs text-muted-foreground">
