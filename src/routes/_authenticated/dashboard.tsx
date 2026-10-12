@@ -38,6 +38,15 @@ function DashboardRouter() {
     }
   }, [data, navigate, isGuardianSignup]);
 
+  // Reine Admin-Konten (ohne Kunden-/Helfer-Rolle) landen direkt in der Admin-Zentrale.
+  const isAdminOnly =
+    !!data?.roles?.includes("admin") &&
+    !data.roles.some((r) => r === "customer" || r.startsWith("helper_"));
+
+  useEffect(() => {
+    if (isAdminOnly) navigate({ to: "/admin", replace: true });
+  }, [isAdminOnly, navigate]);
+
   if (isError) {
     return (
       <div className="min-h-screen bg-background text-foreground">
@@ -49,7 +58,7 @@ function DashboardRouter() {
     );
   }
 
-  if (isLoading || !data?.roles || data.roles.length === 0) {
+  if (isLoading || isAdminOnly || !data?.roles || data.roles.length === 0) {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <SiteNav />
