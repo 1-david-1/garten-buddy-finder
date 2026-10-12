@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Role = "customer" | "helper_youth" | "helper_adult" | "helper_pro";
-type SignupRole = "helper" | "customer" | undefined;
+type SignupRole = "helper" | "customer" | "guardian" | undefined;
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
@@ -34,8 +34,11 @@ function Onboarding() {
   useEffect(() => {
     if (rolesQuery.data?.roles?.length) {
       navigate({ to: "/dashboard" });
+    } else if (signupRole === "guardian") {
+      // Eltern-Konto: keine Helfer-/Kunden-Rolle nötig
+      navigate({ to: "/eltern" });
     }
-  }, [rolesQuery.data, navigate]);
+  }, [rolesQuery.data, navigate, signupRole]);
 
   const [role, setRole] = useState<Role | null>(null);
 
@@ -148,13 +151,18 @@ function Onboarding() {
               />
             )}
             {role === "helper_youth" && (
-              <Field
-                label={t("onboarding.guardianEmail")}
-                type="email"
-                value={form.guardianEmail}
-                onChange={(v) => setForm({ ...form, guardianEmail: v })}
-                required
-              />
+              <div>
+                <Field
+                  label={t("onboarding.guardianEmail")}
+                  type="email"
+                  value={form.guardianEmail}
+                  onChange={(v) => setForm({ ...form, guardianEmail: v })}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Optional. Bei der Verifizierung (Profil) lädst du deine Eltern zum Pflicht-Eltern-Konto
+                  ein – mit dieser E-Mail oder ohne, mit einem Link zum Weitergeben.
+                </p>
+              </div>
             )}
             {role === "helper_pro" && (
               <>

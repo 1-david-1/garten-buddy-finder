@@ -6,6 +6,7 @@ import { getMyRoles } from "@/lib/roles.functions";
 import { SiteNav } from "@/components/site-nav";
 import { useI18n } from "@/lib/i18n";
 import { QueryErrorCard } from "@/components/query-error-card";
+import { useAuth } from "@/lib/auth";
 
 // HINWEIS: Falls in den Dateien 'export default' verwendet wird, 
 // nutze 'import HelperDashboard from ...' (ohne geschweifte Klammern).
@@ -21,6 +22,9 @@ function DashboardRouter() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const getRoles = useServerFn(getMyRoles);
+  const { user } = useAuth();
+  // Eltern-Konten (Registrierung über die Einladung) haben keine Helfer-/Kunden-Rolle.
+  const isGuardianSignup = user?.user_metadata?.signup_role === "guardian";
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["my-roles"],
@@ -30,9 +34,9 @@ function DashboardRouter() {
   useEffect(() => {
     // Sobald die Rollen geladen sind und keine Rolle zugewiesen ist, zum Onboarding weiterleiten
     if (data && (!data.roles || data.roles.length === 0)) {
-      navigate({ to: "/onboarding", replace: true });
+      navigate({ to: isGuardianSignup ? "/eltern" : "/onboarding", replace: true });
     }
-  }, [data, navigate]);
+  }, [data, navigate, isGuardianSignup]);
 
   if (isError) {
     return (

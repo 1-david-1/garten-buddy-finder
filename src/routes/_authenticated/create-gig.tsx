@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createGig } from "@/lib/gigs.functions";
+import { GIG_SAFETY_TEXT } from "@/lib/consent-texts";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -65,6 +66,7 @@ function CreateGigPage() {
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("10:00");
   const [durationHours, setDurationHours] = useState("2");
+  const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const [allowedAgeGroups, setAllowedAgeGroups] = useState<string[]>([
     "helper_youth",
     "helper_adult",
@@ -86,6 +88,7 @@ function CreateGigPage() {
             : null,
           durationMinutes: Math.round(parseFloat(durationHours) * 60),
           allowedAgeGroups,
+          safetyConfirmed,
         },
       }),
     onSuccess: () => {
@@ -394,11 +397,24 @@ function CreateGigPage() {
                 </div>
               </div>
 
+              <div className="flex items-start gap-3 rounded-lg border border-glass-border p-3">
+                <Checkbox
+                  id="gig-safety-confirmed"
+                  checked={safetyConfirmed}
+                  onCheckedChange={(v) => setSafetyConfirmed(v === true)}
+                  className="mt-0.5"
+                />
+                <label htmlFor="gig-safety-confirmed" className="text-xs leading-relaxed">
+                  {GIG_SAFETY_TEXT}
+                </label>
+              </div>
+
               <Button
                 className="w-full"
                 onClick={() => mutation.mutate()}
                 disabled={
                   mutation.isPending ||
+                  !safetyConfirmed ||
                   !title.trim() ||
                   !serviceType ||
                   !budgetEuros ||
