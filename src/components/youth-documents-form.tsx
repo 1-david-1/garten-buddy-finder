@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
-import { FileUp, Loader2 } from "lucide-react";
+import { ExternalLink, FileUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -71,13 +71,15 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
     },
     onError: (e) => {
       const m = (e as Error).message ?? "";
-      toast.error(
-        m.includes("already_pending")
-          ? "Es liegt bereits eine Einreichung zur Prüfung vor."
+      console.error("[Jugend-Unterlagen]", e);
+      const text = m.includes("already_pending")
+        ? "Es liegt bereits eine Einreichung zur Prüfung vor."
+        : m.includes("server_misconfigured")
+          ? "Der Server ist noch nicht vollständig eingerichtet (Service-Schlüssel fehlt). Bitte informiere den Betreiber."
           : m.startsWith("Upload") || m.startsWith("Bitte")
             ? m
-            : "Das hat nicht geklappt. Bitte versuche es später noch einmal.",
-      );
+            : "Das hat nicht geklappt. Bitte versuche es später noch einmal.";
+      toast.error(text, m && text !== m ? { description: m.slice(0, 160) } : undefined);
     },
   });
 
@@ -132,8 +134,26 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
         <div key={key} className="space-y-1.5">
           <Label htmlFor={`doc-${key}`} className="flex items-center gap-1.5 text-xs">
             <FileUp className="size-3.5" />
-            {LABELS[key].label}
+            {key === "consent" ? (
+              <a
+                href="/einverstaendniserklaerung"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {LABELS[key].label}
+                <ExternalLink className="size-3" />
+              </a>
+            ) : (
+              LABELS[key].label
+            )}
           </Label>
+          {key === "consent" && (
+            <p className="text-[11px] text-muted-foreground">
+              Zum Ausdrucken: auf die Beschriftung klicken, die Vorlage öffnet sich in einem neuen Tab.
+            </p>
+          )}
           <Input
             id={`doc-${key}`}
             type="file"

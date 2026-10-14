@@ -62,11 +62,13 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
     },
     onError: (e) => {
       const m = (e as Error).message ?? "";
-      toast.error(
-        m.startsWith("Upload") || m.startsWith("Bitte")
+      console.error("[Ausweisprüfung]", e);
+      const text = m.includes("server_misconfigured")
+        ? "Der Server ist noch nicht vollständig eingerichtet (Service-Schlüssel fehlt). Bitte informiere den Betreiber."
+        : m.startsWith("Upload") || m.startsWith("Bitte")
           ? m
-          : "Das hat nicht geklappt. Bitte versuche es später noch einmal.",
-      );
+          : "Das hat nicht geklappt. Bitte versuche es später noch einmal.";
+      toast.error(text, m && text !== m ? { description: m.slice(0, 160) } : undefined);
     },
   });
 

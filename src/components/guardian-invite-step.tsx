@@ -12,6 +12,8 @@ import { inviteGuardian } from "@/lib/guardian.functions";
 import type { MyVerification } from "@/lib/verification.functions";
 
 const ERRORS: Record<string, string> = {
+  server_misconfigured:
+    "Der Server ist noch nicht vollständig eingerichtet (Service-Schlüssel fehlt). Bitte informiere den Betreiber.",
   recently_sent: "Die E-Mail wurde gerade erst gesendet. Bitte warte ein paar Minuten.",
   already_linked: "Das Eltern-Konto ist schon verknüpft.",
   not_youth: "Das ist nur für Jugendliche möglich.",
@@ -21,6 +23,13 @@ function errorText(e: unknown) {
   const m = (e as Error)?.message ?? "";
   for (const [code, text] of Object.entries(ERRORS)) if (m.includes(code)) return text;
   return "Das hat nicht geklappt. Bitte versuche es später noch einmal.";
+}
+
+/** Zeigt die Meldung und - als Detail für den Betreiber - die technische Ursache. */
+function showError(e: unknown) {
+  const detail = (e as Error)?.message ?? "";
+  console.error("[Eltern-Einladung]", e);
+  toast.error(errorText(e), detail ? { description: detail.slice(0, 160) } : undefined);
 }
 
 /**
@@ -57,7 +66,7 @@ export function GuardianInviteStep({
       }
       onChanged();
     },
-    onError: (e) => toast.error(errorText(e)),
+    onError: showError,
   });
 
   const shareText = link
