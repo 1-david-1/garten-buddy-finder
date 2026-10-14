@@ -216,6 +216,8 @@ export const requestIdentityVerification = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { assertServiceRole } = await import("@/lib/server/service-role.server");
+    await assertServiceRole();
 
     const [{ data: roles }, { data: profile }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", userId),

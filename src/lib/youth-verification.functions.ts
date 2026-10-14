@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireAdminAuth } from "@/lib/admin-middleware";
-import { logAdminAction } from "@/lib/admin-audit";
 
 /**
  * Verifizierung Jugendlicher (13-17) über Unterlagen:
@@ -53,6 +52,8 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { assertServiceRole } = await import("@/lib/server/service-role.server");
+    await assertServiceRole();
 
     const [{ data: roles }, { data: profile }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", userId),
@@ -197,7 +198,7 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
     const { emailTemplate } = await import("@/lib/server/email.server");
@@ -268,15 +269,6 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
         documents: remaining,
       })
       .eq("id", request.id);
-
-    // Audit-Log: jede Entscheidung über Jugend-Unterlagen wird protokolliert.
-    await logAdminAction(
-      context.supabase,
-      approved ? "verification.youth.approve" : "verification.youth.reject",
-      "user",
-      request.user_id,
-      { request_id: request.id, reason: approved ? null : (data.reason ?? null) },
-    );
 
     await notifyUserByEmail({
       userId: request.user_id,
