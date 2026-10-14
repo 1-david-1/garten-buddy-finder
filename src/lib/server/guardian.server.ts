@@ -13,6 +13,7 @@
 //   4. Im Eltern-Konto sehen die Eltern Konto- und Auftragsdaten, geben Aufträge frei
 //      und können das Konto pausieren, melden und blockieren.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertServiceRole } from "@/lib/server/service-role.server";
 import { emailTemplate, sendEmail, SITE_URL } from "@/lib/server/email.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { GUARDIAN_CONSENT_VERSION } from "@/lib/consent-texts";
@@ -31,7 +32,8 @@ export const INVITE_VALID_DAYS = 14;
 const RESEND_COOLDOWN_MS = 10 * 60 * 1000;
 
 async function assertYouth(userId: string) {
-  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const { data: roles, error } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw error;
   if (!(roles ?? []).some((r) => r.role === "helper_youth")) throw new VerificationError("not_youth");
 }
 
@@ -45,6 +47,7 @@ export async function createGuardianInvite(
   childId: string,
   email: string | null,
 ): Promise<{ link: string; emailMasked: string | null }> {
+  await assertServiceRole();
   await assertYouth(childId);
 
   const { data: open } = await supabaseAdmin
@@ -145,6 +148,7 @@ export async function acceptGuardianInvite(
   guardianUserId: string,
   token: string,
 ): Promise<{ childName: string }> {
+  await assertServiceRole();
   const { data: link } = await supabaseAdmin
     .from("guardian_links")
     .select("id, child_id, created_at, last_sent_at")
@@ -361,6 +365,7 @@ export async function setChildPaused(guardianUserId: string, childId: string, pa
  * offen, geht sie an die neue Adresse.
  */
 export async function changeGuardianEmail(childId: string, email: string): Promise<void> {
+  await assertServiceRole();
   await assertYouth(childId);
   const { error } = await supabaseAdmin
     .from("profile_private")
