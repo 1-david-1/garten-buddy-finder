@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, Clock, Loader2, PauseCircle, PlayCircle, ShieldAlert, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { SiteNav } from "@/components/site-nav";
@@ -22,6 +22,11 @@ import {
   setChildPausedFn,
 } from "@/lib/guardian.functions";
 import { VERIFICATION_STATUS_LABEL } from "@/lib/verification-status";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { acceptGuardianInviteFn } from "@/lib/guardian.functions";
 import type { GuardianApprovalItem, GuardianChildOverview } from "@/lib/server/guardian.server";
 
 /**
@@ -61,6 +66,22 @@ function decisionError(e: unknown): string {
 function GuardianPage() {
   const overviewFn = useServerFn(getMyGuardianOverview);
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: () => overviewFn() });
+  const { user } = useAuth();
+  const acceptFn = useServerFn(acceptGuardianInviteFn);
+
+  // Konto wurde automatisch angelegt (Einladungs-Mail): Falls die Weiterleitung auf die Einladungsseite nicht
+  // geklappt hat, steht der Einladungs-Token in den Konto-Daten - dann hier verknüpfen.
+  const pendingInvite = user?.user_metadata?.guardian_invite as string | undefined;
+  const autoLink = useMutation({
+    mutationFn: () => acceptFn({ data: { token: pendingInvite! } }),
+    onSuccess: () => query.refetch(),
+  });
+  useEffect(() => {
+    if (pendingInvite && query.data && query.data.children.length === 0 && autoLink.isIdle) {
+      autoLink.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInvite, query.data]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -80,6 +101,8 @@ function GuardianPage() {
 
         {query.isLoading && <p className="text-sm text-muted-foreground">Lädt…</p>}
         {query.isError && <QueryErrorCard error={query.error} />}
+
+        <GuardianAccountSettings />
 
         {query.data && <GuardianVerificationBlock verification={query.data.verification} onChanged={() => query.refetch()} />}
 
@@ -107,6 +130,68 @@ function GuardianPage() {
         </p>
       </main>
     </div>
+  );
+}
+
+/** Name (für den Abgleich mit dem Ausweis) und Passwort festlegen - wichtig, wenn das Konto automatisch angelegt wurde. */
+function GuardianAccountSettings() {
+  const { user } = useAuth();
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!user) return;
+    setBusy(true);
+    try {
+      if (name.trim().length >= 2) {
+        const { error } = await supabase.from("profiles").update({ display_name: name.trim() }).eq("id", user.id);
+        if (error) throw error;
+      }
+      if (password) {
+        if (password.length < 8) throw new Error("Das Passwort muss mindestens 8 Zeichen haben.");
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+      }
+      toast.success("Gespeichert.");
+      setPassword("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Das hat nicht geklappt.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border-glass-border bg-glass backdrop-blur">
+      <CardContent className="space-y-3 pt-5">
+        <p className="font-semibold">Ihr Konto</p>
+        <p className="text-xs text-muted-foreground">
+          Angemeldet als {user?.email}. Bitte tragen Sie Ihren vollständigen Namen ein (so wie auf Ihrem Ausweis)
+          und legen Sie ein Passwort fest, damit Sie sich später wieder anmelden können.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="g-name" className="text-xs">Vor- und Nachname</Label>
+            <Input id="g-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="g-pass" className="text-xs">Neues Passwort (mind. 8 Zeichen)</Label>
+            <Input
+              id="g-pass"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+        </div>
+        <Button size="sm" variant="outline" disabled={busy || (name.trim().length < 2 && !password)} onClick={save}>
+          {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
+          Speichern
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

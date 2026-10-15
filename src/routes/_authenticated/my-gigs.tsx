@@ -1,3 +1,5 @@
+import { SafetyActions } from "@/components/safety-actions";
+import { SafetyAbortButton } from "@/components/safety-abort-button";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -450,6 +452,25 @@ function MyGigsPage() {
                 >
                   Nachricht an Helfer
                 </Button>
+              )}
+
+              {selectedGigData.assigned_helper_id && (
+                <div className="space-y-3 rounded-xl border border-glass-border p-3">
+                  <p className="text-xs text-muted-foreground">Sicherheit</p>
+                  <SafetyActions
+                    userId={selectedGigData.assigned_helper_id}
+                    userName="Helfer"
+                    gigId={selectedGigData.id}
+                  />
+                  {(selectedGigData.status === "pending_helper" ||
+                    selectedGigData.status === "assigned" ||
+                    selectedGigData.status === "in_progress") && (
+                    <SafetyAbortButton
+                      gigId={selectedGigData.id}
+                      onDone={() => queryClient.invalidateQueries({ queryKey: ["my-gigs"] })}
+                    />
+                  )}
+                </div>
               )}
 
               {/* Angebote */}
