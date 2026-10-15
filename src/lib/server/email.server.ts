@@ -2,13 +2,45 @@
 // Nur aus Server-Function-Handlern importieren (idealerweise per dynamischem
 // `await import(...)`, siehe client.server.ts), niemals aus Routen/Komponenten.
 
+import { getRequest } from "@tanstack/react-start/server";
+
 function getEnv(key: string): string | undefined {
   const fromProcess = typeof process !== "undefined" ? process.env[key] : undefined;
   const fromVite = (import.meta.env as Record<string, string | undefined>)[key];
   return fromProcess || fromVite || undefined;
 }
 
-export const SITE_URL = getEnv("PUBLIC_SITE_URL") || "http://localhost:3000";
+/**
+ * Öffentliche Adresse der App für Links in E-Mails. Reihenfolge:
+ * 1. PUBLIC_SITE_URL (empfohlen, in der Hosting-Umgebung setzen)
+ * 2. Adresse der aktuellen Anfrage (Proxy-Header oder Origin) - damit Links nicht auf localhost zeigen
+ * 3. http://localhost:3000 (nur lokale Entwicklung)
+ */
+export function getSiteUrl(): string {
+  const configured = getEnv("PUBLIC_SITE_URL");
+  if (configured) return configured.replace(/\/+$/, "");
+  try {
+    const req = getRequest();
+    const proto = req.headers.get("x-forwarded-proto");
+    const host = req.headers.get("x-forwarded-host");
+    if (proto && host) return `${proto.split(",")[0].trim()}://${host.split(",")[0].trim()}`;
+    const origin = req.headers.get("origin");
+    if (origin) return origin;
+    return new URL(req.url).origin;
+  } catch {
+    return "http://localhost:3000";
+  }
+}
+
+/** Für die Systemstatus-Seite im Admin: ist der E-Mail-Versand eingerichtet? */
+export function getEmailConfig() {
+  return {
+    resendConfigured: Boolean(getEnv("RESEND_API_KEY")),
+    fromAddress: getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <no-reply@greenmatch.app> (Standard)",
+    siteUrlConfigured: Boolean(getEnv("PUBLIC_SITE_URL")),
+    effectiveSiteUrl: getSiteUrl(),
+  };
+}
 
 interface SendEmailInput {
   to: string;
@@ -17,18 +49,19 @@ interface SendEmailInput {
 }
 
 /**
- * Versendet eine E-Mail über die Resend-API. Wirft absichtlich nie einen Fehler:
+ * Versendet eine E-Mail über die Resend-API und liefert zurück, ob sie versendet wurde.
+ * Wirft absichtlich nie einen Fehler:
  * Fehlt der API-Key oder schlägt der Request fehl, wird nur geloggt. Eine
  * Benachrichtigung darf niemals eine eigentliche Aktion (Gebot, Zusage, ...)
  * zum Scheitern bringen.
  */
-export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<void> {
+export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<boolean> {
   const apiKey = getEnv("RESEND_API_KEY");
   if (!apiKey) {
     console.warn(
       `[email] RESEND_API_KEY ist nicht gesetzt - E-Mail wurde NICHT versendet: "${subject}" an ${to}`,
     );
-    return;
+    return false;
   }
 
   const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <no-reply@greenmatch.app>";
@@ -46,9 +79,12 @@ export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error(`[email] Resend-Versand fehlgeschlagen (${res.status}):`, body);
+      return false;
     }
+    return true;
   } catch (err) {
     console.error("[email] Netzwerkfehler beim E-Mail-Versand:", err);
+    return false;
   }
 }
 
@@ -61,10 +97,12 @@ export function emailTemplate(options: {
   bodyLines: string[];
   ctaLabel?: string;
   ctaPath?: string;
+  /** Absoluter Link für den Button (hat Vorrang vor ctaPath), z. B. Einmal-Anmeldelink */
+  ctaUrl?: string;
   /** Eigener Fußzeilen-Text, z.B. für Eltern, die (noch) kein Nutzerkonto haben. */
   footer?: string;
 }): string {
-  const { heading, bodyLines, ctaLabel, ctaPath, footer } = options;
+  const { heading, bodyLines, ctaLabel, ctaPath, ctaUrl, footer } = options;
   const footerText =
     footer ??
     "Du erhältst diese E-Mail, weil du bei GreenMatch für dieses Ereignis benachrichtigt werden möchtest. Du kannst das jederzeit in deinen Profileinstellungen ändern.";
@@ -77,8 +115,8 @@ export function emailTemplate(options: {
     .join("");
 
   const cta =
-    ctaLabel && ctaPath
-      ? `<a href="${SITE_URL}${ctaPath}" style="display:inline-block;margin-top:16px;padding:11px 22px;background:#1f8a5c;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">${ctaLabel}</a>`
+    ctaLabel && (ctaPath || ctaUrl)
+      ? `<a href="${ctaUrl ?? `${getSiteUrl()}${ctaPath}`}" style="display:inline-block;margin-top:16px;padding:11px 22px;background:#1f8a5c;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">${ctaLabel}</a>`
       : "";
 
   return `<!doctype html>

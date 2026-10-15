@@ -10,9 +10,9 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 let verified = false;
 
 export class ServerMisconfiguredError extends Error {
-  constructor() {
+  constructor(detail?: string) {
     super(
-      "server_misconfigured: Der Server hat keinen Service-Role-Schlüssel (SUPABASE_SERVICE_ROLE_KEY fehlt oder ist ungültig).",
+      `server_misconfigured: Der Server hat keinen gültigen Service-Role-Schlüssel (SUPABASE_SERVICE_ROLE_KEY fehlt oder ist ungültig).${detail ? ` Ursache: ${detail}` : ""}`,
     );
   }
 }
@@ -26,6 +26,6 @@ export async function assertServiceRole(): Promise<void> {
     verified = true;
   } catch (e) {
     console.error("[service-role] Admin-Zugriff nicht möglich:", (e as Error)?.message);
-    throw new ServerMisconfiguredError();
+    throw new ServerMisconfiguredError((e as Error)?.message);
   }
 }

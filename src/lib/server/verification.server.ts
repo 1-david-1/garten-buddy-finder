@@ -10,7 +10,7 @@
 //      lehnen ab (decideGuardianConsent). Bei Zustimmung wird das Profil verifiziert.
 //   4. Der Link bleibt gültig, um die Zustimmung später zu widerrufen.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { emailTemplate, sendEmail, SITE_URL } from "@/lib/server/email.server";
+import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import {
@@ -463,9 +463,9 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
   const childName = profile.display_name?.trim() || "Ihr Kind";
   const e = escapeHtml;
   const child = e(childName);
-  const approveUrl = `${SITE_URL}/eltern?request=${created.id}&aktion=freigeben`;
-  const declineUrl = `${SITE_URL}/eltern?request=${created.id}&aktion=ablehnen`;
-  const reportUrl = `${SITE_URL}/eltern?request=${created.id}&aktion=melden`;
+  const approveUrl = `${getSiteUrl()}/eltern?request=${created.id}&aktion=freigeben`;
+  const declineUrl = `${getSiteUrl()}/eltern?request=${created.id}&aktion=ablehnen`;
+  const reportUrl = `${getSiteUrl()}/eltern?request=${created.id}&aktion=melden`;
   const button = (href: string, label: string, primary: boolean) =>
     `<a href="${href}" style="display:inline-block;margin:4px 8px 4px 0;padding:12px 20px;border-radius:8px;font-weight:600;text-decoration:none;${
       primary ? "background:#16a34a;color:#ffffff;" : "background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;"

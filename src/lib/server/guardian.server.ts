@@ -14,7 +14,7 @@
 //      und können das Konto pausieren, melden und blockieren.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertServiceRole } from "@/lib/server/service-role.server";
-import { emailTemplate, sendEmail, SITE_URL } from "@/lib/server/email.server";
+import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { GUARDIAN_CONSENT_VERSION } from "@/lib/consent-texts";
 import { deriveVerificationStatus, type VerificationStatus } from "@/lib/verification-status";
@@ -46,7 +46,15 @@ async function assertYouth(userId: string) {
 export async function createGuardianInvite(
   childId: string,
   email: string | null,
-): Promise<{ link: string; emailMasked: string | null }> {
+): Promise<{
+  /** Link zum Weitergeben (ohne Anmeldung; legt kein Konto an) */
+  link: string;
+  emailMasked: string | null;
+  /** false, wenn der E-Mail-Versand nicht eingerichtet ist oder fehlgeschlagen ist */
+  emailSent: boolean;
+  /** true, wenn für die Eltern automatisch ein Konto angelegt wurde */
+  accountCreated: boolean;
+}> {
   await assertServiceRole();
   await assertYouth(childId);
 
@@ -86,7 +94,9 @@ export async function createGuardianInvite(
     .from("profile_private")
     .upsert({ id: childId, guardian_email: email }, { onConflict: "id" });
 
-  const link = `${SITE_URL}/eltern-einladung/${token}`;
+  const link = `${getSiteUrl()}/eltern-einladung/${token}`;
+  let emailSent = false;
+  let accountCreated = false;
 
   if (email) {
     const { data: child } = await supabaseAdmin
@@ -96,28 +106,76 @@ export async function createGuardianInvite(
       .maybeSingle();
     const childName = child?.display_name?.trim() || "Ihr Kind";
     const name = escapeHtml(childName);
-    await sendEmail({
+
+    // Eltern-Konto automatisch anlegen: Mit der angegebenen E-Mail-Adresse wird ein Konto erstellt (bzw. ein
+    // vorhandenes genutzt) und ein Einmal-Anmeldelink erzeugt. Mit dem Klick bestätigen die Eltern zugleich ihre
+    // E-Mail-Adresse. Dieser Link geht NUR per E-Mail an die Eltern - nie an das Kind.
+    const action = await createGuardianAccountLink(email, link, token);
+    accountCreated = action.created;
+
+    emailSent = await sendEmail({
       to: email,
       subject: `${childName} möchte bei GreenMatch Gartenhilfe anbieten – Ihre Zustimmung wird benötigt`,
       html: emailTemplate({
         heading: "Einverständniserklärung und Eltern-Konto",
         bodyLines: [
           `<strong>${name}</strong> möchte bei GreenMatch leichte Gartenarbeiten für Nachbarn übernehmen. Das ist ab 13 Jahren nur mit Ihrer Zustimmung möglich.`,
-          "<strong>Was jetzt zu tun ist:</strong><br/>1. Eltern-Konto anlegen (kostenlos) – über den Button unten.<br/>2. Einverständniserklärung ausdrucken, unterschreiben und gemeinsam mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Danach prüft unser Team die Unterlagen.",
+          action.created
+            ? "Wir haben für Sie bereits ein Eltern-Konto mit dieser E-Mail-Adresse angelegt. Mit dem Button unten melden Sie sich ohne Passwort an; dort können Sie Ihren Namen und ein Passwort festlegen."
+            : "Mit dem Button unten öffnen Sie Ihr Eltern-Konto.",
+          "<strong>Was jetzt zu tun ist:</strong><br/>1. Eltern-Konto öffnen (kostenlos) – über den Button unten.<br/>2. Einverständniserklärung ausdrucken, unterschreiben und gemeinsam mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Danach prüft unser Team die Unterlagen.",
           "<strong>Ihr Eltern-Konto ist Pflicht</strong> – es dient der Sicherheit Ihres Kindes: Dort sehen Sie alle Auftragsdaten (Ort, Zeit, Auftraggeber, Art der Tätigkeit), geben jeden einzelnen Auftrag frei und können das Konto jederzeit pausieren sowie Auftraggeber melden oder blockieren.",
           "Für Jugendliche gelten höchstens 2 Stunden pro Tag, nur zwischen 08:00 und 18:00 Uhr, nicht während des Schulunterrichts und nur leichte, ungefährliche Tätigkeiten.",
-          `Die Einverständniserklärung zum Ausdrucken: <a href="${SITE_URL}/einverstaendniserklaerung">${SITE_URL}/einverstaendniserklaerung</a>`,
+          `Die Einverständniserklärung zum Ausdrucken: <a href="${getSiteUrl()}/einverstaendniserklaerung">${getSiteUrl()}/einverstaendniserklaerung</a>`,
           `Der Link ist ${INVITE_VALID_DAYS} Tage gültig. Wenn Sie nicht zustimmen möchten, ignorieren Sie diese E-Mail einfach.`,
         ],
-        ctaLabel: "Eltern-Konto anlegen",
-        ctaPath: `/eltern-einladung/${token}`,
+        ctaLabel: action.created ? "Eltern-Konto öffnen" : "Eltern-Konto anlegen oder anmelden",
+        ctaUrl: action.url,
         footer:
           "Sie erhalten diese E-Mail, weil Ihr Kind Ihre Adresse bei GreenMatch angegeben hat. Wenn Sie das nicht erwartet haben, können Sie sie ignorieren.",
       }),
     });
   }
 
-  return { link, emailMasked: email ? maskEmail(email) : null };
+  return { link, emailMasked: email ? maskEmail(email) : null, emailSent, accountCreated };
+}
+
+/**
+ * Erzeugt den Link, den die Eltern per E-Mail erhalten:
+ *  - neue E-Mail-Adresse  -> Konto wird angelegt (Rolle "guardian" in den Metadaten) + Einmal-Anmeldelink
+ *  - vorhandenes Konto    -> Einmal-Anmeldelink (Magic Link)
+ *  - nicht möglich        -> normaler Einladungslink (Eltern registrieren sich selbst)
+ * Der Einladungs-Token steht zusätzlich in den Metadaten, falls die Weiterleitung auf die Einladungsseite
+ * (Redirect-Liste in Supabase) nicht klappt: die Eltern-Seite verknüpft dann trotzdem.
+ */
+async function createGuardianAccountLink(
+  email: string,
+  inviteUrl: string,
+  token: string,
+): Promise<{ url: string; created: boolean }> {
+  try {
+    let created = true;
+    let res = await supabaseAdmin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: { redirectTo: inviteUrl, data: { signup_role: "guardian", guardian_invite: token } },
+    });
+    if (res.error) {
+      // Bereits registriert -> Einmal-Anmeldelink für das vorhandene Konto
+      created = false;
+      res = await supabaseAdmin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: { redirectTo: inviteUrl },
+      });
+    }
+    const actionLink = res.data?.properties?.action_link;
+    if (actionLink) return { url: actionLink, created };
+    if (res.error) console.error("[Eltern-Konto] generateLink fehlgeschlagen:", res.error.message);
+  } catch (e) {
+    console.error("[Eltern-Konto] Konto/Anmeldelink konnte nicht erzeugt werden:", e);
+  }
+  return { url: inviteUrl, created: false };
 }
 
 export type InviteLookup =
