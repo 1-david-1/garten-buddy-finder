@@ -9,6 +9,7 @@ import {
   ScrollText,
   Search,
   Settings as SettingsIcon,
+  Activity,
   Flag,
   ShieldCheck,
   ShieldOff,
@@ -35,6 +36,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { YouthVerificationAdmin } from "@/components/dashboard/youth-verification-admin";
 import { ReportsAdmin } from "@/components/dashboard/reports-admin";
+import { SystemStatusAdmin } from "@/components/dashboard/system-status-admin";
 import { IdentityVerificationAdmin } from "@/components/dashboard/identity-verification-admin";
 import {
   Select,
@@ -53,7 +55,6 @@ import {
 } from "@/components/ui/table";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
 import { useI18n } from "@/lib/i18n";
-import { getAdminAttentionCounts } from "@/lib/admin-attention.functions";
 import {
   adjustTrustScore,
   getAdminAuditLog,
@@ -159,19 +160,6 @@ export function AdminDashboard() {
   const getOverviewFn = useServerFn(getAdminOverview);
   const overviewQ = useQuery({ queryKey: ["admin-overview"], queryFn: () => getOverviewFn() });
 
-  // ---- Handlungsbedarf (Badges an den Tabs + Karte in der Übersicht) ----
-  const getAttentionFn = useServerFn(getAdminAttentionCounts);
-  const attentionQ = useQuery({
-    queryKey: ["admin-attention"],
-    queryFn: () => getAttentionFn(),
-    refetchInterval: 60_000,
-  });
-  const openReports = attentionQ.data?.openReports ?? 0;
-  const urgentReports = attentionQ.data?.urgentReports ?? 0;
-  const pendingIdentity = attentionQ.data?.pendingIdentity ?? 0;
-  const pendingYouth = attentionQ.data?.pendingYouth ?? 0;
-  const pendingVerifications = pendingIdentity + pendingYouth;
-
   const updateSettingFn = useServerFn(updateAdminSetting);
   const quickSettingMutation = useMutation({
     mutationFn: (input: { key: string; value: boolean }) => updateSettingFn({ data: input }),
@@ -192,11 +180,7 @@ export function AdminDashboard() {
   const setVerifiedFn = useServerFn(setUserVerified);
   const verifyMutation = useMutation({
     mutationFn: (input: { userId: string; verified: boolean }) => setVerifiedFn({ data: input }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-attention"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-identity-verifications"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-users"] }),
   });
 
   const adjustTrustFn = useServerFn(adjustTrustScore);
@@ -294,21 +278,14 @@ export function AdminDashboard() {
           <TabsTrigger value="youth" className="gap-1.5">
             <ShieldCheck className="size-4" />
             Verifizierung
-            {pendingVerifications > 0 && (
-              <Badge className="px-1.5 py-0 text-[10px]">{pendingVerifications}</Badge>
-            )}
           </TabsTrigger>
           <TabsTrigger value="reports" className="gap-1.5">
             <Flag className="size-3.5" />
             Meldungen
-            {openReports > 0 && (
-              <Badge
-                variant={urgentReports > 0 ? "destructive" : "default"}
-                className="px-1.5 py-0 text-[10px]"
-              >
-                {openReports}
-              </Badge>
-            )}
+          </TabsTrigger>
+          <TabsTrigger value="system" className="gap-1.5">
+            <Activity className="size-3.5" />
+            Systemstatus
           </TabsTrigger>
           <TabsTrigger value="audit" className="gap-1.5">
             <ScrollText className="size-3.5" />
@@ -331,59 +308,6 @@ export function AdminDashboard() {
             <p className="text-muted-foreground">{t("common.loading")}</p>
           ) : (
             <>
-              <Card className="border-glass-border bg-glass backdrop-blur">
-                <CardHeader className="pb-2">
-                  <CardTitle className="font-brand text-lg">{t("admin.attention.title")}</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {openReports + pendingVerifications === 0
-                      ? t("admin.attention.nothing")
-                      : t("admin.attention.sub")}
-                  </p>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setTab("reports")}
-                    className="flex items-center justify-between rounded-xl border border-glass-border p-3 text-left transition hover:border-primary/50"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Flag
-                        className={`size-4 ${urgentReports > 0 ? "text-destructive" : "text-primary"}`}
-                      />
-                      <div>
-                        <p className="text-sm">{t("admin.attention.reports")}</p>
-                        {urgentReports > 0 && (
-                          <p className="text-xs text-destructive">
-                            {urgentReports} {t("admin.attention.urgent")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-2xl font-semibold">
-                      {attentionQ.isLoading ? "–" : openReports}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTab("youth")}
-                    className="flex items-center justify-between rounded-xl border border-glass-border p-3 text-left transition hover:border-primary/50"
-                  >
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="size-4 text-primary" />
-                      <div>
-                        <p className="text-sm">{t("admin.attention.verifications")}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {pendingIdentity} Ausweis · {pendingYouth} Jugend
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-2xl font-semibold">
-                      {attentionQ.isLoading ? "–" : pendingVerifications}
-                    </span>
-                  </button>
-                </CardContent>
-              </Card>
-
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card className="border-glass-border bg-glass backdrop-blur">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -987,6 +911,10 @@ export function AdminDashboard() {
 
         <TabsContent value="reports" className="mt-6">
           <ReportsAdmin />
+        </TabsContent>
+
+        <TabsContent value="system" className="mt-6">
+          <SystemStatusAdmin />
         </TabsContent>
 
         <TabsContent value="audit" className="mt-6">

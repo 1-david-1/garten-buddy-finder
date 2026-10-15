@@ -57,6 +57,7 @@ import {
   setVacationMode,
   submitTaxId,
 } from "@/lib/helper-dashboard.functions";
+import { SafetyActions } from "@/components/safety-actions";
 import { SafetyAbortButton } from "@/components/safety-abort-button";
 import { cancelGig } from "@/lib/gigs.functions";
 import { respondToBooking } from "@/lib/service-listings.functions";
@@ -1120,6 +1121,15 @@ export function HelperDashboard() {
                     }}
                   />
                 )}
+
+                <div className="mt-6 space-y-2">
+                  <p className="text-xs text-muted-foreground">Sicherheit: Auftraggeber</p>
+                  <SafetyActions
+                    userId={selectedGig.customerId}
+                    userName={selectedGig.customerName}
+                    gigId={selectedGig.id}
+                  />
+                </div>
 
                 {(selectedGig.status === "assigned" || selectedGig.status === "in_progress") && (
                   <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
