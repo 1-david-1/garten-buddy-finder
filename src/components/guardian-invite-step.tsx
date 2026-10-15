@@ -60,9 +60,19 @@ export function GuardianInviteStep({
       if (withoutEmail) {
         setLink(res.link);
         toast.success("Link erstellt. Gib ihn jetzt an deine Eltern weiter.");
+      } else if (!res.emailSent) {
+        // E-Mail-Versand nicht eingerichtet oder fehlgeschlagen: Eltern bekommen nichts - Link zum Weitergeben zeigen.
+        setLink(res.link);
+        toast.warning(
+          "Die E-Mail konnte nicht versendet werden. Gib deinen Eltern stattdessen den Link unten weiter.",
+        );
       } else {
         setLink(null);
-        toast.success(`Einverständniserklärung und Einladung gesendet an ${res.emailMasked}.`);
+        toast.success(
+          res.accountCreated
+            ? `Wir haben ein Eltern-Konto für ${res.emailMasked} angelegt und die Einladung gesendet.`
+            : `Einverständniserklärung und Einladung gesendet an ${res.emailMasked}.`,
+        );
       }
       onChanged();
     },
