@@ -8,57 +8,6 @@ export type Database = {
   };
   public: {
     Tables: {
-      admin_audit_log: {
-        Row: {
-          action: string;
-          admin_id: string;
-          created_at: string;
-          id: string;
-          metadata: Json | null;
-          target_id: string | null;
-          target_type: string | null;
-        };
-        Insert: {
-          action: string;
-          admin_id: string;
-          created_at?: string;
-          id?: string;
-          metadata?: Json | null;
-          target_id?: string | null;
-          target_type?: string | null;
-        };
-        Update: {
-          action?: string;
-          admin_id?: string;
-          created_at?: string;
-          id?: string;
-          metadata?: Json | null;
-          target_id?: string | null;
-          target_type?: string | null;
-        };
-        Relationships: [];
-      };
-      admin_settings: {
-        Row: {
-          description: string | null;
-          key: string;
-          updated_at: string;
-          value: Json;
-        };
-        Insert: {
-          description?: string | null;
-          key: string;
-          updated_at?: string;
-          value: Json;
-        };
-        Update: {
-          description?: string | null;
-          key?: string;
-          updated_at?: string;
-          value?: Json;
-        };
-        Relationships: [];
-      };
       earnings_tracker: {
         Row: {
           gross_cents: number;
@@ -804,15 +753,6 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      log_admin_action: {
-        Args: {
-          _action: string;
-          _metadata?: Json | null;
-          _target_id?: string | null;
-          _target_type?: string | null;
-        };
-        Returns: undefined;
-      };
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"];
@@ -823,6 +763,7 @@ export type Database = {
       is_helper: { Args: { _user_id: string }; Returns: boolean };
       is_suspended: { Args: { _user_id: string }; Returns: boolean };
       is_verified: { Args: { _user_id: string }; Returns: boolean };
+      verification_required: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_restricted: { Args: { _user_id: string; _scope: string }; Returns: boolean };
       users_blocked: { Args: { _a: string; _b: string }; Returns: boolean };
       has_guardian_consent: { Args: { _user_id: string }; Returns: boolean };
@@ -954,7 +895,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["customer", "helper_youth", "helper_adult", "helper_pro", "admin"],
+      app_role: ["customer", "helper_youth", "helper_adult", "helper_pro"],
       escrow_state: ["pending", "held", "releasing", "paid_out", "disputed"],
       gig_status: [
         "draft",
