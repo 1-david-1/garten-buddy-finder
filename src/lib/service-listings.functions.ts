@@ -222,6 +222,21 @@ export function validateListingInput(data: ServiceListingInput): string | null {
 // bleiben erlaubt. Gebote auf Aufträge sind zusätzlich per RLS-Policy gesperrt.
 // ---------------------------------------------------------------------------
 async function assertCanPublish(supabase: SupabaseClient<Database>, userId: string) {
+  // Alle Nutzer: nicht gesperrt/eingeschränkt, und - solange die Verifizierungspflicht gilt - verifiziert.
+  const { data: restricted } = await supabase.rpc("is_restricted", { _user_id: userId, _scope: "jobs" });
+  if (restricted) {
+    throw new Error("Dein Konto ist derzeit eingeschränkt. Du kannst keine Angebote veröffentlichen.");
+  }
+  const { data: required } = await supabase.rpc("verification_required");
+  if (required) {
+    const { data: verified } = await supabase.rpc("is_verified", { _user_id: userId });
+    if (!verified) {
+      throw new Error(
+        "Bitte schließe zuerst deine Verifizierung ab, bevor du Angebote veröffentlichst (Profil → Verifizierung).",
+      );
+    }
+  }
+
   const { data: isYouth } = await supabase.rpc("has_role", {
     _user_id: userId,
     _role: "helper_youth",

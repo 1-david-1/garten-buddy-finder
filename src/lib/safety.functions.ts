@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireAdminAuth } from "@/lib/admin-middleware";
-import { logAdminAction } from "@/lib/admin-audit";
 
 /**
  * Melden, Blockieren und Sperren.
@@ -102,6 +101,11 @@ export const reportUser = createServerFn({ method: "POST" })
       .single();
     if (error || !report) throw error ?? new Error("report_failed");
 
+    // Die Meldung ist gespeichert. Protokoll und automatische Schutzmaßnahmen laufen danach; scheitern
+    // sie (z. B. Server-Konfiguration), bekommt die meldende Person trotzdem eine Bestätigung - der
+    // Fehler wird protokolliert und die Meldung bleibt für das Team sichtbar (Status "open", schwer).
+    let escalated = false;
+    try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
       .from("user_report_events")
@@ -110,7 +114,11 @@ export const reportUser = createServerFn({ method: "POST" })
     // Schwere Meldung: beteiligte Jugendliche automatisch pausieren, Eltern informieren, eskalieren.
     if (severe) {
       const { pauseChildrenAndNotifyGuardians } = await import("@/lib/server/guardian.server");
-      const candidates = new Set<string>([userId, data.reportedUserId]);
+      // Pausiert werden: die gemeldete Person (falls minderjährig), die/der minderjährige Helfer/in des
+      // gemeldeten Auftrags und das Kind, für das Eltern melden. Ein Kind, das selbst meldet, wird nicht
+      // pauschal pausiert (sonst würde Melden bestraft) - stattdessen wird die gemeldete Person automatisch
+      // für dieses Kind blockiert.
+      const candidates = new Set<string>([data.reportedUserId]);
       if (data.onBehalfOfChildId) candidates.add(data.onBehalfOfChildId);
       if (data.gigId) {
         const { data: gig } = await supabaseAdmin
@@ -127,6 +135,17 @@ export const reportUser = createServerFn({ method: "POST" })
         .in("user_id", [...candidates]);
       const youthIds = (youthRoles ?? []).map((r) => r.user_id);
 
+      const { data: reporterRoles } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.onBehalfOfChildId ?? userId);
+      if ((reporterRoles ?? []).some((r) => r.role === "helper_youth")) {
+        const { error: blockError } = await supabaseAdmin
+          .from("user_blocks")
+          .insert({ blocker_id: data.onBehalfOfChildId ?? userId, blocked_id: data.reportedUserId });
+        if (blockError && blockError.code !== "23505") console.error("[Meldung] Auto-Blockierung fehlgeschlagen:", blockError);
+      }
+
       const label = REPORT_REASONS.find((r) => r.value === data.reason)?.label ?? data.reason;
       const paused = await pauseChildrenAndNotifyGuardians(youthIds, label);
 
@@ -141,7 +160,12 @@ export const reportUser = createServerFn({ method: "POST" })
             : "Automatisch eskaliert.",
       });
     }
-    return { ok: true as const, escalated: severe };
+      escalated = severe;
+    } catch (e) {
+      console.error("[Meldung] Nachbearbeitung fehlgeschlagen (Meldung selbst ist gespeichert):", e);
+    }
+
+    return { ok: true as const, escalated };
   });
 
 // ---- Blockieren ------------------------------------------------------------
@@ -170,8 +194,8 @@ export const blockUser = createServerFn({ method: "POST" })
       if (data.block) {
         const { error } = await supabaseAdmin
           .from("user_blocks")
-          .upsert({ blocker_id: blockerId, blocked_id: data.userId }, { onConflict: "blocker_id,blocked_id" });
-        if (error) throw error;
+          .insert({ blocker_id: blockerId, blocked_id: data.userId });
+        if (error && error.code !== "23505") throw error;
       } else {
         const { error } = await supabaseAdmin
           .from("user_blocks")
@@ -184,10 +208,10 @@ export const blockUser = createServerFn({ method: "POST" })
     }
 
     if (data.block) {
-      const { error } = await supabase
-        .from("user_blocks")
-        .upsert({ blocker_id: userId, blocked_id: data.userId }, { onConflict: "blocker_id,blocked_id" });
-      if (error) throw error;
+      // Bewusst INSERT statt UPSERT: ein UPSERT braucht das UPDATE-Recht, das Nutzer auf
+      // user_blocks nicht haben ("permission denied"). Ein Duplikat (23505) ist kein Fehler.
+      const { error } = await supabase.from("user_blocks").insert({ blocker_id: userId, blocked_id: data.userId });
+      if (error && error.code !== "23505") throw error;
     } else {
       const { error } = await supabase
         .from("user_blocks")
@@ -357,10 +381,6 @@ export const resolveReport = createServerFn({ method: "POST" })
       action: data.status,
       note: [data.restriction ? `Sperre: ${data.restriction}` : null, data.note].filter(Boolean).join(" · ") || null,
     });
-    await logAdminAction(context.supabase, `report.${data.status}`, "report", data.reportId, {
-      reported_user_id: report.reported_user_id,
-      restriction: data.restriction ?? null,
-    });
     return { ok: true as const };
   });
 
@@ -379,7 +399,6 @@ export const setRestriction = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { applyRestriction } = await import("@/lib/server/safety.server");
     await applyRestriction({ userId: data.userId, kind: data.kind, reason: data.reason, actorId: context.userId });
-    await logAdminAction(context.supabase, "restriction.set", "user", data.userId, { kind: data.kind });
     return { ok: true as const };
   });
 
@@ -395,7 +414,6 @@ export const liftRestriction = createServerFn({ method: "POST" })
       .eq("id", data.restrictionId)
       .is("lifted_at", null);
     if (error) throw error;
-    await logAdminAction(context.supabase, "restriction.lift", "restriction", data.restrictionId);
     return { ok: true as const };
   });
 
@@ -405,7 +423,7 @@ export const setReverificationRequired = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ userId: z.string().uuid(), required: z.boolean() }).parse(input),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("profiles")
@@ -416,12 +434,6 @@ export const setReverificationRequired = createServerFn({ method: "POST" })
       .from("verification_results")
       .update({ status: data.required ? "reverification_required" : "verified" })
       .eq("user_id", data.userId);
-    await logAdminAction(
-      context.supabase,
-      data.required ? "user.reverification.require" : "user.reverification.clear",
-      "user",
-      data.userId,
-    );
     return { ok: true as const };
   });
 
@@ -473,18 +485,12 @@ export const setUserSuspended = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ userId: z.string().uuid(), suspended: z.boolean() }).parse(input),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ suspended_at: data.suspended ? new Date().toISOString() : null })
       .eq("id", data.userId);
     if (error) throw error;
-    await logAdminAction(
-      context.supabase,
-      data.suspended ? "user.suspend" : "user.unsuspend",
-      "user",
-      data.userId,
-    );
     return { ok: true as const };
   });
