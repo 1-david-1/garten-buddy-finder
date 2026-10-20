@@ -117,7 +117,10 @@ export async function createGuardianInvite(
       to: email,
       subject: `${childName} möchte bei GreenMatch Gartenhilfe anbieten – Ihre Zustimmung wird benötigt`,
       html: emailTemplate({
+        badge: "Kinderschutz & Registrierung",
         heading: "Einverständniserklärung und Eltern-Konto",
+        greeting: "Liebe Erziehungsberechtigte,",
+        previewText: `${childName} möchte bei GreenMatch Gartenhilfe anbieten – Ihre Zustimmung wird benötigt.`,
         bodyLines: [
           `<strong>${name}</strong> möchte bei GreenMatch leichte Gartenarbeiten für Nachbarn übernehmen. Das ist ab 13 Jahren nur mit Ihrer Zustimmung möglich.`,
           action.created
@@ -126,7 +129,7 @@ export async function createGuardianInvite(
           "<strong>Was jetzt zu tun ist:</strong><br/>1. Eltern-Konto öffnen (kostenlos) – über den Button unten.<br/>2. Einverständniserklärung ausdrucken, unterschreiben und gemeinsam mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Danach prüft unser Team die Unterlagen.",
           "<strong>Ihr Eltern-Konto ist Pflicht</strong> – es dient der Sicherheit Ihres Kindes: Dort sehen Sie alle Auftragsdaten (Ort, Zeit, Auftraggeber, Art der Tätigkeit), geben jeden einzelnen Auftrag frei und können das Konto jederzeit pausieren sowie Auftraggeber melden oder blockieren.",
           "Für Jugendliche gelten höchstens 2 Stunden pro Tag, nur zwischen 08:00 und 18:00 Uhr, nicht während des Schulunterrichts und nur leichte, ungefährliche Tätigkeiten.",
-          `Die Einverständniserklärung zum Ausdrucken: <a href="${getSiteUrl()}/einverstaendniserklaerung">${getSiteUrl()}/einverstaendniserklaerung</a>`,
+          `Die Einverständniserklärung zum Ausdrucken: <a href="${getSiteUrl()}/einverstaendniserklaerung" style="color:#059669;font-weight:600;">${getSiteUrl()}/einverstaendniserklaerung</a>`,
           `Der Link ist ${INVITE_VALID_DAYS} Tage gültig. Wenn Sie nicht zustimmen möchten, ignorieren Sie diese E-Mail einfach.`,
         ],
         ctaLabel: action.created ? "Eltern-Konto öffnen" : "Eltern-Konto anlegen oder anmelden",

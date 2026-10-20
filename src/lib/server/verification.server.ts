@@ -466,39 +466,35 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
   const approveUrl = `${getSiteUrl()}/eltern?request=${created.id}&aktion=freigeben`;
   const declineUrl = `${getSiteUrl()}/eltern?request=${created.id}&aktion=ablehnen`;
   const reportUrl = `${getSiteUrl()}/eltern?request=${created.id}&aktion=melden`;
-  const button = (href: string, label: string, primary: boolean) =>
-    `<a href="${href}" style="display:inline-block;margin:4px 8px 4px 0;padding:12px 20px;border-radius:8px;font-weight:600;text-decoration:none;${
-      primary ? "background:#16a34a;color:#ffffff;" : "background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;"
-    }">${label}</a>`;
   const verificationText = details.customerVerified
-    ? "Identität geprüft (Verifizierung abgeschlossen)"
+    ? "Identität geprüft ✓"
     : "nicht verifiziert";
 
   const html = emailTemplate({
+    badge: "Jugendschutz & Auftragsfreigabe",
     heading: `Zustimmung zu einem Gartenauftrag für ${childName} erforderlich`,
+    greeting: "Liebe Erziehungsberechtigte,",
+    previewText: `Auftragsfreigabe für ${childName}: ${details.activity} (${details.dateLabel})`,
     bodyLines: [
-      `Für <strong>${child}</strong> liegt folgende Auftragsanfrage vor:`,
-      [
-        `<strong>Auftraggeber:</strong> ${e(details.customerName)}`,
-        `<strong>Verifizierungsstatus:</strong> ${e(verificationText)}`,
-        `<strong>Tätigkeit:</strong> ${e(details.activity)} – ${e(details.title)}${details.description ? ` (${e(details.description)})` : ""}`,
-        `<strong>Ort:</strong> ${e(details.location)}`,
-        `<strong>Datum:</strong> ${e(details.dateLabel)}`,
-        `<strong>Beginn:</strong> ${e(details.startLabel)}`,
-        `<strong>Ende:</strong> ${e(details.endLabel)}`,
-        `<strong>Dauer:</strong> ${e(details.durationLabel)}`,
-        `<strong>Vergütung:</strong> ${details.priceCents > 0 ? formatEuro(details.priceCents) : "nicht angegeben"}`,
-        `<strong>Besondere Hinweise oder Risiken:</strong> ${e(details.risks)}`,
-        `<strong>Verbotene Tätigkeiten:</strong> ${e(FORBIDDEN_ACTIVITIES_NOTE)}`,
-      ].join("<br/>"),
-      `Bitte prüfen Sie diese Angaben gemeinsam mit ${child}.`,
-      `Der Auftrag wird nur angenommen, wenn Sie ihn <strong>ausdrücklich freigeben</strong>. Keine Antwort gilt als Ablehnung beziehungsweise nicht als Zustimmung. Die Anfrage ist ${JOB_APPROVAL_VALID_DAYS} Tage gültig.`,
-      `${button(approveUrl, "Auftrag freigeben", true)}${button(declineUrl, "Auftrag ablehnen", false)}<br/><span style="font-size:12px;">Die Freigabe erfolgt in Ihrem Eltern-Konto (Anmeldung nötig); erst der dortige Klick auf „Auftrag freigeben“ gilt als Zustimmung.</span>`,
-      `Wenn sich Tätigkeit, Ort, Zeit, Auftraggeber oder sonstige wesentliche Bedingungen ändern, ist eine erneute Zustimmung erforderlich. ${child} darf den Auftrag bei Unsicherheit oder Gefahr jederzeit abbrechen (Notfall- und Abbruchfunktion in der App). Bei akuter Gefahr: Notruf 112.`,
-      `Etwas stimmt nicht? <a href="${reportUrl}">Auftrag melden</a>`,
+      `Für <strong>${child}</strong> liegt folgende Auftragsanfrage vor. Als Erziehungsberechtigte/r bitten wir Sie, die Angaben gemeinsam mit ${child} zu prüfen:`,
     ],
-    footer:
-      "Sie erhalten diese E-Mail, weil Ihr Kind bei GreenMatch mit Ihrem Eltern-Konto verknüpft ist. Im Eltern-Konto können Sie außerdem Auftraggeber melden oder blockieren, das Konto Ihres Kindes pausieren und die Verknüpfung beenden.",
+    infoTable: [
+      { label: "Tätigkeit", value: `${e(details.activity)} – ${e(details.title)}${details.description ? ` (${e(details.description)})` : ""}` },
+      { label: "Auftraggeber", value: `${e(details.customerName)} (${e(verificationText)})` },
+      { label: "Ort", value: e(details.location) },
+      { label: "Termin & Zeit", value: `${e(details.dateLabel)}, ${e(details.startLabel)} – ${e(details.endLabel)} (ca. ${e(details.durationLabel)})` },
+      { label: "Vergütung", value: details.priceCents > 0 ? formatEuro(details.priceCents) : "nicht angegeben" },
+      { label: "Besondere Risiken", value: e(details.risks) },
+      { label: "Verbotene Tätigkeiten", value: e(FORBIDDEN_ACTIVITIES_NOTE) },
+    ],
+    ctaLabel: "Auftrag im Eltern-Konto freigeben",
+    ctaUrl: approveUrl,
+    secondaryCta: {
+      label: "Auftrag ablehnen",
+      url: declineUrl,
+      variant: "danger",
+    },
+    footer: `Der Auftrag wird nur angenommen, wenn Sie ihn ausdrücklich freigeben (Gültig für ${JOB_APPROVAL_VALID_DAYS} Tage). Etwas stimmt nicht? <a href="${reportUrl}" style="color:#059669;text-decoration:none;">Auftrag melden</a>.`,
   });
   const subject = `Zustimmung zu einem Gartenauftrag für ${childName} erforderlich`;
   await Promise.all(recipients.map((to) => sendEmail({ to, subject, html })));
