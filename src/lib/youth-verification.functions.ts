@@ -96,6 +96,16 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
       status: "pending",
       documents,
     });
+    // Eine Datenbank, auf der die Migration für Jugend-Unterlagen noch nicht
+    // ausgeführt wurde, kennt diesen Wert in der CHECK-Constraint nicht.
+    // Der Fehlercode bleibt für die Oberfläche absichtlich stabil und wird
+    // dort als konkrete Einrichtungsanweisung angezeigt.
+    if (
+      error?.code === "23514" &&
+      error.message.includes("verification_requests_kind_check")
+    ) {
+      throw new Error("verification_schema_outdated");
+    }
     if (error) throw error;
     return { ok: true as const };
   });
