@@ -74,12 +74,17 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
       console.error("[Jugend-Unterlagen]", e);
       const text = m.includes("already_pending")
         ? "Es liegt bereits eine Einreichung zur Prüfung vor."
+        : m.includes("verification_schema_outdated")
+          ? "Die Verifizierungsfunktion wird gerade eingerichtet. Bitte informiere den Betreiber."
         : m.includes("server_misconfigured")
           ? "Der Server ist noch nicht vollständig eingerichtet (Service-Schlüssel fehlt). Bitte informiere den Betreiber."
           : m.startsWith("Upload") || m.startsWith("Bitte")
             ? m
             : "Das hat nicht geklappt. Bitte versuche es später noch einmal.";
-      toast.error(text, m && text !== m ? { description: m.slice(0, 160) } : undefined);
+      toast.error(
+        text,
+        m && text !== m ? { description: m.slice(0, 160) } : undefined,
+      );
     },
   });
 
