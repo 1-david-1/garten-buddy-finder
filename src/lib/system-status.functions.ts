@@ -43,7 +43,9 @@ export const getSystemStatus = createServerFn({ method: "GET" })
       key: "email",
       label: "E-Mail-Versand (Resend)",
       ok: mail.resendConfigured,
-      detail: mail.resendConfigured ? `Absender: ${mail.fromAddress}` : "RESEND_API_KEY fehlt - es werden KEINE E-Mails verschickt (Einladungen, Freigaben, Warnungen).",
+      detail: mail.resendConfigured
+        ? `Absender: ${mail.fromAddress}${mail.replyToAddress ? ` | Antworten an: ${mail.replyToAddress}` : ""}`
+        : "RESEND_API_KEY fehlt - es werden KEINE E-Mails verschickt (Einladungen, Freigaben, Warnungen).",
       fix: mail.resendConfigured ? undefined : "RESEND_API_KEY (und EMAIL_FROM_ADDRESS mit verifizierter Absender-Domain) setzen.",
     });
     checks.push({
