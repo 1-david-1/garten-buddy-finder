@@ -84,7 +84,7 @@ export const respondToBookingFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
     z.object({
-      bookingId: z.string(),
+      bookingId: z.string().uuid(),
       action: z.enum(["accept", "decline"]),
     }),
   )
@@ -108,7 +108,7 @@ export const respondToBookingFn = createServerFn({ method: "POST" })
 
 export const markNotificationReadFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(z.object({ notificationId: z.string() }))
+  .validator(z.object({ notificationId: z.string().uuid() }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     await supabase
