@@ -174,22 +174,14 @@ export const getAdminUsers = createServerFn({ method: "GET" })
       supabase.from("user_roles").select("user_id, role"),
       supabase
         .from("verification_requests")
-        .select("user_id, kind")
-        .eq("status", "pending"),
+        .select("user_id, kind, guardian_email, documents, created_at")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false }),
     ]);
 
     if (profilesRes.error) throw profilesRes.error;
     if (rolesRes.error) throw rolesRes.error;
     if (pendingRes.error) throw pendingRes.error;
-
-    // Offene Anfragen je Nutzer: "identity" wartet auf das Team, "guardian_consent"
-    // "youth_documents" wartet ebenfalls auf das Team (Tab "Jugend-Prüfung").
-    const pendingByUser = new Map<string, "identity" | "youth_documents">();
-    for (const r of pendingRes.data ?? []) {
-      if (r.kind === "identity" || r.kind === "youth_documents") {
-        pendingByUser.set(r.user_id, r.kind);
-      }
-    }
 
     const rolesByUser = new Map<string, string[]>();
     for (const r of rolesRes.data ?? []) {
@@ -198,20 +190,152 @@ export const getAdminUsers = createServerFn({ method: "GET" })
       rolesByUser.set(r.user_id, list);
     }
 
+    // Kontakt- und Altersdaten Minderjähriger sind absichtlich nicht öffentlich.
+    // Sie werden hier ausschließlich nach der Admin-Prüfung mit dem Service-Client
+    // geladen und nur an den geschützten Admin-Bereich zurückgegeben.
+    const youthIds = (profilesRes.data ?? [])
+      .filter((p) => (rolesByUser.get(p.id) ?? []).includes("helper_youth"))
+      .map((p) => p.id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [privateRes, linksRes] = await Promise.all([
+      youthIds.length > 0
+        ? supabaseAdmin
+            .from("profile_private")
+            .select("id, birthdate, guardian_email")
+            .in("id", youthIds)
+        : Promise.resolve({
+            data: [] as { id: string; birthdate: string | null; guardian_email: string | null }[],
+            error: null,
+          }),
+      youthIds.length > 0
+        ? supabaseAdmin
+            .from("guardian_links")
+            .select("child_id, guardian_user_id, invited_email, status, created_at")
+            .in("child_id", youthIds)
+            .in("status", ["invited", "active"])
+            .order("created_at", { ascending: false })
+        : Promise.resolve({
+            data: [] as {
+              child_id: string;
+              guardian_user_id: string | null;
+              invited_email: string | null;
+              status: "invited" | "active";
+              created_at: string;
+            }[],
+            error: null,
+          }),
+    ]);
+    if (privateRes.error) throw privateRes.error;
+    if (linksRes.error) throw linksRes.error;
+
+    const privateByUser = new Map((privateRes.data ?? []).map((p) => [p.id, p]));
+    type GuardianLink = {
+      child_id: string;
+      guardian_user_id: string | null;
+      invited_email: string | null;
+      status: string;
+    };
+    const linkByChild = new Map<string, GuardianLink>();
+    for (const link of linksRes.data ?? []) {
+      if (!linkByChild.has(link.child_id)) linkByChild.set(link.child_id, link);
+    }
+
+    const guardianIds = [...new Set((linksRes.data ?? []).flatMap((link) => (link.guardian_user_id ? [link.guardian_user_id] : [])))];
+    const guardianProfilesRes = guardianIds.length > 0
+      ? await supabaseAdmin.from("profiles").select("id, display_name").in("id", guardianIds)
+      : { data: [] as { id: string; display_name: string | null }[], error: null };
+    if (guardianProfilesRes.error) throw guardianProfilesRes.error;
+    const guardianNameById = new Map((guardianProfilesRes.data ?? []).map((p) => [p.id, p.display_name]));
+
+    // Die Login-Adressen liegen ausschließlich in auth.users. Sie werden nur für
+    // Jugendkonten und zugehörige Elternkonten in den Admin-Abgleich geladen.
+    const relevantAuthIds = [...new Set([...youthIds, ...guardianIds])];
+    const authUsersRes = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (authUsersRes.error) throw authUsersRes.error;
+    const authEmailById = new Map(
+      (authUsersRes.data.users ?? []).map((user) => [user.id, user.email ?? null]),
+    );
+    const missingAuthIds = relevantAuthIds.filter((id) => !authEmailById.has(id));
+    const missingAuthUsers = await Promise.all(
+      missingAuthIds.map(async (id) => ({ id, ...(await supabaseAdmin.auth.admin.getUserById(id)) })),
+    );
+    for (const result of missingAuthUsers) {
+      if (result.error) throw result.error;
+      authEmailById.set(result.id, result.data.user?.email ?? null);
+    }
+
+    type YouthRequestSnapshot = {
+      guardianName?: string;
+      guardianEmail?: string;
+      childBirthdate?: string;
+      guardianAccount?: { name: string | null; email: string | null } | null;
+    };
+    const pendingByUser = new Map<string, "identity" | "youth_documents">();
+    const youthRequestByUser = new Map<
+      string,
+      { guardianEmail: string | null; snapshot: YouthRequestSnapshot }
+    >();
+    for (const r of pendingRes.data ?? []) {
+      if (r.kind !== "identity" && r.kind !== "youth_documents") continue;
+      if (!pendingByUser.has(r.user_id)) pendingByUser.set(r.user_id, r.kind);
+      if (r.kind === "youth_documents" && !youthRequestByUser.has(r.user_id)) {
+        youthRequestByUser.set(r.user_id, {
+          guardianEmail: r.guardian_email,
+          snapshot: (r.documents ?? {}) as YouthRequestSnapshot,
+        });
+      }
+    }
+
     return {
-      users: (profilesRes.data ?? []).map((p) => ({
-        id: p.id,
-        displayName: p.display_name,
-        city: p.city,
-        trustScore: p.trust_score,
-        verifiedAt: p.verified_at,
-        verificationMethod: p.verification_method ?? null,
-        pendingVerification: pendingByUser.get(p.id) ?? null,
-        businessName: p.business_name,
-        ustId: p.ust_id,
-        createdAt: p.created_at,
-        roles: rolesByUser.get(p.id) ?? [],
-      })),
+      users: (profilesRes.data ?? []).map((p) => {
+        const roles = rolesByUser.get(p.id) ?? [];
+        const isYouth = roles.includes("helper_youth");
+        const privateProfile = privateByUser.get(p.id);
+        const link = linkByChild.get(p.id);
+        const request = youthRequestByUser.get(p.id);
+        const snapshot = request?.snapshot;
+
+        return {
+          id: p.id,
+          displayName: p.display_name,
+          city: p.city,
+          trustScore: p.trust_score,
+          verifiedAt: p.verified_at,
+          verificationMethod: p.verification_method ?? null,
+          pendingVerification: pendingByUser.get(p.id) ?? null,
+          businessName: p.business_name,
+          ustId: p.ust_id,
+          createdAt: p.created_at,
+          roles,
+          youthDetails: isYouth
+            ? {
+                childEmail: authEmailById.get(p.id) ?? null,
+                birthdate: snapshot?.childBirthdate ?? privateProfile?.birthdate ?? null,
+                guardianName: snapshot?.guardianName ?? null,
+                guardianEmail:
+                  request?.guardianEmail ??
+                  snapshot?.guardianEmail ??
+                  privateProfile?.guardian_email ??
+                  link?.invited_email ??
+                  null,
+                guardianAccountName:
+                  (link?.guardian_user_id
+                    ? guardianNameById.get(link.guardian_user_id)?.trim()
+                    : undefined) ??
+                  snapshot?.guardianAccount?.name ??
+                  null,
+                guardianAccountEmail:
+                  (link?.guardian_user_id
+                    ? authEmailById.get(link.guardian_user_id)
+                    : undefined) ??
+                  link?.invited_email ??
+                  snapshot?.guardianAccount?.email ??
+                  null,
+                guardianLinkState: link?.status ?? null,
+              }
+            : null,
+        };
+      }),
     };
   });
 
