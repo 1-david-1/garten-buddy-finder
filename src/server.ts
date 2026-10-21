@@ -44,18 +44,80 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Security-Header (Audit M5/N1)
+// ---------------------------------------------------------------------------
+
+/** Ursprung der Supabase-Instanz für die Content-Security-Policy (connect-src). */
+function supabaseOrigins(): string[] {
+  const raw =
+    (typeof process !== "undefined"
+      ? process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+      : undefined) ?? "";
+  try {
+    const url = new URL(raw);
+    const ws = url.protocol === "https:" ? "wss:" : "ws:";
+    return [url.origin, `${ws}//${url.host}`];
+  } catch {
+    // Fallback: gehostetes Supabase (*.supabase.co)
+    return ["https://*.supabase.co", "wss://*.supabase.co"];
+  }
+}
+
+function buildCsp(): string {
+  const connect = ["'self'", ...supabaseOrigins()].join(" ");
+  return [
+    "default-src 'self'",
+    // TanStack Start (SSR) setzt Inline-Skripte für die Hydration ein -> 'unsafe-inline' nötig.
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    // Bilder: eigene, Datenschutz-Uploads (Supabase Storage) und https-Quellen für Inserate-Fotos.
+    "img-src 'self' data: blob: https:",
+    `connect-src ${connect}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+/**
+ * Setzt die Standard-Sicherheitsheader. Setzt CSP_MODE=report-only in der Umgebung, wird die CSP
+ * nur gemeldet statt erzwungen (zum vorsichtigen Einführen, falls etwas blockiert wird).
+ */
+function withSecurityHeaders(response: Response): Response {
+  if (response.status === 101) return response; // WebSocket-Upgrade nicht anfassen
+  const headers = new Headers(response.headers);
+  const reportOnly = typeof process !== "undefined" && process.env.CSP_MODE === "report-only";
+  headers.set(reportOnly ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy", buildCsp());
+  headers.set("Strict-Transport-Security", "max-age=31536000");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  if (!headers.has("Referrer-Policy")) headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
+      // Nur serverseitig loggen: Details (Pfade, Stacktrace) gehören nicht zum Client.
       console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return withSecurityHeaders(
+        new Response(renderErrorPage(), {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      );
     }
   },
 };
