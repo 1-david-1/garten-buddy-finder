@@ -193,8 +193,16 @@ export function AdminDashboard() {
     const rows = usersQ.data?.users ?? [];
     const q = userSearch.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter(
-      (u) => u.displayName.toLowerCase().includes(q) || (u.city ?? "").toLowerCase().includes(q),
+    return rows.filter((u) =>
+      [
+        u.displayName,
+        u.city,
+        u.youthDetails?.childEmail,
+        u.youthDetails?.guardianName,
+        u.youthDetails?.guardianEmail,
+        u.youthDetails?.guardianAccountName,
+        u.youthDetails?.guardianAccountEmail,
+      ].some((value) => value?.toLowerCase().includes(q)),
     );
   }, [usersQ.data, userSearch]);
 
@@ -585,6 +593,7 @@ export function AdminDashboard() {
                         <TableHead className="hidden md:table-cell">
                           {t("admin.users.col.city")}
                         </TableHead>
+                        <TableHead className="min-w-56">Jugenddaten / Eltern</TableHead>
                         <TableHead>{t("admin.users.col.trust")}</TableHead>
                         <TableHead className="hidden sm:table-cell">
                           {t("admin.users.col.verified")}
@@ -621,6 +630,47 @@ export function AdminDashboard() {
                           </TableCell>
                           <TableCell className="hidden text-muted-foreground md:table-cell">
                             {u.city ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {u.youthDetails ? (
+                              <div className="space-y-1">
+                                <p className="break-all">
+                                  <span className="text-muted-foreground">Konto-E-Mail Kind: </span>
+                                  {u.youthDetails.childEmail ?? "—"}
+                                </p>
+                                <p>
+                                  <span className="text-muted-foreground">Geburtsdatum Kind: </span>
+                                  {u.youthDetails.birthdate
+                                    ? formatDate(u.youthDetails.birthdate, intlLocale)
+                                    : "—"}
+                                </p>
+                                <p>
+                                  <span className="text-muted-foreground">Elternteil (Unterlagen): </span>
+                                  {u.youthDetails.guardianName ?? "—"}
+                                </p>
+                                <p className="break-all">
+                                  <span className="text-muted-foreground">Eltern-E-Mail: </span>
+                                  {u.youthDetails.guardianEmail ?? "—"}
+                                </p>
+                                {(u.youthDetails.guardianAccountName ||
+                                  u.youthDetails.guardianAccountEmail) && (
+                                  <p className="break-all">
+                                    <span className="text-muted-foreground">Eltern-Konto: </span>
+                                    {u.youthDetails.guardianAccountName ?? "—"}
+                                    {u.youthDetails.guardianAccountEmail
+                                      ? ` (${u.youthDetails.guardianAccountEmail})`
+                                      : ""}
+                                  </p>
+                                )}
+                                {u.youthDetails.guardianLinkState && (
+                                  <p className="text-muted-foreground">
+                                    Elternkonto: {u.youthDetails.guardianLinkState === "active" ? "verknüpft" : "eingeladen"}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              "—"
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5">
