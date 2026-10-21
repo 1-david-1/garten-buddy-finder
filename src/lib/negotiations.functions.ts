@@ -2,6 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
 import {
+  counterBidSchema,
+  gigIdSchema,
+  negotiationIdSchema,
+  negotiationInputSchema,
+  parseInput,
+} from "@/lib/validation";
+import {
   PLATFORM_FEE_CUSTOMER_RATE,
   PLATFORM_FEE_HELPER_RATE,
 } from "@/lib/platform-fees";
@@ -29,8 +36,10 @@ export interface Negotiation {
  */
 export const createBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: NegotiationInput) => data)
+  .inputValidator((data: unknown) => parseInput(negotiationInputSchema, data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "create_bid", 30, 3600);
     const { supabase, userId } = context;
 
     // Prüfe ob User ein Helper ist
@@ -89,7 +98,7 @@ export const createBid = createServerFn({ method: "POST" })
     if (gig) {
       const { notifyUserByEmail } =
         await import("@/lib/server/notifications.server");
-      const { emailTemplate } = await import("@/lib/server/email.server");
+      const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
       await notifyUserByEmail({
         userId: gig.customer_id,
         category: "new_bid",
@@ -97,7 +106,7 @@ export const createBid = createServerFn({ method: "POST" })
         html: emailTemplate({
           heading: "Du hast ein neues Gebot erhalten",
           bodyLines: [
-            `${helperProfile?.display_name ?? "Ein Helfer"} hat ${(data.bidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} für deinen Auftrag „${gig.title}“ geboten.`,
+            `${escapeHtml(helperProfile?.display_name ?? "Ein Helfer")} hat ${(data.bidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} für deinen Auftrag „${escapeHtml(gig.title)}“ geboten.`,
           ],
           ctaLabel: "Gebot ansehen",
           ctaPath: "/my-gigs",
@@ -118,8 +127,10 @@ export const createBid = createServerFn({ method: "POST" })
  */
 export const counterBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { negotiationId: string; counterBidCents: number }) => data)
+  .inputValidator((data: unknown) => parseInput(counterBidSchema, data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "counter_bid", 30, 3600);
     const { supabase, userId } = context;
 
     const { data: negotiation, error } = await supabase
@@ -173,7 +184,7 @@ export const counterBid = createServerFn({ method: "POST" })
  */
 export const acceptBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { negotiationId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(negotiationIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -239,7 +250,7 @@ export const acceptBid = createServerFn({ method: "POST" })
 
     const { notifyUserByEmail } =
       await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
     await notifyUserByEmail({
       userId: negotiation.helper_id,
       category: "bid_updates",
@@ -247,7 +258,7 @@ export const acceptBid = createServerFn({ method: "POST" })
       html: emailTemplate({
         heading: "Dein Gebot wurde angenommen",
         bodyLines: [
-          `Dein Gebot für „${gig.title}“ wurde angenommen. Der Auftrag ist jetzt dir zugewiesen.`,
+          `Dein Gebot für „${escapeHtml(gig.title)}“ wurde angenommen. Der Auftrag ist jetzt dir zugewiesen.`,
         ],
         ctaLabel: "Auftrag ansehen",
         ctaPath: "/gigs",
@@ -267,7 +278,7 @@ export const acceptBid = createServerFn({ method: "POST" })
  */
 export const declineBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { negotiationId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(negotiationIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -324,7 +335,7 @@ export const declineBid = createServerFn({ method: "POST" })
  */
 export const getNegotiationsForGig = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(gigIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
 

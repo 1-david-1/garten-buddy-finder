@@ -2,7 +2,16 @@ import { CUSTOMER_RULES_VERSION, GIG_SAFETY_VERSION } from "@/lib/consent-texts"
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
-import type { Database } from "@/integrations/supabase/types";
+import {
+  assignHelperSchema,
+  cancelGigSchema,
+  directBookingSchema,
+  gigIdSchema,
+  gigInputSchema,
+  gigStatusSchema,
+  parseInput,
+  proposeDateSchema,
+} from "@/lib/validation";
 
 export interface GigInput {
   title: string;
@@ -41,8 +50,10 @@ export interface Gig {
  */
 export const createGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: GigInput) => data)
+  .inputValidator((data: unknown) => parseInput(gigInputSchema, data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "create_gig", 20, 3600);
     const { supabase, userId } = context;
 
     // Kinderschutz: Regeln akzeptiert + Eignung der Tätigkeit bestätigt (mit Auftrags-ID und Zeitpunkt gespeichert).
@@ -113,8 +124,10 @@ export interface DirectBookingInput {
  */
 export const createDirectBookingRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: DirectBookingInput) => data)
+  .inputValidator((data: unknown) => parseInput(directBookingSchema, data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "direct_booking", 20, 3600);
     const { supabase, userId } = context;
 
     if (data.helperId === userId) {
@@ -140,7 +153,7 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
     if (error) throw error;
 
     const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
     await notifyUserByEmail({
       userId: data.helperId,
       category: "gig_updates",
@@ -148,7 +161,7 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
       html: emailTemplate({
         heading: "Neue Buchungsanfrage erhalten",
         bodyLines: [
-          `Ein Kunde möchte dich direkt für „${data.serviceType}“ buchen. Bitte bestätige oder lehne die Anfrage ab.`,
+          `Ein Kunde möchte dich direkt für „${escapeHtml(data.serviceType)}“ buchen. Bitte bestätige oder lehne die Anfrage ab.`,
         ],
         ctaLabel: "Anfrage ansehen",
         ctaPath: "/dashboard",
@@ -224,7 +237,7 @@ export const getAvailableGigs = createServerFn({ method: "GET" })
  */
 export const getGigDetails = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(gigIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
 
@@ -258,7 +271,7 @@ export const getGigDetails = createServerFn({ method: "GET" })
  */
 export const updateGigStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string; status: Database["public"]["Enums"]["gig_status"] }) => data)
+  .inputValidator((data: unknown) => parseInput(gigStatusSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -279,7 +292,7 @@ export const updateGigStatus = createServerFn({ method: "POST" })
  */
 export const proposeGigDate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string; scheduledAt: string }) => data)
+  .inputValidator((data: unknown) => parseInput(proposeDateSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -300,8 +313,10 @@ export const proposeGigDate = createServerFn({ method: "POST" })
  */
 export const assignHelperToGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string; helperId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(assignHelperSchema, data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "assign_helper", 30, 3600);
     const { supabase, userId } = context;
 
     const { data: gig, error } = await supabase
@@ -318,14 +333,14 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
     if (error) throw error;
 
     const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
     await notifyUserByEmail({
       userId: data.helperId,
       category: "gig_updates",
       subject: `Du wurdest für „${gig.title}“ eingeteilt`,
       html: emailTemplate({
         heading: "Neuer Auftrag zugewiesen",
-        bodyLines: [`Du wurdest dem Auftrag „${gig.title}“ zugewiesen.`],
+        bodyLines: [`Du wurdest dem Auftrag „${escapeHtml(gig.title)}“ zugewiesen.`],
         ctaLabel: "Auftrag ansehen",
         ctaPath: "/gigs",
       }),
@@ -340,7 +355,7 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
   });
 export const completeGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(gigIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -400,7 +415,7 @@ export const completeGig = createServerFn({ method: "POST" })
 
       // Notifications
       const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-      const { emailTemplate } = await import("@/lib/server/email.server");
+      const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
       await notifyUserByEmail({
         userId: gig.assigned_helper_id,
         category: "gig_updates",
@@ -408,7 +423,7 @@ export const completeGig = createServerFn({ method: "POST" })
         html: emailTemplate({
           heading: "Auftrag abgeschlossen",
           bodyLines: [
-            `Der Auftrag „${gig.title}“ wurde als abgeschlossen markiert. Die Auszahlung wird gemäß eurer Treuhand-Regelung verarbeitet.`,
+            `Der Auftrag „${escapeHtml(gig.title)}“ wurde als abgeschlossen markiert. Die Auszahlung wird gemäß eurer Treuhand-Regelung verarbeitet.`,
           ],
           ctaLabel: "Zum Dashboard",
           ctaPath: "/dashboard",
@@ -443,7 +458,7 @@ export interface CancelGigInput {
  */
 export const cancelGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: CancelGigInput) => data)
+  .inputValidator((data: unknown) => parseInput(cancelGigSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -488,7 +503,7 @@ export const cancelGig = createServerFn({ method: "POST" })
     const otherUserId = isCustomer ? gig.assigned_helper_id : gig.customer_id;
     if (otherUserId) {
       const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-      const { emailTemplate } = await import("@/lib/server/email.server");
+      const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
       await notifyUserByEmail({
         userId: otherUserId,
         category: "gig_updates",
@@ -496,10 +511,10 @@ export const cancelGig = createServerFn({ method: "POST" })
         html: emailTemplate({
           heading: "Ein Auftrag wurde storniert",
           bodyLines: [
-            `„${gig.title}“ (${gig.service_type}) wurde von ${
+            `„${escapeHtml(gig.title)}“ (${escapeHtml(gig.service_type)}) wurde von ${
               isCustomer ? "der Kundin/dem Kunden" : "der Helferin/dem Helfer"
             } storniert.`,
-            `Grund: ${data.reason.trim()}`,
+            `Grund: ${escapeHtml(data.reason.trim())}`,
           ],
           ctaLabel: "Details ansehen",
           ctaPath: "/dashboard",

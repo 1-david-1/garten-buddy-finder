@@ -78,7 +78,7 @@ export const decideIdentityVerification = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
     const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
 
     const { data: request } = await supabaseAdmin
@@ -173,7 +173,7 @@ export const decideIdentityVerification = createServerFn({ method: "POST" })
               "Wichtig: Die Ausweisprüfung bedeutet nicht, dass eine Person vollständig auf ihre Zuverlässigkeit oder persönliche Eignung geprüft wurde.",
             ]
           : [
-              `Leider hat die Prüfung nicht geklappt: ${data.reason}`,
+              `Leider hat die Prüfung nicht geklappt: ${escapeHtml(data.reason ?? "")}`,
               "Du kannst eine neue Kopie hochladen. Die alte Kopie wurde gelöscht.",
             ],
         ctaLabel: "Zum Profil",

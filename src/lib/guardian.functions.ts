@@ -26,6 +26,8 @@ export const inviteGuardian = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "invite_guardian", 5, 3600, "Du hast zu viele Einladungen verschickt. Bitte versuche es später erneut.");
     const { createGuardianInvite } = await import("@/lib/server/guardian.server");
     return createGuardianInvite(context.userId, data.withoutEmail ? null : data.email);
   });
@@ -36,6 +38,8 @@ export const changeGuardianEmailFn = createServerFn({ method: "POST" })
     z.object({ email: z.string().trim().email().max(200) }).parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "guardian_email_change", 5, 3600);
     const { changeGuardianEmail } = await import("@/lib/server/guardian.server");
     await changeGuardianEmail(context.userId, data.email);
     return { ok: true as const };
@@ -46,6 +50,8 @@ export const changeGuardianEmailFn = createServerFn({ method: "POST" })
 export const getGuardianInvite = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ token: tokenSchema }).parse(input))
   .handler(async ({ data }) => {
+    const { enforceIpRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("token_lookup", 60, 600);
     const { lookupGuardianInvite } = await import("@/lib/server/guardian.server");
     return lookupGuardianInvite(data.token);
   });

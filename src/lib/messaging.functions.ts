@@ -242,6 +242,8 @@ export const sendMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => sendMessageSchema.parse(data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "send_message", 30, 60, "Du sendest sehr schnell. Bitte warte einen Moment.");
     const { supabase, userId } = context;
     const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
@@ -283,16 +285,27 @@ export const sendMessage = createServerFn({ method: "POST" })
     ]);
     const { notifyUserByEmail } =
       await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
+    // E-Mail-Bombing verhindern: höchstens eine Benachrichtigungs-Mail pro Empfänger und Chat
+    // alle 5 Minuten (der Eintrag in der Glocke wird trotzdem immer angelegt).
+    const { checkRateLimit } = await import("@/lib/server/rate-limit.server");
+    const mayEmail = await checkRateLimit({
+      action: "msg_email",
+      key: `${recipientId}:${data.conversationId}`,
+      max: 1,
+      windowSeconds: 300,
+    });
     await notifyUserByEmail({
       userId: recipientId,
+      skipEmail: !mayEmail,
       category: "messages",
       subject: `Neue Nachricht von ${sender?.display_name ?? "einem Nutzer"}`,
       html: emailTemplate({
         heading: "Neue Nachricht erhalten",
         bodyLines: [
-          `${sender?.display_name ?? "Ein Nutzer"} hat dir geschrieben${contextLabel ? ` (${contextLabel})` : ""}.`,
-          data.body.length > 120 ? `${data.body.slice(0, 120)}…` : data.body,
+          `${escapeHtml(sender?.display_name ?? "Ein Nutzer")} hat dir geschrieben${contextLabel ? ` (${escapeHtml(contextLabel)})` : ""}.`,
+          // Nutzertext: IMMER escapen, sonst landet fremdes HTML im Postfach des Empfängers.
+          escapeHtml(data.body.length > 120 ? `${data.body.slice(0, 120)}…` : data.body),
         ],
         ctaLabel: "Nachricht lesen",
         ctaPath: `/messages/${data.conversationId}`,
@@ -354,10 +367,23 @@ export const startConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => startConversationSchema.parse(data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "start_conversation", 20, 3600);
     const { supabase, userId } = context;
 
     if (data.otherUserId === userId) {
       throw new Error("Du kannst nicht mit dir selbst chatten.");
+    }
+
+    // Gibt es den Nutzer überhaupt? (Blockierung, Einschränkung und Verifizierung prüfen die
+    // Datenbank-Trigger mit verständlichen Meldungen.)
+    const { data: otherProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", data.otherUserId)
+      .maybeSingle();
+    if (!otherProfile) {
+      throw new Error("Dieser Nutzer wurde nicht gefunden.");
     }
 
     const [participantA, participantB] =

@@ -76,6 +76,8 @@ export const reportUser = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "report_user", 10, 3600, "Du hast in kurzer Zeit viele Meldungen gesendet. Bitte versuche es später erneut oder wende dich an den Support.");
     const { supabase, userId } = context;
     if (data.reportedUserId === userId) throw new Error("Du kannst dich nicht selbst melden.");
 
@@ -149,6 +151,13 @@ export const reportUser = createServerFn({ method: "POST" })
       const label = REPORT_REASONS.find((r) => r.value === data.reason)?.label ?? data.reason;
       const paused = await pauseChildrenAndNotifyGuardians(youthIds, label);
 
+      const { sendSecurityAlert } = await import("@/lib/server/alert.server");
+      await sendSecurityAlert("Schwere Meldung eingegangen", {
+        report_id: report.id,
+        grund: data.reason,
+        pausierte_minderjaehrige: paused.length,
+      });
+
       await supabaseAdmin.from("user_reports").update({ status: "escalated" }).eq("id", report.id);
       await supabaseAdmin.from("user_report_events").insert({
         report_id: report.id,
@@ -182,6 +191,8 @@ export const blockUser = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "block_user", 30, 3600);
     const { supabase, userId } = context;
     const blockerId = data.onBehalfOfChildId ?? userId;
     if (data.userId === blockerId) throw new Error("Du kannst dich nicht selbst blockieren.");
@@ -381,6 +392,15 @@ export const resolveReport = createServerFn({ method: "POST" })
       action: data.status,
       note: [data.restriction ? `Sperre: ${data.restriction}` : null, data.note].filter(Boolean).join(" · ") || null,
     });
+    {
+      const { error: auditError } = await context.supabase.rpc("log_admin_action", {
+        _action: "report." + data.status,
+        _target_type: "report",
+        _target_id: data.reportId,
+        _metadata: { restriction: data.restriction ?? null, reported_user_id: report.reported_user_id },
+      });
+      if (auditError) throw new Error(`audit_log_failed: ${auditError.message}`);
+    }
     return { ok: true as const };
   });
 
@@ -399,6 +419,15 @@ export const setRestriction = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { applyRestriction } = await import("@/lib/server/safety.server");
     await applyRestriction({ userId: data.userId, kind: data.kind, reason: data.reason, actorId: context.userId });
+    {
+      const { error: auditError } = await context.supabase.rpc("log_admin_action", {
+        _action: "user.restrict",
+        _target_type: "user",
+        _target_id: data.userId,
+        _metadata: { kind: data.kind },
+      });
+      if (auditError) throw new Error(`audit_log_failed: ${auditError.message}`);
+    }
     return { ok: true as const };
   });
 
@@ -414,6 +443,15 @@ export const liftRestriction = createServerFn({ method: "POST" })
       .eq("id", data.restrictionId)
       .is("lifted_at", null);
     if (error) throw error;
+    {
+      const { error: auditError } = await context.supabase.rpc("log_admin_action", {
+        _action: "user.restriction_lifted",
+        _target_type: "restriction",
+        _target_id: data.restrictionId,
+        _metadata: null,
+      });
+      if (auditError) throw new Error(`audit_log_failed: ${auditError.message}`);
+    }
     return { ok: true as const };
   });
 
@@ -423,7 +461,7 @@ export const setReverificationRequired = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ userId: z.string().uuid(), required: z.boolean() }).parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("profiles")
@@ -434,6 +472,15 @@ export const setReverificationRequired = createServerFn({ method: "POST" })
       .from("verification_results")
       .update({ status: data.required ? "reverification_required" : "verified" })
       .eq("user_id", data.userId);
+    {
+      const { error: auditError } = await context.supabase.rpc("log_admin_action", {
+        _action: data.required ? "user.reverification_required" : "user.reverification_cleared",
+        _target_type: "user",
+        _target_id: data.userId,
+        _metadata: null,
+      });
+      if (auditError) throw new Error(`audit_log_failed: ${auditError.message}`);
+    }
     return { ok: true as const };
   });
 
@@ -485,12 +532,21 @@ export const setUserSuspended = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ userId: z.string().uuid(), suspended: z.boolean() }).parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ suspended_at: data.suspended ? new Date().toISOString() : null })
       .eq("id", data.userId);
     if (error) throw error;
+    {
+      const { error: auditError } = await context.supabase.rpc("log_admin_action", {
+        _action: data.suspended ? "user.suspend" : "user.unsuspend",
+        _target_type: "user",
+        _target_id: data.userId,
+        _metadata: null,
+      });
+      if (auditError) throw new Error(`audit_log_failed: ${auditError.message}`);
+    }
     return { ok: true as const };
   });

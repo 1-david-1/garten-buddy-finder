@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { markNotificationsReadSchema, parseInput } from "@/lib/validation";
 
 export interface AppNotification {
   id: string;
@@ -51,7 +52,7 @@ export const getNotifications = createServerFn({ method: "GET" })
  */
 export const markNotificationsRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { notificationId?: string; all?: boolean }) => data)
+  .inputValidator((data: unknown) => parseInput(markNotificationsReadSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 

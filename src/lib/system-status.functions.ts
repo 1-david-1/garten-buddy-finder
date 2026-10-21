@@ -87,6 +87,7 @@ export const getSystemStatus = createServerFn({ method: "GET" })
       { table: "contact_attempts", column: "user_id", migration: "20261009" },
       { table: "profiles", column: "reverification_required_at", migration: "20261009" },
       { table: "profiles", column: "suspended_at", migration: "20261008" },
+      { table: "rate_limit_hits", column: "bucket", migration: "20261021 (Rate-Limits)" },
     ];
     for (const p of probes) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,6 +118,27 @@ export const getSystemStatus = createServerFn({ method: "GET" })
         ok: !error,
         detail: error ? error.message : "vorhanden",
         fix: error ? "Migration 20261009000000_child_protection_round2.sql ausführen." : undefined,
+      });
+    }
+
+    // 6. Die Verifizierungspflicht darf nie unbemerkt abgeschaltet sein: Sie ist ein globaler
+    // Schalter (Funktion verification_required()). Liefert sie etwas anderes als "true", warnen wir laut.
+    {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabaseAdmin as any).rpc("verification_required");
+      const active = !error && data === true;
+      checks.push({
+        key: "verification_required_active",
+        label: "Verifizierungspflicht ist aktiv",
+        ok: active,
+        detail: error
+          ? error.message
+          : active
+            ? "aktiv - nur verifizierte Konten können bieten, Aufträge annehmen und schreiben"
+            : "ACHTUNG: ausgeschaltet - Konten werden ohne Prüfung zugelassen (auch Jugendliche)!",
+        fix: active
+          ? undefined
+          : "Funktion public.verification_required() wieder auf SELECT true setzen (Migration 20261009000000_child_protection_round2.sql) und prüfen, wer sie geändert hat.",
       });
     }
 

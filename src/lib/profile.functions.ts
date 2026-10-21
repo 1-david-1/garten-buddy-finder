@@ -1,7 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import {
+  helperIdSchema,
+  notificationPrefsSchema,
+  parseInput,
+  toggleFavoriteSchema,
+} from "@/lib/validation";
 import type { Database } from "@/integrations/supabase/types";
+
+import { z } from "zod";
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -15,6 +23,37 @@ export interface ProfileUpdateInput {
   language?: string;
 }
 
+const profileUpdateSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(100).optional(),
+    city: z.string().trim().max(100).optional(),
+    postalCode: z.string().trim().max(10).optional(),
+    bio: z.string().trim().max(2000).optional(),
+    businessName: z.string().trim().max(200).optional(),
+    ustId: z
+      .string()
+      .trim()
+      .max(30)
+      .regex(/^[A-Z]{2}\d{9,11}$|^$/i)
+      .optional(),
+    birthdate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine((v) => {
+        const d = new Date(`${v}T00:00:00Z`);
+        return (
+          !Number.isNaN(d.getTime()) &&
+          d.toISOString().slice(0, 10) === v &&
+          d.getUTCFullYear() >= 1900 &&
+          d.getTime() <= Date.now()
+        );
+      }, "Bitte gib ein gültiges Geburtsdatum an.")
+      .optional(),
+    guardianEmail: z.string().trim().email().max(254).optional(),
+    language: z.enum(["de", "en"]).optional(),
+  })
+  .strict();
+
 /**
  * Holt das eigene Profil
  */
@@ -22,6 +61,16 @@ export const getMyProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId, claims } = context;
+
+    // Mit 18 wird aus dem Jugendlichen-Konto automatisch ein Erwachsenen-Konto (best effort,
+    // zusätzlich läuft das täglich per pg_cron, sofern verfügbar).
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: syncError } = await supabaseAdmin.rpc("sync_youth_to_adult", { _user_id: userId });
+      if (syncError) console.error("[profile] sync_youth_to_adult:", syncError.message);
+    } catch (err) {
+      console.error("[profile] sync_youth_to_adult:", (err as Error).message);
+    }
 
     const { data: profile, error } = await supabase
       .from("profiles")
@@ -48,7 +97,7 @@ export const getMyProfile = createServerFn({ method: "GET" })
  */
 export const updateProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: ProfileUpdateInput) => data)
+  .inputValidator((data: unknown) => parseInput(profileUpdateSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -110,14 +159,7 @@ export const updateProfile = createServerFn({ method: "POST" })
  */
 export const updateNotificationPrefs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (data: {
-      enabled?: boolean;
-      newBid?: boolean;
-      bidUpdates?: boolean;
-      gigUpdates?: boolean;
-    }) => data,
-  )
+  .inputValidator((data: unknown) => parseInput(notificationPrefsSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
@@ -158,7 +200,7 @@ export const updateNotificationPrefs = createServerFn({ method: "POST" })
  */
 export const getHelperProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { helperId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(helperIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
 
@@ -228,7 +270,7 @@ export const getHelperProfile = createServerFn({ method: "GET" })
  */
 export const toggleFavorite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { helperId: string; add: boolean }) => data)
+  .inputValidator((data: unknown) => parseInput(toggleFavoriteSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 

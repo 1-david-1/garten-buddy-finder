@@ -1,6 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import {
+  buyListingSchema,
+  createServiceListingSchema,
+  listingAmountSchema,
+  listingIdSchema,
+  makeOfferSchema,
+  offerAmountSchema,
+  offerIdSchema,
+  parseInput,
+  purchaseWithScheduleSchema,
+  respondToBookingSchema,
+  serviceListingFiltersSchema,
+  updateServiceListingSchema,
+} from "@/lib/validation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -272,10 +286,10 @@ async function assertCanPublish(supabase: SupabaseClient<Database>, userId: stri
  */
 export const createServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (data: ServiceListingInput & { publish?: boolean; id?: string }) => data,
-  )
+  .inputValidator((data: unknown) => parseInput(createServiceListingSchema, data))
   .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "create_listing", 30, 3600);
     const { supabase, userId } = context;
 
     const validationError = validateListingInput(data);
@@ -351,7 +365,7 @@ export function postalCodeProximity(
  */
 export const getServiceListings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((filters: ServiceListingFilters | undefined) => filters ?? {})
+  .inputValidator((filters: unknown) => parseInput(serviceListingFiltersSchema, filters))
   .handler(async ({ context, data: filters }) => {
     const { supabase } = context;
 
@@ -429,7 +443,7 @@ export const getMyServiceListings = createServerFn({ method: "GET" })
  */
 export const getServiceListingById = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((id: string) => id)
+  .inputValidator((id: unknown) => parseInput(listingIdSchema, id))
   .handler(async ({ context, data: id }) => {
     const { supabase } = context;
 
@@ -456,9 +470,7 @@ export const getServiceListingById = createServerFn({ method: "GET" })
 
 export const updateServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (input: { id: string; data: Partial<ServiceListingInput> }) => input,
-  )
+  .inputValidator((input: unknown) => parseInput(updateServiceListingSchema, input))
   .handler(async ({ context, data: input }) => {
     const { supabase } = context;
     const d = input.data;
@@ -508,7 +520,7 @@ export const updateServiceListing = createServerFn({ method: "POST" })
 
 export const deleteServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((id: string) => id)
+  .inputValidator((id: unknown) => parseInput(listingIdSchema, id))
   .handler(async ({ context, data: id }) => {
     const { supabase } = context;
 
@@ -536,7 +548,7 @@ export const deleteServiceListing = createServerFn({ method: "POST" })
  */
 export const publishServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((id: string) => id)
+  .inputValidator((id: unknown) => parseInput(listingIdSchema, id))
   .handler(async ({ context, data: id }) => {
     const { supabase, userId } = context;
     await assertCanPublish(supabase, userId);
@@ -583,7 +595,7 @@ export const publishServiceListing = createServerFn({ method: "POST" })
  */
 export const unpublishServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((id: string) => id)
+  .inputValidator((id: unknown) => parseInput(listingIdSchema, id))
   .handler(async ({ context, data: id }) => {
     const { supabase } = context;
 
@@ -615,7 +627,7 @@ export const unpublishServiceListing = createServerFn({ method: "POST" })
 
 export const getAuctionBids = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((listingId: string) => listingId)
+  .inputValidator((listingId: unknown) => parseInput(listingIdSchema, listingId))
   .handler(async ({ context, data: listingId }) => {
     const { supabase } = context;
 
@@ -650,8 +662,10 @@ export const getAuctionBids = createServerFn({ method: "GET" })
  */
 export const placeAuctionBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { listingId: string; amountCents: number }) => input)
+  .inputValidator((input: unknown) => parseInput(listingAmountSchema, input))
   .handler(async ({ context, data: input }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "auction_bid", 60, 3600);
     const { supabase } = context;
 
     const { data, error } = await supabase.rpc("place_auction_bid", {
@@ -670,7 +684,7 @@ export const placeAuctionBid = createServerFn({ method: "POST" })
  */
 export const endAuction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((listingId: string) => listingId)
+  .inputValidator((listingId: unknown) => parseInput(listingIdSchema, listingId))
   .handler(async ({ context, data: listingId }) => {
     const { supabase } = context;
 
@@ -695,11 +709,10 @@ export const endAuction = createServerFn({ method: "POST" })
 
 export const makeOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (input: { listingId: string; amountCents: number; message: string }) =>
-      input,
-  )
+  .inputValidator((input: unknown) => parseInput(makeOfferSchema, input))
   .handler(async ({ context, data: input }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "make_offer", 30, 3600);
     const { supabase, userId } = context;
 
     if (input.amountCents <= 0) {
@@ -726,7 +739,7 @@ export const makeOffer = createServerFn({ method: "POST" })
  */
 export const getOffersForListing = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((listingId: string) => listingId)
+  .inputValidator((listingId: unknown) => parseInput(listingIdSchema, listingId))
   .handler(async ({ context, data: listingId }) => {
     const { supabase } = context;
 
@@ -816,8 +829,10 @@ export const getReceivedOffers = createServerFn({ method: "GET" })
 
 export const counterOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { offerId: string; amountCents: number }) => input)
+  .inputValidator((input: unknown) => parseInput(offerAmountSchema, input))
   .handler(async ({ context, data: input }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "counter_offer", 30, 3600);
     const { supabase } = context;
 
     if (input.amountCents <= 0) {
@@ -837,7 +852,7 @@ export const counterOffer = createServerFn({ method: "POST" })
 
 export const rejectOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((offerId: string) => offerId)
+  .inputValidator((offerId: unknown) => parseInput(offerIdSchema, offerId))
   .handler(async ({ context, data: offerId }) => {
     const { supabase } = context;
 
@@ -854,7 +869,7 @@ export const rejectOffer = createServerFn({ method: "POST" })
 
 export const withdrawOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((offerId: string) => offerId)
+  .inputValidator((offerId: unknown) => parseInput(offerIdSchema, offerId))
   .handler(async ({ context, data: offerId }) => {
     const { supabase } = context;
 
@@ -876,7 +891,7 @@ export const withdrawOffer = createServerFn({ method: "POST" })
  */
 export const acceptOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((offerId: string) => offerId)
+  .inputValidator((offerId: unknown) => parseInput(offerIdSchema, offerId))
   .handler(async ({ context, data: offerId }) => {
     const { supabase } = context;
 
@@ -900,7 +915,7 @@ export const acceptOffer = createServerFn({ method: "POST" })
  */
 export const purchaseServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { listingId: string; buyNow?: boolean }) => input)
+  .inputValidator((input: unknown) => parseInput(buyListingSchema, input))
   .handler(async ({ context, data: input }) => {
     const { supabase } = context;
 
@@ -915,15 +930,10 @@ export const purchaseServiceListing = createServerFn({ method: "POST" })
 
 export const purchaseWithSchedule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (input: {
-      listingId: string;
-      scheduledAt: string;
-      scheduledEnd?: string;
-      message?: string;
-    }) => input,
-  )
+  .inputValidator((input: unknown) => parseInput(purchaseWithScheduleSchema, input))
   .handler(async ({ context, data: input }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "purchase_schedule", 20, 3600);
     const { supabase } = context;
 
     const { data, error } = await supabase.rpc("purchase_with_schedule", {
@@ -939,7 +949,7 @@ export const purchaseWithSchedule = createServerFn({ method: "POST" })
 
 export const respondToBooking = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { gigId: string; accept: boolean }) => input)
+  .inputValidator((input: unknown) => parseInput(respondToBookingSchema, input))
   .handler(async ({ context, data: input }) => {
     const { supabase, userId } = context;
 
@@ -965,7 +975,7 @@ export const respondToBooking = createServerFn({ method: "POST" })
 
     if (gigBefore) {
       const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-      const { emailTemplate } = await import("@/lib/server/email.server");
+      const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
       await notifyUserByEmail({
         userId: gigBefore.customer_id,
         category: "gig_updates",
@@ -976,8 +986,8 @@ export const respondToBooking = createServerFn({ method: "POST" })
           heading: input.accept ? "Buchung bestätigt" : "Buchungsanfrage abgelehnt",
           bodyLines: [
             input.accept
-              ? `Deine Buchungsanfrage für „${gigBefore.title}“ wurde bestätigt.`
-              : `Deine Buchungsanfrage für „${gigBefore.title}“ wurde leider abgelehnt.`,
+              ? `Deine Buchungsanfrage für „${escapeHtml(gigBefore.title)}“ wurde bestätigt.`
+              : `Deine Buchungsanfrage für „${escapeHtml(gigBefore.title)}“ wurde leider abgelehnt.`,
           ],
           ctaLabel: "Details ansehen",
           ctaPath: "/my-gigs",

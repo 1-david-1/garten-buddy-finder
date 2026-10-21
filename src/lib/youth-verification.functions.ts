@@ -30,6 +30,11 @@ const DELETE_DOCS_AFTER_REVIEW = true;
 
 type StoredDocuments = {
   guardianName?: string;
+  /** Angaben zum Zeitpunkt der Einreichung für den manuellen Abgleich durch das Team. */
+  childName?: string;
+  childBirthdate?: string;
+  guardianEmail?: string;
+  guardianAccount?: { name: string | null; email: string | null } | null;
   submissionId?: string;
   files?: Partial<Record<YouthDocKey, string>>;
   deletedAt?: string;
@@ -50,14 +55,33 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "youth_submit", 10, 86400);
     const { supabase, userId } = context;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { assertServiceRole } = await import("@/lib/server/service-role.server");
     await assertServiceRole();
 
-    const [{ data: roles }, { data: profile }] = await Promise.all([
+    const [{ data: roles }, { data: profile }, { data: privateProfile }, { data: guardianLink }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", userId),
-      supabase.from("profiles").select("verified_at").eq("id", userId).maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("verified_at, display_name")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("profile_private")
+        .select("birthdate, guardian_email")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("guardian_links")
+        .select("guardian_user_id, invited_email")
+        .eq("child_id", userId)
+        .in("status", ["invited", "active"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
     if (!(roles ?? []).some((r) => r.role === "helper_youth")) throw new Error("not_youth");
     if (profile?.verified_at) throw new Error("already_verified");
@@ -85,8 +109,29 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
     const missing = YOUTH_DOC_KEYS.filter((k) => !files[k]);
     if (missing.length > 0) throw new Error(`missing_documents:${missing.join(",")}`);
 
+    const guardianEmail = privateProfile?.guardian_email ?? guardianLink?.invited_email ?? null;
+    let guardianAccount: StoredDocuments["guardianAccount"] = null;
+    if (guardianLink?.guardian_user_id) {
+      const [{ data: guardianProfile }, { data: guardianAuth }] = await Promise.all([
+        supabaseAdmin
+          .from("profiles")
+          .select("display_name")
+          .eq("id", guardianLink.guardian_user_id)
+          .maybeSingle(),
+        supabaseAdmin.auth.admin.getUserById(guardianLink.guardian_user_id),
+      ]);
+      guardianAccount = {
+        name: guardianProfile?.display_name?.trim() || null,
+        email: guardianAuth?.user?.email ?? guardianLink.invited_email ?? null,
+      };
+    }
+
     const documents: StoredDocuments = {
       guardianName: data.guardianName,
+      childName: profile?.display_name?.trim() || undefined,
+      childBirthdate: privateProfile?.birthdate ?? undefined,
+      guardianEmail: guardianEmail ?? undefined,
+      guardianAccount,
       submissionId: data.submissionId,
       files,
     };
@@ -94,6 +139,7 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
       user_id: userId,
       kind: "youth_documents",
       status: "pending",
+      guardian_email: guardianEmail,
       documents,
     });
     // Eine Datenbank, auf der die Migration für Jugend-Unterlagen noch nicht
@@ -133,7 +179,7 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
 
     const { data: requests, error } = await supabaseAdmin
       .from("verification_requests")
-      .select("id, user_id, created_at, documents")
+      .select("id, user_id, created_at, guardian_email, documents")
       .eq("kind", "youth_documents")
       .eq("status", "pending")
       .order("created_at", { ascending: true });
@@ -151,13 +197,18 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
           .maybeSingle(),
         supabaseAdmin
           .from("guardian_links")
-          .select("guardian_user_id")
+          .select("guardian_user_id, invited_email")
           .eq("child_id", r.user_id)
           .eq("status", "active")
           .maybeSingle(),
       ]);
 
-      let guardianAccount: YouthVerificationItem["guardianAccount"] = null;
+      let guardianAccount: YouthVerificationItem["guardianAccount"] = docs.guardianAccount?.name
+        ? {
+            name: docs.guardianAccount.name,
+            email: docs.guardianAccount.email,
+          }
+        : null;
       if (link?.guardian_user_id) {
         const [{ data: gp }, { data: gAuth }] = await Promise.all([
           supabaseAdmin.from("profiles").select("display_name").eq("id", link.guardian_user_id).maybeSingle(),
@@ -178,10 +229,11 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
       items.push({
         requestId: r.id,
         userId: r.user_id,
-        childName: profile?.display_name?.trim() || "—",
-        statedBirthdate: priv?.birthdate ?? null,
+        childName: docs.childName ?? profile?.display_name?.trim() ?? "—",
+        statedBirthdate: docs.childBirthdate ?? priv?.birthdate ?? null,
         guardianName: docs.guardianName ?? "—",
-        guardianEmail: priv?.guardian_email ?? null,
+        guardianEmail:
+          r.guardian_email ?? docs.guardianEmail ?? priv?.guardian_email ?? link?.invited_email ?? null,
         guardianAccount,
         submittedAt: r.created_at,
         documents: YOUTH_DOC_KEYS.map((key) => {
@@ -208,10 +260,10 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
 
     const { data: request } = await supabaseAdmin
       .from("verification_requests")
@@ -280,6 +332,16 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
       })
       .eq("id", request.id);
 
+    {
+      const { error: auditError } = await context.supabase.rpc("log_admin_action", {
+        _action: approved ? "user.verify_youth" : "user.verify_youth_rejected",
+        _target_type: "user",
+        _target_id: request.user_id,
+        _metadata: null,
+      });
+      if (auditError) throw new Error(`audit_log_failed: ${auditError.message}`);
+    }
+
     await notifyUserByEmail({
       userId: request.user_id,
       category: "gig_updates",
@@ -289,7 +351,7 @@ export const decideYouthVerification = createServerFn({ method: "POST" })
         bodyLines: [
           approved
             ? "Wir haben deine Unterlagen geprüft. Du bist jetzt verifiziert und kannst bieten und Angebote einstellen. Für jeden einzelnen Auftrag fragen wir zusätzlich deine Eltern in ihrem Eltern-Konto."
-            : `Wir konnten deine Unterlagen leider nicht bestätigen. Grund: ${(data.reason ?? "").replace(/</g, "&lt;")}. Du kannst sie im Profil erneut einreichen.`,
+            : `Wir konnten deine Unterlagen leider nicht bestätigen. Grund: ${escapeHtml(data.reason ?? "")}. Du kannst sie im Profil erneut einreichen.`,
         ],
         ctaLabel: approved ? "Zum Dashboard" : "Zum Profil",
         ctaPath: approved ? "/dashboard" : "/profile",

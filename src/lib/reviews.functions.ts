@@ -2,6 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import {
+  customerIdSchema,
+  helperIdSchema,
+  parseInput,
+  reviewInputSchema,
+  reviewsForGigSchema,
+} from "@/lib/validation";
 
 export type ReviewDirection = "customer_to_helper" | "helper_to_customer";
 
@@ -59,7 +66,7 @@ async function resolveReviewParty(
  */
 export const createReview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: ReviewInput) => data)
+  .inputValidator((data: unknown) => parseInput(reviewInputSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const party = await resolveReviewParty(supabase, userId, data.gigId);
@@ -86,7 +93,7 @@ export const createReview = createServerFn({ method: "POST" })
  */
 export const updateReview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: ReviewInput) => data)
+  .inputValidator((data: unknown) => parseInput(reviewInputSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const party = await resolveReviewParty(supabase, userId, data.gigId);
@@ -111,7 +118,7 @@ export const updateReview = createServerFn({ method: "POST" })
  */
 export const getHelperReviews = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { helperId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(helperIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
 
@@ -156,7 +163,7 @@ export const getHelperReviews = createServerFn({ method: "GET" })
  */
 export const getCustomerReviews = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { customerId: string }) => data)
+  .inputValidator((data: unknown) => parseInput(customerIdSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
 
@@ -201,7 +208,7 @@ export const getCustomerReviews = createServerFn({ method: "GET" })
  */
 export const getGigReview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { gigId: string; direction?: ReviewDirection }) => data)
+  .inputValidator((data: unknown) => parseInput(reviewsForGigSchema, data))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
     const direction = data.direction ?? "customer_to_helper";

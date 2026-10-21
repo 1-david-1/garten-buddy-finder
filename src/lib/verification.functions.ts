@@ -29,6 +29,8 @@ export interface MyVerification {
   consents: { helperSafetyAccepted: boolean; customerRulesAccepted: boolean };
   guardian: {
     state: RequestState;
+    /** Nur für das eigene Jugendkonto: wird zum erneuten Versenden der Einladung vorausgefüllt. */
+    email: string | null;
     emailMasked: string | null;
     sentAt: string | null;
     expiresAt: string | null;
@@ -161,6 +163,7 @@ export const getMyVerification = createServerFn({ method: "GET" })
         kind === "youth"
           ? {
               state: effectiveState(latestGuardian?.status, latestGuardian?.expires_at),
+              email: guardianEmail,
               emailMasked: guardianEmail ? maskEmail(guardianEmail) : null,
               sentAt: latestGuardian?.created_at ?? null,
               expiresAt: null,
@@ -214,6 +217,8 @@ export const requestIdentityVerification = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "identity_request", 10, 86400);
     const { supabase, userId } = context;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { assertServiceRole } = await import("@/lib/server/service-role.server");
@@ -266,6 +271,8 @@ const tokenSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const getGuardianConsentRequest = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ token: tokenSchema }).parse(input))
   .handler(async ({ data }) => {
+    const { enforceIpRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("token_lookup", 60, 600);
     const { lookupGuardianConsent } = await import("@/lib/server/verification.server");
     return lookupGuardianConsent(data.token);
   });
@@ -277,6 +284,8 @@ export const decideGuardianConsentFn = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
+    const { enforceIpRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("token_decide", 30, 600);
     const { decideGuardianConsent } = await import("@/lib/server/verification.server");
     return decideGuardianConsent(data.token, data.decision);
   });
@@ -285,6 +294,8 @@ export const decideGuardianConsentFn = createServerFn({ method: "POST" })
 export const getJobApprovalRequest = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ token: tokenSchema }).parse(input))
   .handler(async ({ data }) => {
+    const { enforceIpRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("token_lookup", 60, 600);
     const { lookupJobApproval } = await import("@/lib/server/verification.server");
     return lookupJobApproval(data.token);
   });
@@ -296,6 +307,8 @@ export const decideJobApprovalFn = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
+    const { enforceIpRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("token_decide", 30, 600);
     const { decideJobApproval } = await import("@/lib/server/verification.server");
     return decideJobApproval(data.token, data.decision);
   });
