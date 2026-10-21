@@ -13,23 +13,41 @@ function getEnv(key: string): string | undefined {
 /**
  * Öffentliche Adresse der App für Links in E-Mails. Reihenfolge:
  * 1. PUBLIC_SITE_URL (empfohlen, in der Hosting-Umgebung setzen)
- * 2. Adresse der aktuellen Anfrage (Proxy-Header oder Origin) - damit Links nicht auf localhost zeigen
- * 3. http://localhost:3000 (nur lokale Entwicklung)
+ * 2. http://localhost:3000 (nur lokale Entwicklung)
+ *
+ * SECURITY: x-forwarded-host / x-forwarded-proto werden absichtlich NICHT
+ * verwendet – sie können von Angreifern manipuliert werden (Host-Header-
+ * Injection), sodass E-Mail-Links auf Phishing-Domains zeigen würden.
  */
 export function getSiteUrl(): string {
   const configured = getEnv("PUBLIC_SITE_URL");
   if (configured) return configured.replace(/\/+$/, "");
-  try {
-    const req = getRequest();
-    const proto = req.headers.get("x-forwarded-proto");
-    const host = req.headers.get("x-forwarded-host");
-    if (proto && host) return `${proto.split(",")[0].trim()}://${host.split(",")[0].trim()}`;
-    const origin = req.headers.get("origin");
-    if (origin) return origin;
-    return new URL(req.url).origin;
-  } catch {
-    return "http://localhost:3000";
-  }
+  console.warn(
+    "[email] PUBLIC_SITE_URL ist nicht gesetzt – E-Mail-Links zeigen auf localhost. " +
+      "Bitte die Umgebungsvariable in der Hosting-Umgebung setzen.",
+  );
+  return "http://localhost:3000";
+}
+
+/**
+ * HTML-Escaping für Nutzereingaben, die in E-Mail-Templates landen (Namen, Titel,
+ * Nachrichtentexte, Gründe ...). bodyLines, infoTable-Werte, greeting, trustNotice und
+ * footer werden im Template als HTML eingefügt - dynamische Werte MÜSSEN dort durch
+ * escapeHtml() laufen. heading, previewText, badge und Button-Beschriftungen escaped das
+ * Template selbst.
+ */
+export function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Betreffzeilen dürfen keine Zeilenumbrüche enthalten (Header-Injection) und bleiben kurz. */
+export function sanitizeSubject(value: string): string {
+  return String(value).replace(/[\r\n\u2028\u2029]+/g, " ").trim().slice(0, 200);
 }
 
 /** Für die Systemstatus-Seite im Admin: ist der E-Mail-Versand eingerichtet? */
@@ -57,7 +75,8 @@ interface SendEmailInput {
  * Benachrichtigung darf niemals eine eigentliche Aktion (Gebot, Zusage, ...)
  * zum Scheitern bringen.
  */
-export async function sendEmail({ to, subject, html, replyTo }: SendEmailInput): Promise<boolean> {
+export async function sendEmail({ to, subject: rawSubject, html, replyTo }: SendEmailInput): Promise<boolean> {
+  const subject = sanitizeSubject(rawSubject);
   const apiKey = getEnv("RESEND_API_KEY");
   if (!apiKey) {
     console.warn(
@@ -133,20 +152,14 @@ export interface EmailTemplateOptions {
  * Optimiert für Apple Mail, Gmail, Outlook (MSO), Thunderbird und Mobile Clients.
  */
 export function emailTemplate(options: EmailTemplateOptions): string {
-  const {
-    heading,
-    greeting,
-    badge,
-    bodyLines,
-    infoTable,
-    trustNotice,
-    ctaLabel,
-    ctaPath,
-    ctaUrl,
-    secondaryCta,
-    footer,
-    previewText,
-  } = options;
+  const { greeting, bodyLines, infoTable, trustNotice, ctaPath, ctaUrl, secondaryCta, footer } =
+    options;
+
+  // Reine Textfelder: werden immer escaped (Aufrufer übergeben hier nie HTML).
+  const heading = escapeHtml(options.heading);
+  const previewText = options.previewText ? escapeHtml(options.previewText) : undefined;
+  const badge = options.badge ? escapeHtml(options.badge) : undefined;
+  const ctaLabel = options.ctaLabel ? escapeHtml(options.ctaLabel) : undefined;
 
   const siteUrl = getSiteUrl();
   const supportEmail = getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de";
@@ -208,10 +221,10 @@ export function emailTemplate(options: EmailTemplateOptions): string {
   let buttonsHtml = "";
   if (ctaLabel && (ctaPath || ctaUrl)) {
     const primaryUrl = ctaUrl ?? `${siteUrl}${ctaPath}`;
-    buttonsHtml += `<a href="${primaryUrl}" class="btn-primary" target="_blank" style="background-color:#15803d; color:#ffffff !important; padding:14px 28px; text-decoration:none; border-radius:8px; font-size:15px; font-weight:bold; display:inline-block; box-shadow:0 4px 12px rgba(21, 128, 61, 0.25); margin-right:8px; margin-bottom:12px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${ctaLabel}</a>`;
+    buttonsHtml += `<a href="${escapeHtml(primaryUrl)}" class="btn-primary" target="_blank" style="background-color:#15803d; color:#ffffff !important; padding:14px 28px; text-decoration:none; border-radius:8px; font-size:15px; font-weight:bold; display:inline-block; box-shadow:0 4px 12px rgba(21, 128, 61, 0.25); margin-right:8px; margin-bottom:12px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${ctaLabel}</a>`;
   }
   if (secondaryCta) {
-    buttonsHtml += `<a href="${secondaryCta.url}" class="btn-secondary" target="_blank" style="background-color:#ffffff; color:#64748b !important; padding:14px 20px; text-decoration:none; border-radius:8px; font-size:14px; display:inline-block; border:1px solid #cbd5e1; margin-bottom:12px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${secondaryCta.label}</a>`;
+    buttonsHtml += `<a href="${escapeHtml(secondaryCta.url)}" class="btn-secondary" target="_blank" style="background-color:#ffffff; color:#64748b !important; padding:14px 20px; text-decoration:none; border-radius:8px; font-size:14px; display:inline-block; border:1px solid #cbd5e1; margin-bottom:12px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${escapeHtml(secondaryCta.label)}</a>`;
   }
 
   const footerText =

@@ -97,6 +97,10 @@ export async function notifySafetyAbort(input: {
   const otherId = actorId === gig.customer_id ? gig.assigned_helper_id : gig.customer_id;
   const title = escapeHtml(gig.title);
 
+  // Echtzeit-Hinweis ans Team (nur IDs, keine Details), falls ein Alert-Webhook eingerichtet ist.
+  const { sendSecurityAlert } = await import("@/lib/server/alert.server");
+  await sendSecurityAlert("Sicherheits-Abbruch eines Auftrags", { gig_id: gig.id, abgebrochen_von: actorId });
+
   if (otherId) {
     await notifyUserByEmail({
       userId: otherId,

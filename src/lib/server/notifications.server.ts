@@ -35,6 +35,8 @@ interface NotifyUserInput {
    * automatisch "keine Glocke" bedeuten).
    */
   inApp?: InAppNotification;
+  /** Nur die E-Mail überspringen (z. B. wegen Cooldown) - der Eintrag in der Glocke bleibt. */
+  skipEmail?: boolean;
 }
 
 /**
@@ -55,6 +57,7 @@ export async function notifyUserByEmail({
   subject,
   html,
   inApp,
+  skipEmail,
 }: NotifyUserInput): Promise<void> {
   try {
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -65,7 +68,7 @@ export async function notifyUserByEmail({
     if (profileError) throw profileError;
 
     const prefs = (profile?.notification_prefs ?? {}) as NotificationPrefs;
-    const emailAllowed = prefs.enabled !== false && prefs[category] !== false;
+    const emailAllowed = !skipEmail && prefs.enabled !== false && prefs[category] !== false;
 
     if (emailAllowed) {
       const { data: userRes, error: userError } =

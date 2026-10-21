@@ -10,7 +10,7 @@
 //      lehnen ab (decideGuardianConsent). Bei Zustimmung wird das Profil verifiziert.
 //   4. Der Link bleibt gültig, um die Zustimmung später zu widerrufen.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server";
+import { emailTemplate, escapeHtml, getSiteUrl, sendEmail } from "@/lib/server/email.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import {
@@ -37,13 +37,8 @@ export function maskEmail(email: string): string {
   return `${visible}${"*".repeat(Math.max(2, local.length - visible.length))}@${domain}`;
 }
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// escapeHtml lebt in email.server.ts; hier nur re-exportiert, damit bestehende Importe weiter funktionieren.
+export { escapeHtml };
 
 export async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
