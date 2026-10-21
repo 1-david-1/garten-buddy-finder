@@ -767,6 +767,11 @@ export type Database = {
       is_restricted: { Args: { _user_id: string; _scope: string }; Returns: boolean };
       users_blocked: { Args: { _a: string; _b: string }; Returns: boolean };
       has_guardian_consent: { Args: { _user_id: string }; Returns: boolean };
+      check_rate_limit: {
+        Args: { _bucket: string; _max: number; _window_seconds: number };
+        Returns: boolean;
+      };
+      sync_youth_to_adult: { Args: { _user_id?: string | null }; Returns: number };
     };
     Enums: {
       app_role: "customer" | "helper_youth" | "helper_adult" | "helper_pro" | "admin";
