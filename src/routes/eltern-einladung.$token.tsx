@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BadgeCheck, Clock, Loader2, Printer, ShieldCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { YouthProtectionRules } from "@/components/youth-protection-rules";
 import { useAuth } from "@/lib/auth";
 import { acceptGuardianInviteFn, getGuardianInvite } from "@/lib/guardian.functions";
@@ -38,6 +39,7 @@ function GuardianInvitePage() {
   const lookupFn = useServerFn(getGuardianInvite);
   const acceptFn = useServerFn(acceptGuardianInviteFn);
   const [error, setError] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
 
   const query = useQuery({
     queryKey: ["guardian-invite", token],
@@ -57,11 +59,8 @@ function GuardianInvitePage() {
   const data = query.data;
   const open = data?.state === "open";
 
-  // Direkt verknüpfen, sobald angemeldet und die Einladung gültig ist.
-  useEffect(() => {
-    if (user && open && accept.isIdle) accept.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, open]);
+  // Bewusst KEINE automatische Verknüpfung: Wer den Link nur öffnet (z. B. über eine Weiterleitung),
+  // wird nicht ungewollt als Elternteil verknüpft. Die Verknüpfung passiert erst nach Bestätigung.
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -150,19 +149,43 @@ function GuardianInvitePage() {
               </div>
             ) : (
               <div className="space-y-3 rounded-2xl border border-glass-border bg-glass p-5 backdrop-blur">
-                {accept.isPending && (
-                  <p className="flex items-center gap-2 text-sm">
-                    <Loader2 className="size-4 animate-spin" /> Konto wird verknüpft…
-                  </p>
-                )}
-                {error && (
+                {!accept.isSuccess && (
                   <>
-                    <p className="text-sm text-destructive">{error}</p>
-                    <Button variant="outline" onClick={() => accept.mutate()} disabled={accept.isPending}>
-                      Erneut versuchen
+                    <label className="flex items-start gap-3 text-sm">
+                      <Checkbox
+                        checked={confirmed}
+                        onCheckedChange={(v) => setConfirmed(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Ich bin Elternteil bzw. Erziehungsberechtigte/r von <strong>{data.childName}</strong>{" "}
+                        und möchte mein Konto als Eltern-Konto mit diesem Kind verknüpfen.
+                      </span>
+                    </label>
+                    <Button
+                      size="lg"
+                      className="w-full"
+                      onClick={() => {
+                        setError(null);
+                        accept.mutate();
+                      }}
+                      disabled={!confirmed || accept.isPending}
+                    >
+                      {accept.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" /> Konto wird verknüpft…
+                        </>
+                      ) : (
+                        "Eltern-Konto verknüpfen"
+                      )}
                     </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Du hast diese Einladung nicht erwartet? Dann schließe diese Seite einfach – es wird nichts
+                      verknüpft.
+                    </p>
                   </>
                 )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
             )}
           </>
