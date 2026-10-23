@@ -42,11 +42,16 @@ export const getSystemStatus = createServerFn({ method: "GET" })
     checks.push({
       key: "email",
       label: "E-Mail-Versand (Resend)",
-      ok: mail.resendConfigured,
-      detail: mail.resendConfigured
-        ? `Absender: ${mail.fromAddress}${mail.replyToAddress ? ` | Antworten an: ${mail.replyToAddress}` : ""}`
-        : "RESEND_API_KEY fehlt - es werden KEINE E-Mails verschickt (Einladungen, Freigaben, Warnungen).",
-      fix: mail.resendConfigured ? undefined : "RESEND_API_KEY (und EMAIL_FROM_ADDRESS mit verifizierter Absender-Domain) setzen.",
+      ok: mail.resendConfigured && mail.fromConfigured,
+      detail: !mail.resendConfigured
+        ? "RESEND_API_KEY fehlt – es werden KEINE E-Mails verschickt (Einladungen, Freigaben, Warnungen)."
+        : !mail.fromConfigured
+          ? `API-Key gesetzt, aber EMAIL_FROM_ADDRESS fehlt. Fallback: ${mail.fromAddress}`
+          : `Absender: ${mail.fromAddress}${mail.replyToAddress ? ` | Antworten an: ${mail.replyToAddress}` : ""}`,
+      fix:
+        !mail.resendConfigured || !mail.fromConfigured
+          ? "In .env bzw. Hosting setzen: RESEND_API_KEY=re_… und EMAIL_FROM_ADDRESS=GreenMatch <noreply@deine-verifizierte-domain.de> (Domain in Resend verifizieren). Zum Testen: GreenMatch <onboarding@resend.dev> – dann nur an die Resend-Konto-Mail zustellbar."
+          : undefined,
     });
     checks.push({
       key: "site_url",
