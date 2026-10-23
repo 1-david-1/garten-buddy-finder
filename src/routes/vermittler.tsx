@@ -36,6 +36,11 @@ function IntermediaryPage() {
 
         <p>GreenMatch ist eine kostenlose technische Vermittlungsplattform.</p>
         <p>
+          <strong>Zweck und Betrieb:</strong> Dieses Projekt verfolgt derzeit ausschließlich ideelle Zwecke. Die
+          Nutzung ist kostenlos. Eine wirtschaftliche Tätigkeit oder entgeltliche Vermittlung findet derzeit nicht
+          statt.
+        </p>
+        <p>
           Wir nehmen derzeit keine Zahlungen entgegen, wickeln keine Vergütungen ab und verlangen keine
           Provision oder Vermittlungsgebühr. Wir sind nicht Arbeitgeber der minderjährigen oder erwachsenen
           Personen und führen die Gartenarbeiten nicht selbst durch.
@@ -49,13 +54,23 @@ function IntermediaryPage() {
         <p>
           Auftraggeber dürfen Minderjährigen nur geeignete und ungefährliche Tätigkeiten anbieten. Verboten sind
           insbesondere Arbeiten mit gefährlichen Maschinen, Chemikalien, Pflanzenschutzmitteln, schweren Lasten,
-          großer Höhe, Baustellen, Gewässern und sonstigen erheblichen Risiken.
+          großer Höhe, Baustellen, Gewässern und sonstigen erheblichen Risiken. Rasenmäher und Heckenscheren sind
+          besonders unfallträchtig: Sie sind grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder
+          vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Solche
+          Tätigkeiten dürfen deshalb nur in Absprache mit den Erziehungsberechtigten vereinbart werden.
         </p>
         <p>
           Wir prüfen Nutzer und Inhalte im Rahmen unserer technischen und organisatorischen Möglichkeiten.
           Außerdem stellen wir Melde-, Sperr- und Sicherheitsfunktionen bereit. Eine Verifizierung bedeutet
           jedoch nicht, dass eine Person vollständig zuverlässig, geeignet oder ungefährlich ist. Sie bestätigt
           ausschließlich die geprüften Identitäts- und Altersdaten.
+        </p>
+        <p>
+          Wir führen die Arbeiten nicht selbst aus. Sie werden ausschließlich zwischen Auftraggeber und helfender
+          Person durchgeführt, bei Jugendlichen mit Zustimmung der gesetzlichen Vertretung. Deshalb können und werden
+          wir nicht für Sach- und Personenschäden aufkommen, die bei der Ausführung eines Auftrags entstehen. Wir
+          bieten derzeit keine eigene Versicherung an. Die Beteiligten sollten vorab klären, ob eine private
+          Haftpflichtversicherung Gartenhilfe abdeckt.
         </p>
         <p>
           Wir können nicht ausschließen, dass Nutzer falsche Angaben machen oder sich trotz
@@ -79,6 +94,24 @@ function IntermediaryPage() {
           Melde- und Abhilfeverfahren verfügen. Für Vermittlungsdienste gelten außerdem je nach Einordnung und
           Größe Transparenz-, Kontaktstellen-, Moderations- und Beschwerdepflichten nach dem Digital Services
           Act.
+        </p>
+        <p className="border-t border-glass-border pt-5 text-sm text-muted-foreground">
+          Weitere Informationen:{" "}
+          <Link to="/eltern-info" className="text-primary underline">
+            Für Eltern
+          </Link>
+          {" · "}
+          <Link to="/datenschutz" className="text-primary underline">
+            Datenschutz
+          </Link>
+          {" · "}
+          <Link to="/freiburg" className="text-primary underline">
+            Gartenhilfe Freiburg
+          </Link>
+          {" · "}
+          <Link to="/" className="text-primary underline">
+            Startseite
+          </Link>
         </p>
       </main>
     </div>

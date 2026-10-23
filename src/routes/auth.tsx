@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { checkName } from "@/lib/sanitize";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -64,13 +65,16 @@ function AuthPage() {
     try {
       if (mode === "signup") {
         if (!fullName.trim()) throw new Error(t("auth.fullName"));
+        // Nur ein echter Name: keine Sonderzeichen, kein HTML/Code, keine Web-Adressen (XSS-Schutz)
+        const nameCheck = checkName(fullName, "displayName");
+        if (!nameCheck.ok) throw new Error(nameCheck.error);
         if (!role) throw new Error(t("auth.role"));
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: window.location.origin + afterAuthUrl,
-            data: { full_name: fullName.trim(), signup_role: role },
+            data: { full_name: nameCheck.value, signup_role: role },
           },
         });
         if (error) {
@@ -158,6 +162,8 @@ function AuthPage() {
                 id="fullName"
                 type="text"
                 required
+                maxLength={60}
+                autoComplete="name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="mt-1"

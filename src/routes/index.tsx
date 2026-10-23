@@ -30,13 +30,13 @@ import { useHeroAnimation } from "@/hooks/use-hero-animation";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "GreenMatch — Gartenhilfe aus der Nachbarschaft" },
+      { title: "Gartenhilfe Freiburg – geprüfte Helfer | GreenMatch" },
       {
         name: "description",
         content:
-          "Nachbarschaftliche Gartenhilfe: Gartenbesitzer finden Helfer von nebenan – Jugendliche mit Zustimmung der Eltern, Nachbarn und Profi-Gärtner. Auftrag ausschreiben oder Angebot buchen, mit Chat, Bewertungen und Verifizierung.",
+          "Gartenhilfe in Freiburg: Rasen, Hecke, Beet. Helfer von nebenan, alle per Ausweis geprüft, Jugendliche mit Eltern-Freigabe. Kostenlos.",
       },
-      { property: "og:title", content: "GreenMatch — Gartenhilfe aus der Nachbarschaft" },
+      { property: "og:title", content: "Gartenhilfe Freiburg – geprüfte Helfer | GreenMatch" },
       { property: "og:description", content: "Fair. Lokal. Verifiziert." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -51,6 +51,7 @@ function Landing() {
       <SiteNav />
       <Hero />
       <Paths />
+      <Check />
       <Ways />
       <FreeAndPay />
       <Levels />
@@ -136,6 +137,12 @@ function Hero() {
               </span>
             ))}
           </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            {t("lp.hero.pilot")}{" "}
+            <Link to="/freiburg" className="text-primary underline">
+              {t("lp.hero.pilot.link")}
+            </Link>
+          </p>
         </div>
 
         <PhoneMockup
@@ -360,6 +367,39 @@ function PathCard({
 }
 
 /* ------------------------------------------------------------------ */
+/* Alle werden geprüft                                                 */
+/* ------------------------------------------------------------------ */
+
+function Check() {
+  const { t } = useI18n();
+  const cards = [
+    { icon: BadgeCheck, n: 1 },
+    { icon: Lock, n: 2 },
+    { icon: ShieldCheck, n: 3 },
+  ] as const;
+  return (
+    <section id="pruefung" className="mx-auto max-w-6xl px-4 py-20">
+      <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.check.title")}</h2>
+      <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">{t("lp.check.sub")}</p>
+      <div className="grid gap-6 md:grid-cols-3">
+        {cards.map(({ icon: Icon, n }) => (
+          <div key={n} className="rounded-3xl border border-glass-border bg-glass p-6 backdrop-blur">
+            <Icon className="mb-4 size-6 text-primary" />
+            <h3 className="mb-2 font-semibold">{t(`lp.check.${n}.title`)}</h3>
+            <p className="text-sm text-muted-foreground">{t(`lp.check.${n}.body`)}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-8 text-center text-sm">
+        <Link to="/vermittler" className="text-primary underline">
+          {t("lp.check.link")}
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Zwei Wege                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -485,7 +525,7 @@ function Safety() {
       <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.safety.title")}</h2>
       <p className="mb-12 text-center text-muted-foreground">{t("lp.safety.sub")}</p>
       <ol className="space-y-4">
-        {[1, 2, 3, 4, 5].map((n) => (
+        {[1, 2, 3, 4, 5, 6].map((n) => (
           <li
             key={n}
             className="flex gap-4 rounded-2xl border border-glass-border bg-glass p-5 backdrop-blur"
@@ -500,6 +540,12 @@ function Safety() {
           </li>
         ))}
       </ol>
+      <p className="mt-6 text-center text-sm text-muted-foreground">{t("lp.safety.note")}</p>
+      <p className="mt-3 text-center text-sm">
+        <Link to="/eltern-info" className="text-primary underline">
+          {t("lp.footer.parents")}
+        </Link>
+      </p>
     </section>
   );
 }
@@ -615,7 +661,7 @@ function Faq() {
       <div className="mx-auto max-w-3xl px-4">
         <h2 className="mb-10 text-center font-brand text-4xl">{t("lp.faq.title")}</h2>
         <Accordion type="single" collapsible className="w-full">
-          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => (
             <AccordionItem key={n} value={`q${n}`}>
               <AccordionTrigger className="text-left">{t(`lp.faq.${n}.q`)}</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
@@ -624,6 +670,19 @@ function Faq() {
             </AccordionItem>
           ))}
         </Accordion>
+        <p className="mt-8 text-center text-sm text-muted-foreground">
+          <Link to="/vermittler" className="text-primary underline">
+            {t("lp.footer.verm")}
+          </Link>
+          {" · "}
+          <Link to="/datenschutz" className="text-primary underline">
+            {t("lp.footer.privacy")}
+          </Link>
+          {" · "}
+          <Link to="/eltern-info" className="text-primary underline">
+            {t("lp.footer.parents")}
+          </Link>
+        </p>
       </div>
     </section>
   );
@@ -691,13 +750,28 @@ function Footer() {
               {l.label}
             </a>
           ))}
-          <a href="/vermittler" className="hover:text-foreground">
-            Unsere Rolle als Vermittler
-          </a>
+          <Link to="/vermittler" className="hover:text-foreground">
+            {t("lp.footer.verm")}
+          </Link>
+          <Link to="/eltern-info" className="hover:text-foreground">
+            {t("lp.footer.parents")}
+          </Link>
+          <Link to="/freiburg" className="hover:text-foreground">
+            {t("lp.footer.freiburg")}
+          </Link>
+          <Link to="/datenschutz" className="hover:text-foreground">
+            {t("lp.footer.privacy")}
+          </Link>
         </nav>
       </div>
-      <div className="border-t border-glass-border py-4 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} GreenMatch
+      <div className="border-t border-glass-border px-4 py-4 text-center text-xs text-muted-foreground">
+        <p>© {new Date().getFullYear()} GreenMatch</p>
+        <p className="mx-auto mt-1 max-w-3xl">
+          {t("lp.footer.purpose")}{" "}
+          <Link to="/vermittler" className="underline">
+            {t("lp.footer.verm")}
+          </Link>
+        </p>
       </div>
     </footer>
   );
