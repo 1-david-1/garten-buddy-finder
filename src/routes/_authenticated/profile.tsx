@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { checkName } from "@/lib/sanitize";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -64,17 +65,27 @@ function ProfilePage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: () =>
-      updateProfileFn({
+    mutationFn: () => {
+      // Namen streng prüfen (Positivliste), damit kein Code im Anzeigenamen landet.
+      const name = checkName(form.displayName ?? "", "displayName");
+      if (!name.ok) throw new Error(name.error);
+      const city = (form.city ?? "").trim() ? checkName(form.city ?? "", "city") : { ok: true as const, value: "" };
+      if (!city.ok) throw new Error(city.error);
+      const business = (form.businessName ?? "").trim()
+        ? checkName(form.businessName ?? "", "businessName")
+        : { ok: true as const, value: "" };
+      if (!business.ok) throw new Error(business.error);
+      return updateProfileFn({
         data: {
-          displayName: form.displayName,
-          city: form.city,
+          displayName: name.value,
+          city: city.value,
           postalCode: form.postalCode,
           bio: form.bio,
-          businessName: form.businessName,
+          businessName: business.value,
           ustId: form.ustId,
         },
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success("Profil gespeichert!");
       queryClient.invalidateQueries({ queryKey: ["my-profile"] });
@@ -190,6 +201,8 @@ function ProfilePage() {
                           <Label className="text-xs">Anzeigename *</Label>
                           <Input
                             value={form.displayName ?? ""}
+                            maxLength={60}
+                            autoComplete="nickname"
                             onChange={(e) =>
                               setForm({ ...form, displayName: e.target.value })
                             }

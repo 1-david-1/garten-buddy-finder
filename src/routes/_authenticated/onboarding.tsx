@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { checkName } from "@/lib/sanitize";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -108,14 +109,21 @@ function Onboarding() {
             onSubmit={(e) => {
               e.preventDefault();
               setError(null);
+              // Namen streng prüfen (Positivliste), damit kein Code im Anzeigenamen landet.
+              const name = checkName(form.displayName, "displayName");
+              if (!name.ok) return setError(name.error);
+              const city = form.city.trim() ? checkName(form.city, "city") : null;
+              if (city && !city.ok) return setError(city.error);
+              const business = form.businessName.trim() ? checkName(form.businessName, "businessName") : null;
+              if (business && !business.ok) return setError(business.error);
               mut.mutate({
                 data: {
                   role,
-                  displayName: form.displayName,
-                  city: form.city || null,
+                  displayName: name.value,
+                  city: city?.ok ? city.value : null,
                   postalCode: form.postalCode || null,
                   birthdate: form.birthdate || null,
-                  businessName: form.businessName || null,
+                  businessName: business?.ok ? business.value : null,
                   vatId: form.vatId || null,
                   guardianEmail: form.guardianEmail || null,
                   language: locale,
