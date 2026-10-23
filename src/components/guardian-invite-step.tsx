@@ -65,6 +65,12 @@ export function GuardianInviteStep({
         setLink(res.link);
         toast.warning(
           "Die E-Mail konnte nicht versendet werden. Gib deinen Eltern stattdessen den Link unten weiter.",
+          res.emailError
+            ? { description: res.emailError.slice(0, 220) }
+            : {
+                description:
+                  "Meist fehlt RESEND_API_KEY oder EMAIL_FROM_ADDRESS in der Server-Umgebung.",
+              },
         );
       } else {
         setLink(null);
