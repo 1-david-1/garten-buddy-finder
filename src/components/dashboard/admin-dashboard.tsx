@@ -13,10 +13,24 @@ import {
   Flag,
   ShieldCheck,
   ShieldOff,
+  Trash2,
   Users as UsersIcon,
   ClipboardList,
   Wrench,
 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Bar,
   BarChart,
@@ -57,6 +71,7 @@ import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/da
 import { useI18n } from "@/lib/i18n";
 import {
   adjustTrustScore,
+  deleteAdminUser,
   getAdminAuditLog,
   getAdminGigs,
   getAdminOverview,
@@ -140,6 +155,11 @@ export function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
   const [gigStatusFilter, setGigStatusFilter] = useState<GigStatusFilter>("all");
   const [settingDrafts, setSettingDrafts] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    displayName: string;
+  } | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
 
   const navItems: DashboardNavItem[] = [
     {
@@ -187,6 +207,20 @@ export function AdminDashboard() {
   const trustMutation = useMutation({
     mutationFn: (input: { userId: string; delta: number }) => adjustTrustFn({ data: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-users"] }),
+  });
+
+  const deleteUserFn = useServerFn(deleteAdminUser);
+  const deleteMutation = useMutation({
+    mutationFn: (input: { userId: string; reason: string }) => deleteUserFn({ data: input }),
+    onSuccess: () => {
+      toast.success("Profil gelöscht");
+      setDeleteTarget(null);
+      setDeleteReason("");
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-audit"] });
+    },
+    onError: (err) => toast.error((err as Error).message),
   });
 
   const filteredUsers = useMemo(() => {
@@ -720,29 +754,49 @@ export function AdminDashboard() {
                             {formatDate(u.createdAt, intlLocale)}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={verifyMutation.isPending}
-                              onClick={() =>
-                                verifyMutation.mutate({
-                                  userId: u.id,
-                                  verified: !u.verifiedAt,
-                                })
-                              }
-                            >
-                              {u.verifiedAt ? (
-                                <>
-                                  <ShieldOff className="mr-1.5 size-3.5" />
-                                  {t("admin.users.unverify")}
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldCheck className="mr-1.5 size-3.5" />
-                                  {t("admin.users.verify")}
-                                </>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={verifyMutation.isPending}
+                                onClick={() =>
+                                  verifyMutation.mutate({
+                                    userId: u.id,
+                                    verified: !u.verifiedAt,
+                                  })
+                                }
+                              >
+                                {u.verifiedAt ? (
+                                  <>
+                                    <ShieldOff className="mr-1.5 size-3.5" />
+                                    {t("admin.users.unverify")}
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="mr-1.5 size-3.5" />
+                                    {t("admin.users.verify")}
+                                  </>
+                                )}
+                              </Button>
+                              {!u.roles.includes("admin") && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                  disabled={deleteMutation.isPending}
+                                  onClick={() => {
+                                    setDeleteReason("");
+                                    setDeleteTarget({
+                                      id: u.id,
+                                      displayName: u.displayName || "Unbenannt",
+                                    });
+                                  }}
+                                >
+                                  <Trash2 className="mr-1.5 size-3.5" />
+                                  Löschen
+                                </Button>
                               )}
-                            </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1026,6 +1080,56 @@ export function AdminDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Profil löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Das Konto von{" "}
+              <strong>{deleteTarget?.displayName}</strong> wird unwiderruflich
+              gelöscht (inkl. Auth-Zugang). Zugehörige Daten werden per Cascade
+              entfernt. Bitte den Grund dokumentieren.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="admin-delete-reason">Löschgrund</Label>
+            <Textarea
+              id="admin-delete-reason"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              placeholder="z. B. Spam-Konto, Nutzerwunsch, Verstoß gegen AGB…"
+              rows={3}
+              maxLength={500}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending || deleteReason.trim().length < 3}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!deleteTarget) return;
+                deleteMutation.mutate({
+                  userId: deleteTarget.id,
+                  reason: deleteReason.trim(),
+                });
+              }}
+            >
+              {deleteMutation.isPending ? "Löscht…" : "Endgültig löschen"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardShell>
   );
 }
