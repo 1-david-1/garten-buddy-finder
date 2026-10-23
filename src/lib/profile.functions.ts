@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { businessNameSchema, displayNameSchema, optionalCitySchema } from "@/lib/sanitize";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import { assertCustomerInFreiburgArea } from "@/lib/freiburg-area";
 import {
   helperIdSchema,
   notificationPrefsSchema,
@@ -99,8 +100,28 @@ export const getMyProfile = createServerFn({ method: "GET" })
 export const updateProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => parseInput(profileUpdateSchema, data))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data: input }) => {
     const { supabase, userId } = context;
+    const data = { ...input };
+
+    // Auftraggeber bleiben im Pilotgebiet Freiburg ± 10 km
+    if (data.city !== undefined || data.postalCode !== undefined) {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+      const isCustomer = (roles ?? []).some((r) => r.role === "customer");
+      if (isCustomer) {
+        const { data: current } = await supabase
+          .from("profiles")
+          .select("postal_code")
+          .eq("id", userId)
+          .maybeSingle();
+        const nextPostal =
+          data.postalCode !== undefined ? data.postalCode : current?.postal_code;
+        data.postalCode = assertCustomerInFreiburgArea(nextPostal);
+      }
+    }
 
     const profileUpdate: Database["public"]["Tables"]["profiles"]["Update"] =
       {};
@@ -328,4 +349,56 @@ export const getMyFavorites = createServerFn({ method: "GET" })
         profiles: profileMap.get(favorite.helper_id) ?? null,
       })),
     };
+  });
+
+const deleteAccountSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(10, "Bitte gib einen kurzen Grund an (mindestens 10 Zeichen).")
+    .max(500, "Der Löschgrund darf höchstens 500 Zeichen lang sein."),
+});
+
+/**
+ * Löscht das eigene Konto inkl. Auth-User (Cascade auf profiles).
+ * Der Löschgrund wird vorher im account_deletion_log gespeichert.
+ */
+export const deleteMyAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => parseInput(deleteAccountSchema, data))
+  .handler(async ({ context, data }) => {
+    const { supabase, userId, claims } = context;
+
+    const { data: isAdmin } = await supabase.rpc("has_role", {
+      _user_id: userId,
+      _role: "admin",
+    });
+    if (isAdmin) {
+      throw new Error(
+        "Admin-Konten können nicht selbst gelöscht werden. Bitte einen anderen Admin kontaktieren.",
+      );
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const [{ data: profile }, { data: roles }] = await Promise.all([
+      supabaseAdmin.from("profiles").select("display_name").eq("id", userId).maybeSingle(),
+      supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
+    ]);
+
+    const { error: logErr } = await supabaseAdmin.from("account_deletion_log").insert({
+      deleted_user_id: userId,
+      deleted_by: userId,
+      initiator: "self",
+      reason: data.reason,
+      display_name: profile?.display_name ?? null,
+      email: (claims.email as string | undefined) ?? null,
+      roles: (roles ?? []).map((r) => r.role),
+    });
+    if (logErr) throw logErr;
+
+    const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (delErr) throw delErr;
+
+    return { ok: true };
   });

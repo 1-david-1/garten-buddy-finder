@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { businessNameSchema, displayNameSchema, optionalCitySchema } from "@/lib/sanitize";
+import { assertCustomerInFreiburgArea } from "@/lib/freiburg-area";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -47,12 +48,22 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       if (!data.businessName || !data.vatId) throw new Error("business_details_required");
     }
 
+    // Auftraggeber: nur Freiburg ± 10 km (Pilot). Stadt + PLZ Pflicht.
+    let postalCode = data.postalCode ?? null;
+    let city = data.city ?? null;
+    if (data.role === "customer") {
+      if (!city?.trim()) {
+        throw new Error("Bitte gib deine Stadt an (Freiburg oder Umgebung, max. 10 km).");
+      }
+      postalCode = assertCustomerInFreiburgArea(postalCode);
+    }
+
     const { error: pErr } = await supabase.from("profiles").upsert(
       {
         id: userId,
         display_name: data.displayName,
-        city: data.city ?? null,
-        postal_code: data.postalCode ?? null,
+        city,
+        postal_code: postalCode,
         business_name: data.businessName ?? null,
         ust_id: data.vatId ?? null,
         language: data.language,

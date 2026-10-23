@@ -431,6 +431,77 @@ export const adjustTrustScore = createServerFn({ method: "POST" })
     return { ok: true, trustScore: nextScore };
   });
 
+/**
+ * Löscht ein Nutzerprofil vollständig (auth.users → Cascade auf profiles & Co.).
+ * Speichert vorher den Löschgrund im account_deletion_log.
+ */
+export const deleteAdminUser = createServerFn({ method: "POST" })
+  .middleware([requireAdminAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        reason: z
+          .string()
+          .trim()
+          .min(3, "Bitte einen kurzen Löschgrund angeben.")
+          .max(500),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId: adminId } = context;
+
+    if (data.userId === adminId) {
+      throw new Error("Du kannst dein eigenes Admin-Konto hier nicht löschen.");
+    }
+
+    const { data: targetRoles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.userId);
+    if ((targetRoles ?? []).some((r) => r.role === "admin")) {
+      throw new Error("Andere Admin-Konten können nicht gelöscht werden.");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", data.userId)
+      .maybeSingle();
+
+    let email: string | null = null;
+    const authUser = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    if (!authUser.error) email = authUser.data.user?.email ?? null;
+
+    const roles = (targetRoles ?? []).map((r) => r.role);
+
+    const { error: logErr } = await supabaseAdmin.from("account_deletion_log").insert({
+      deleted_user_id: data.userId,
+      deleted_by: adminId,
+      initiator: "admin",
+      reason: data.reason,
+      display_name: profile?.display_name ?? null,
+      email,
+      roles,
+    });
+    if (logErr) throw logErr;
+
+    await supabase.rpc("log_admin_action", {
+      _action: "user.delete",
+      _target_type: "user",
+      _target_id: data.userId,
+      _metadata: { reason: data.reason },
+    });
+
+    const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+    if (delErr) throw delErr;
+
+    return { ok: true };
+  });
+
 // ------------------------------------------------------------------
 // Aufträge
 // ------------------------------------------------------------------
