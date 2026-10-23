@@ -8,6 +8,42 @@ export type Database = {
   };
   public: {
     Tables: {
+      account_deletion_log: {
+        Row: {
+          id: string;
+          deleted_user_id: string;
+          deleted_by: string | null;
+          initiator: string;
+          reason: string;
+          display_name: string | null;
+          email: string | null;
+          roles: string[];
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          deleted_user_id: string;
+          deleted_by?: string | null;
+          initiator: string;
+          reason: string;
+          display_name?: string | null;
+          email?: string | null;
+          roles?: string[];
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          deleted_user_id?: string;
+          deleted_by?: string | null;
+          initiator?: string;
+          reason?: string;
+          display_name?: string | null;
+          email?: string | null;
+          roles?: string[];
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       earnings_tracker: {
         Row: {
           gross_cents: number;
@@ -772,6 +808,15 @@ export type Database = {
         Returns: boolean;
       };
       sync_youth_to_adult: { Args: { _user_id?: string | null }; Returns: number };
+      log_account_deletion: {
+        Args: {
+          _deleted_user_id: string;
+          _reason: string;
+          _initiator?: string;
+          _deleted_by?: string | null;
+        };
+        Returns: string;
+      };
     };
     Enums: {
       app_role: "customer" | "helper_youth" | "helper_adult" | "helper_pro" | "admin";
