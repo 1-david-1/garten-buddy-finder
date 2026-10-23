@@ -58,8 +58,8 @@ export function getEmailConfig() {
     fromConfigured,
     fromAddress:
       getEnv("EMAIL_FROM_ADDRESS") ||
-      "GreenMatch <onboarding@resend.dev> (Resend-Test-Absender – nur an die eigene Resend-Konto-Mail)",
-    replyToAddress: getEnv("EMAIL_REPLY_TO") || undefined,
+      "GreenMatch <noreply@mail.inbox-elevate.de>",
+    replyToAddress: getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de",
     siteUrlConfigured: Boolean(getEnv("PUBLIC_SITE_URL")),
     effectiveSiteUrl: getSiteUrl(),
   };
@@ -97,10 +97,8 @@ export async function sendEmail({
     return { ok: false, error };
   }
 
-  // Standard nur für lokale Tests mit Resend-Onboarding-Domain.
-  // Produktion: EMAIL_FROM_ADDRESS mit verifizierter Domain setzen.
-  const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <onboarding@resend.dev>";
-  const reply_to = replyTo || getEnv("EMAIL_REPLY_TO") || undefined;
+  const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <noreply@mail.inbox-elevate.de>";
+  const reply_to = replyTo || getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de";
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
