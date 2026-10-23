@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { completeOnboarding, getMyRoles } from "@/lib/roles.functions";
+import { FREIBURG_AREA_ERROR, isWithinFreiburgArea } from "@/lib/freiburg-area";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { SiteNav } from "@/components/site-nav";
@@ -112,8 +113,16 @@ function Onboarding() {
               // Namen streng prüfen (Positivliste), damit kein Code im Anzeigenamen landet.
               const name = checkName(form.displayName, "displayName");
               if (!name.ok) return setError(name.error);
-              const city = form.city.trim() ? checkName(form.city, "city") : null;
+              const cityRequired = role === "customer";
+              const city = form.city.trim()
+                ? checkName(form.city, "city")
+                : cityRequired
+                  ? ({ ok: false as const, error: "Bitte gib deine Stadt an (Freiburg oder Umgebung)." })
+                  : null;
               if (city && !city.ok) return setError(city.error);
+              if (role === "customer" && !isWithinFreiburgArea(form.postalCode)) {
+                return setError(FREIBURG_AREA_ERROR);
+              }
               const business = form.businessName.trim() ? checkName(form.businessName, "businessName") : null;
               if (business && !business.ok) return setError(business.error);
               mut.mutate({
@@ -142,13 +151,23 @@ function Onboarding() {
                 label={t("onboarding.city")}
                 value={form.city}
                 onChange={(v) => setForm({ ...form, city: v })}
+                required={role === "customer"}
+                placeholder={role === "customer" ? "Freiburg" : undefined}
               />
               <Field
                 label={t("onboarding.postal")}
                 value={form.postalCode}
                 onChange={(v) => setForm({ ...form, postalCode: v })}
+                required={role === "customer"}
+                placeholder={role === "customer" ? "79100" : undefined}
               />
             </div>
+            {role === "customer" && (
+              <p className="text-xs text-muted-foreground">
+                Als Auftraggeber vermitteln wir aktuell nur in Freiburg und Umgebung
+                (max. 10&nbsp;km). Bitte Stadt und PLZ entsprechend angeben.
+              </p>
+            )}
             {(role === "helper_youth" || role === "helper_adult" || role === "helper_pro") && (
               <Field
                 label={t("onboarding.birthdate")}
@@ -210,12 +229,14 @@ function Field({
   onChange,
   type = "text",
   required,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -223,6 +244,7 @@ function Field({
       <Input
         type={type}
         required={required}
+        placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1"

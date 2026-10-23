@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { checkName } from "@/lib/sanitize";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -13,9 +13,11 @@ import {
   Shield,
   Heart,
   Bell,
+  Trash2,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useAppNavItems } from "@/lib/use-app-nav";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,13 +28,26 @@ import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   getMyProfile,
   updateProfile,
   getMyFavorites,
   updateNotificationPrefs,
+  deleteMyAccount,
 } from "@/lib/profile.functions";
 import { toast } from "sonner";
 import { VerificationCard } from "@/components/verification-card";
+import { FREIBURG_AREA_ERROR, isWithinFreiburgArea } from "@/lib/freiburg-area";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -47,12 +62,17 @@ const ROLE_LABELS: Record<string, string> = {
 
 function ProfilePage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const getProfileFn = useServerFn(getMyProfile);
   const updateProfileFn = useServerFn(updateProfile);
   const getFavoritesFn = useServerFn(getMyFavorites);
+  const deleteAccountFn = useServerFn(deleteMyAccount);
 
   const profileQuery = useQuery({
     queryKey: ["my-profile"],
@@ -75,6 +95,11 @@ function ProfilePage() {
         ? checkName(form.businessName ?? "", "businessName")
         : { ok: true as const, value: "" };
       if (!business.ok) throw new Error(business.error);
+      const rolesNow = profileQuery.data?.roles ?? [];
+      const isCustomer = rolesNow.includes("customer");
+      if (isCustomer && !isWithinFreiburgArea(form.postalCode)) {
+        throw new Error(FREIBURG_AREA_ERROR);
+      }
       return updateProfileFn({
         data: {
           displayName: name.value,
@@ -90,6 +115,17 @@ function ProfilePage() {
       toast.success("Profil gespeichert!");
       queryClient.invalidateQueries({ queryKey: ["my-profile"] });
       setEditing(false);
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => deleteAccountFn({ data: { reason: deleteReason.trim() } }),
+    onSuccess: async () => {
+      toast.success("Konto gelöscht");
+      setDeleteOpen(false);
+      await signOut();
+      navigate({ to: "/" });
     },
     onError: (err) => toast.error((err as Error).message),
   });
@@ -126,6 +162,8 @@ function ProfilePage() {
   const profile = profileQuery.data?.profile;
   const roles = profileQuery.data?.roles ?? [];
   const isHelper = roles.some((r) => r.startsWith("helper_"));
+  const isCustomer = roles.includes("customer");
+  const isAdmin = roles.includes("admin");
   const isPro = roles.includes("helper_pro");
   const favorites = favoritesQuery.data?.favorites ?? [];
   const rawPrefs = (profile?.notification_prefs ?? {}) as Record<
@@ -278,6 +316,11 @@ function ProfilePage() {
                         />
                       </div>
                     </div>
+                    {isCustomer && (
+                      <p className="text-xs text-muted-foreground">
+                        Als Auftraggeber aktuell nur Freiburg und Umgebung (max. 10&nbsp;km).
+                      </p>
+                    )}
 
                     {isPro && (
                       <div className="grid grid-cols-2 gap-3">
@@ -534,6 +577,75 @@ function ProfilePage() {
                       bevorzugt.
                     </li>
                   </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {!isAdmin && (
+              <Card className="border-destructive/30 bg-destructive/5 backdrop-blur">
+                <CardContent className="pt-5 space-y-3">
+                  <p className="text-xs font-semibold text-destructive uppercase tracking-wide flex items-center gap-1.5">
+                    <Trash2 className="size-3.5" />
+                    Konto löschen
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Dein Profil und der Login werden unwiderruflich gelöscht.
+                    Bitte nenne kurz den Grund – das hilft uns, GreenMatch zu verbessern.
+                  </p>
+                  <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-destructive/40 text-destructive hover:bg-destructive/10"
+                      >
+                        Profil löschen…
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Konto wirklich löschen?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Diese Aktion kann nicht rückgängig gemacht werden. Alle
+                          Profildaten und der Zugang werden entfernt.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <div className="space-y-2 py-2">
+                        <Label htmlFor="delete-reason">Löschgrund</Label>
+                        <Textarea
+                          id="delete-reason"
+                          value={deleteReason}
+                          onChange={(e) => setDeleteReason(e.target.value)}
+                          placeholder="Warum möchtest du dein Konto löschen?"
+                          rows={3}
+                          maxLength={500}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Mindestens 10 Zeichen.
+                        </p>
+                      </div>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteAccountMutation.isPending}>
+                          Abbrechen
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          disabled={
+                            deleteAccountMutation.isPending ||
+                            deleteReason.trim().length < 10
+                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            deleteAccountMutation.mutate();
+                          }}
+                        >
+                          {deleteAccountMutation.isPending
+                            ? "Löscht…"
+                            : "Endgültig löschen"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardContent>
               </Card>
             )}
