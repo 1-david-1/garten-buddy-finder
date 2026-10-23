@@ -79,6 +79,8 @@ function buildCsp(): string {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    // Nur in Produktion: lokal (http://localhost) würde das die Entwicklung stören.
+    ...(import.meta.env.PROD ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
 }
 

@@ -12,11 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as DatenschutzRouteImport } from './routes/datenschutz'
 import { Route as EinverstaendniserklaerungRouteImport } from './routes/einverstaendniserklaerung'
+import { Route as ElternInfoRouteImport } from './routes/eltern-info'
+import { Route as FreiburgRouteImport } from './routes/freiburg'
+import { Route as VermittlerRouteImport } from './routes/vermittler'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedCreateGigRouteImport } from './routes/_authenticated/create-gig'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedEarningsRouteImport } from './routes/_authenticated/earnings'
+import { Route as AuthenticatedElternRouteImport } from './routes/_authenticated/eltern'
 import { Route as AuthenticatedGigsRouteImport } from './routes/_authenticated/gigs'
 import { Route as AuthenticatedInboxRouteImport } from './routes/_authenticated/inbox'
 import { Route as AuthenticatedMarketplaceRouteImport } from './routes/_authenticated/marketplace'
@@ -26,6 +31,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedSellRouteRouteImport } from './routes/_authenticated/sell/route'
 import { Route as AuftragFreigabeTokenRouteImport } from './routes/auftrag-freigabe.$token'
+import { Route as ElternEinladungTokenRouteImport } from './routes/eltern-einladung.$token'
 import { Route as ElternZustimmungTokenRouteImport } from './routes/eltern-zustimmung.$token'
 import { Route as AuthenticatedHelpersHelperIdRouteImport } from './routes/_authenticated/helpers/$helperId'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages/index'
@@ -50,12 +56,32 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DatenschutzRoute = DatenschutzRouteImport.update({
+  id: '/datenschutz',
+  path: '/datenschutz',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EinverstaendniserklaerungRoute =
   EinverstaendniserklaerungRouteImport.update({
     id: '/einverstaendniserklaerung',
     path: '/einverstaendniserklaerung',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ElternInfoRoute = ElternInfoRouteImport.update({
+  id: '/eltern-info',
+  path: '/eltern-info',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FreiburgRoute = FreiburgRouteImport.update({
+  id: '/freiburg',
+  path: '/freiburg',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VermittlerRoute = VermittlerRouteImport.update({
+  id: '/vermittler',
+  path: '/vermittler',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -74,6 +100,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedEarningsRoute = AuthenticatedEarningsRouteImport.update({
   id: '/earnings',
   path: '/earnings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedElternRoute = AuthenticatedElternRouteImport.update({
+  id: '/eltern',
+  path: '/eltern',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedGigsRoute = AuthenticatedGigsRouteImport.update({
@@ -121,6 +152,11 @@ const AuthenticatedSellRouteRoute = AuthenticatedSellRouteRouteImport.update({
 const AuftragFreigabeTokenRoute = AuftragFreigabeTokenRouteImport.update({
   id: '/auftrag-freigabe/$token',
   path: '/auftrag-freigabe/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ElternEinladungTokenRoute = ElternEinladungTokenRouteImport.update({
+  id: '/eltern-einladung/$token',
+  path: '/eltern-einladung/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ElternZustimmungTokenRoute = ElternZustimmungTokenRouteImport.update({
@@ -177,13 +213,18 @@ const AuthenticatedSellEditIdRoute = AuthenticatedSellEditIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/datenschutz': typeof DatenschutzRoute
   '/einverstaendniserklaerung': typeof EinverstaendniserklaerungRoute
+  '/eltern-info': typeof ElternInfoRoute
+  '/freiburg': typeof FreiburgRoute
+  '/vermittler': typeof VermittlerRoute
   '/messages': typeof AuthenticatedMessagesRouteRouteWithChildren
   '/sell': typeof AuthenticatedSellRouteRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
   '/create-gig': typeof AuthenticatedCreateGigRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
+  '/eltern': typeof AuthenticatedElternRoute
   '/gigs': typeof AuthenticatedGigsRoute
   '/inbox': typeof AuthenticatedInboxRoute
   '/marketplace': typeof AuthenticatedMarketplaceRoute
@@ -191,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
+  '/eltern-einladung/$token': typeof ElternEinladungTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -204,11 +246,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/datenschutz': typeof DatenschutzRoute
   '/einverstaendniserklaerung': typeof EinverstaendniserklaerungRoute
+  '/eltern-info': typeof ElternInfoRoute
+  '/freiburg': typeof FreiburgRoute
+  '/vermittler': typeof VermittlerRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/create-gig': typeof AuthenticatedCreateGigRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
+  '/eltern': typeof AuthenticatedElternRoute
   '/gigs': typeof AuthenticatedGigsRoute
   '/inbox': typeof AuthenticatedInboxRoute
   '/marketplace': typeof AuthenticatedMarketplaceRoute
@@ -216,6 +263,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
+  '/eltern-einladung/$token': typeof ElternEinladungTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -231,13 +279,18 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/datenschutz': typeof DatenschutzRoute
   '/einverstaendniserklaerung': typeof EinverstaendniserklaerungRoute
+  '/eltern-info': typeof ElternInfoRoute
+  '/freiburg': typeof FreiburgRoute
+  '/vermittler': typeof VermittlerRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRouteRouteWithChildren
   '/_authenticated/sell': typeof AuthenticatedSellRouteRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/create-gig': typeof AuthenticatedCreateGigRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/earnings': typeof AuthenticatedEarningsRoute
+  '/_authenticated/eltern': typeof AuthenticatedElternRoute
   '/_authenticated/gigs': typeof AuthenticatedGigsRoute
   '/_authenticated/inbox': typeof AuthenticatedInboxRoute
   '/_authenticated/marketplace': typeof AuthenticatedMarketplaceRoute
@@ -245,6 +298,7 @@ export interface FileRoutesById {
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
+  '/eltern-einladung/$token': typeof ElternEinladungTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/_authenticated/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/_authenticated/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -260,13 +314,18 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/datenschutz'
     | '/einverstaendniserklaerung'
+    | '/eltern-info'
+    | '/freiburg'
+    | '/vermittler'
     | '/messages'
     | '/sell'
     | '/admin'
     | '/create-gig'
     | '/dashboard'
     | '/earnings'
+    | '/eltern'
     | '/gigs'
     | '/inbox'
     | '/marketplace'
@@ -274,6 +333,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/profile'
     | '/auftrag-freigabe/$token'
+    | '/eltern-einladung/$token'
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
@@ -287,11 +347,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/datenschutz'
     | '/einverstaendniserklaerung'
+    | '/eltern-info'
+    | '/freiburg'
+    | '/vermittler'
     | '/admin'
     | '/create-gig'
     | '/dashboard'
     | '/earnings'
+    | '/eltern'
     | '/gigs'
     | '/inbox'
     | '/marketplace'
@@ -299,6 +364,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/profile'
     | '/auftrag-freigabe/$token'
+    | '/eltern-einladung/$token'
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
@@ -313,13 +379,18 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/datenschutz'
     | '/einverstaendniserklaerung'
+    | '/eltern-info'
+    | '/freiburg'
+    | '/vermittler'
     | '/_authenticated/messages'
     | '/_authenticated/sell'
     | '/_authenticated/admin'
     | '/_authenticated/create-gig'
     | '/_authenticated/dashboard'
     | '/_authenticated/earnings'
+    | '/_authenticated/eltern'
     | '/_authenticated/gigs'
     | '/_authenticated/inbox'
     | '/_authenticated/marketplace'
@@ -327,6 +398,7 @@ export interface FileRouteTypes {
     | '/_authenticated/onboarding'
     | '/_authenticated/profile'
     | '/auftrag-freigabe/$token'
+    | '/eltern-einladung/$token'
     | '/eltern-zustimmung/$token'
     | '/_authenticated/helpers/$helperId'
     | '/_authenticated/messages/$conversationId'
@@ -342,8 +414,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DatenschutzRoute: typeof DatenschutzRoute
   EinverstaendniserklaerungRoute: typeof EinverstaendniserklaerungRoute
+  ElternInfoRoute: typeof ElternInfoRoute
+  FreiburgRoute: typeof FreiburgRoute
+  VermittlerRoute: typeof VermittlerRoute
   AuftragFreigabeTokenRoute: typeof AuftragFreigabeTokenRoute
+  ElternEinladungTokenRoute: typeof ElternEinladungTokenRoute
   ElternZustimmungTokenRoute: typeof ElternZustimmungTokenRoute
 }
 
@@ -370,11 +447,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/datenschutz': {
+      id: '/datenschutz'
+      path: '/datenschutz'
+      fullPath: '/datenschutz'
+      preLoaderRoute: typeof DatenschutzRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/einverstaendniserklaerung': {
       id: '/einverstaendniserklaerung'
       path: '/einverstaendniserklaerung'
       fullPath: '/einverstaendniserklaerung'
       preLoaderRoute: typeof EinverstaendniserklaerungRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/eltern-info': {
+      id: '/eltern-info'
+      path: '/eltern-info'
+      fullPath: '/eltern-info'
+      preLoaderRoute: typeof ElternInfoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/freiburg': {
+      id: '/freiburg'
+      path: '/freiburg'
+      fullPath: '/freiburg'
+      preLoaderRoute: typeof FreiburgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vermittler': {
+      id: '/vermittler'
+      path: '/vermittler'
+      fullPath: '/vermittler'
+      preLoaderRoute: typeof VermittlerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -403,6 +508,13 @@ declare module '@tanstack/react-router' {
       path: '/earnings'
       fullPath: '/earnings'
       preLoaderRoute: typeof AuthenticatedEarningsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/eltern': {
+      id: '/_authenticated/eltern'
+      path: '/eltern'
+      fullPath: '/eltern'
+      preLoaderRoute: typeof AuthenticatedElternRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/gigs': {
@@ -466,6 +578,13 @@ declare module '@tanstack/react-router' {
       path: '/auftrag-freigabe/$token'
       fullPath: '/auftrag-freigabe/$token'
       preLoaderRoute: typeof AuftragFreigabeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/eltern-einladung/$token': {
+      id: '/eltern-einladung/$token'
+      path: '/eltern-einladung/$token'
+      fullPath: '/eltern-einladung/$token'
+      preLoaderRoute: typeof ElternEinladungTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/eltern-zustimmung/$token': {
@@ -576,6 +695,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateGigRoute: typeof AuthenticatedCreateGigRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEarningsRoute: typeof AuthenticatedEarningsRoute
+  AuthenticatedElternRoute: typeof AuthenticatedElternRoute
   AuthenticatedGigsRoute: typeof AuthenticatedGigsRoute
   AuthenticatedInboxRoute: typeof AuthenticatedInboxRoute
   AuthenticatedMarketplaceRoute: typeof AuthenticatedMarketplaceRoute
@@ -594,6 +714,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateGigRoute: AuthenticatedCreateGigRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEarningsRoute: AuthenticatedEarningsRoute,
+  AuthenticatedElternRoute: AuthenticatedElternRoute,
   AuthenticatedGigsRoute: AuthenticatedGigsRoute,
   AuthenticatedInboxRoute: AuthenticatedInboxRoute,
   AuthenticatedMarketplaceRoute: AuthenticatedMarketplaceRoute,
@@ -613,8 +734,13 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  DatenschutzRoute: DatenschutzRoute,
   EinverstaendniserklaerungRoute: EinverstaendniserklaerungRoute,
+  ElternInfoRoute: ElternInfoRoute,
+  FreiburgRoute: FreiburgRoute,
+  VermittlerRoute: VermittlerRoute,
   AuftragFreigabeTokenRoute: AuftragFreigabeTokenRoute,
+  ElternEinladungTokenRoute: ElternEinladungTokenRoute,
   ElternZustimmungTokenRoute: ElternZustimmungTokenRoute,
 }
 export const routeTree = rootRouteImport
