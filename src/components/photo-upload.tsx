@@ -3,10 +3,16 @@ import { ImagePlus, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import {
+  IMAGE_ACCEPT,
+  ImageValidationError,
+  UPLOAD_EXT,
+  UPLOAD_MIME,
+  prepareImageForUpload,
+} from "@/lib/image-upload";
 
 const MAX_PHOTOS = 5;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB, muss zum Bucket-Limit in der Migration passen
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /** Extrahiert den Storage-Pfad aus einer öffentlichen Supabase-Storage-URL. */
 function pathFromPublicUrl(url: string): string | null {
@@ -44,28 +50,36 @@ export function PhotoUpload({
     setIsUploading(true);
     try {
       const uploadedUrls: string[] = [];
-      for (const file of toUpload) {
-        if (!ALLOWED_TYPES.includes(file.type)) {
-          toast.error(`${file.name}: nur JPEG, PNG oder WebP erlaubt.`);
-          continue;
-        }
-        if (file.size > MAX_FILE_SIZE) {
-          toast.error(`${file.name}: Datei zu groß (max. 5 MB).`);
+      for (const original of toUpload) {
+        // Nur echte Bilder: Typ + Magic Bytes prüfen, Bild neu erzeugen (entfernt versteckte Daten/EXIF).
+        let file: File;
+        try {
+          file = await prepareImageForUpload(original, {
+            maxBytes: MAX_FILE_SIZE,
+            maxDimension: 2000,
+            minDimension: 100,
+          });
+        } catch (e) {
+          toast.error(
+            `${original.name}: ${
+              e instanceof ImageValidationError ? e.message : "Das Bild konnte nicht verarbeitet werden."
+            }`,
+          );
           continue;
         }
 
-        const ext = file.name.split(".").pop() ?? "jpg";
-        const path = `${helperId}/${listingId}/${crypto.randomUUID()}.${ext}`;
+        const path = `${helperId}/${listingId}/${crypto.randomUUID()}.${UPLOAD_EXT}`;
 
         const { error } = await supabase.storage
           .from("listing-photos")
           .upload(path, file, {
             cacheControl: "3600",
             upsert: false,
+            contentType: UPLOAD_MIME,
           });
         if (error) {
           toast.error(
-            `${file.name}: Upload fehlgeschlagen (${error.message}).`,
+            `${original.name}: Upload fehlgeschlagen (${error.message}).`,
           );
           continue;
         }
@@ -148,14 +162,14 @@ export function PhotoUpload({
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={IMAGE_ACCEPT}
         multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
 
       <p className="text-xs text-muted-foreground">
-        Bis zu {MAX_PHOTOS} Fotos, je max. 5 MB (JPEG, PNG, WebP).
+        Bis zu {MAX_PHOTOS} Fotos, je max. 5 MB. Nur Bilder (JPEG, PNG, WebP), keine PDFs oder anderen Dateien.
       </p>
     </div>
   );

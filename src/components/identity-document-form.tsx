@@ -4,7 +4,15 @@ import { useMutation } from "@tanstack/react-query";
 import { FileUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { IdCheckNotice } from "@/components/youth-protection-rules";
-import { ID_REDACTION_CONFIRMATION } from "@/lib/consent-texts";
+import { ID_CONSENT_TEXT, ID_CONSENT_VERSION, ID_REDACTION_CONFIRMATION } from "@/lib/consent-texts";
+import {
+  IMAGE_ACCEPT,
+  ImageValidationError,
+  UPLOAD_EXT,
+  UPLOAD_MIME,
+  assertImageFile,
+  prepareImageForUpload,
+} from "@/lib/image-upload";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -18,13 +26,6 @@ import {
 } from "@/lib/verification.functions";
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-const EXT: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "application/pdf": "pdf",
-};
 
 /**
  * Ausweisprüfung für Erwachsene, Profis und Auftraggeber:
@@ -35,6 +36,7 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [redacted, setRedacted] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -42,15 +44,26 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
       const uid = auth.user?.id;
       if (!uid || !file) throw new Error("Bitte melde dich erneut an.");
 
+      // Nur echte Bilder: Typ + Magic Bytes prüfen, Bild neu erzeugen (entfernt versteckte Daten/EXIF).
+      let prepared: File;
+      try {
+        prepared = await prepareImageForUpload(file, { maxBytes: MAX_BYTES });
+      } catch (e) {
+        if (e instanceof ImageValidationError) throw new Error(`Bitte wähle ein anderes Bild. ${e.message}`);
+        throw e;
+      }
+
       const submissionId = crypto.randomUUID();
       const { error } = await supabase.storage
         .from(IDENTITY_DOC_BUCKET)
-        .upload(`${uid}/${submissionId}/${IDENTITY_DOC_KEY}.${EXT[file.type]}`, file, {
-          contentType: file.type,
+        .upload(`${uid}/${submissionId}/${IDENTITY_DOC_KEY}.${UPLOAD_EXT}`, prepared, {
+          contentType: UPLOAD_MIME,
           upsert: false,
         });
       if (error) throw new Error("Upload fehlgeschlagen.");
-      return requestFn({ data: { submissionId, note: note.trim() || undefined } });
+      return requestFn({
+        data: { submissionId, note: note.trim() || undefined, consentVersion: ID_CONSENT_VERSION },
+      });
     },
     onSuccess: (res) => {
       toast.success(
@@ -72,17 +85,17 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
     },
   });
 
-  function pick(f: File | undefined) {
+  async function pick(input: HTMLInputElement) {
+    const f = input.files?.[0];
     if (!f) return;
-    if (!ALLOWED.includes(f.type)) {
-      toast.error("Erlaubt sind Fotos (JPG, PNG, WebP) und PDF.");
-      return;
+    try {
+      await assertImageFile(f, MAX_BYTES);
+      setFile(f);
+    } catch (e) {
+      setFile(null);
+      input.value = "";
+      toast.error(e instanceof ImageValidationError ? e.message : "Die Datei konnte nicht geprüft werden.");
     }
-    if (f.size > MAX_BYTES) {
-      toast.error("Die Datei ist größer als 10 MB.");
-      return;
-    }
-    setFile(f);
   }
 
   return (
@@ -92,14 +105,18 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
       <div className="space-y-1.5">
         <Label htmlFor="identity-file" className="flex items-center gap-1.5 text-xs">
           <FileUp className="size-3.5" />
-          Foto deines Ausweises (geschwärzt)
+          Foto deines Ausweises (geschwärzt, nur JPG, PNG oder WebP)
         </Label>
         <Input
           id="identity-file"
           type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={(e) => pick(e.target.files?.[0])}
+          accept={IMAGE_ACCEPT}
+          onChange={(e) => void pick(e.target)}
         />
+        <p className="text-[11px] text-muted-foreground">
+          Nur Bilder (JPG, PNG, WebP), höchstens 10 MB. PDFs und andere Dateien werden abgelehnt. Das Bild wird vor dem
+          Hochladen neu erzeugt, dabei fallen versteckte Zusatzdaten und Standortdaten (EXIF) weg.
+        </p>
         {file && <p className="truncate text-[11px] text-muted-foreground">{file.name}</p>}
       </div>
 
@@ -123,7 +140,26 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
         </Label>
       </div>
 
-      <Button className="w-full" disabled={!file || !redacted || submit.isPending} onClick={() => submit.mutate()}>
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id="identity-consent"
+          checked={consent}
+          onCheckedChange={(v) => setConsent(v === true)}
+          className="mt-0.5"
+        />
+        <Label htmlFor="identity-consent" className="text-xs font-normal leading-relaxed">
+          {ID_CONSENT_TEXT}{" "}
+          <a href="/datenschutz" target="_blank" rel="noreferrer" className="text-primary underline">
+            Datenschutzerklärung
+          </a>
+        </Label>
+      </div>
+
+      <Button
+        className="w-full"
+        disabled={!file || !redacted || !consent || submit.isPending}
+        onClick={() => submit.mutate()}
+      >
         {submit.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
         Zur Prüfung einreichen
       </Button>

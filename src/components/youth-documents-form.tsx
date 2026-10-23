@@ -9,6 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { IdCheckNotice, YouthProtectionRules } from "@/components/youth-protection-rules";
 import { ID_REDACTION_CONFIRMATION } from "@/lib/consent-texts";
+import {
+  IMAGE_ACCEPT,
+  ImageValidationError,
+  UPLOAD_EXT,
+  UPLOAD_MIME,
+  assertImageFile,
+  prepareImageForUpload,
+} from "@/lib/image-upload";
 import { supabase } from "@/integrations/supabase/client";
 import {
   submitYouthVerification,
@@ -18,13 +26,6 @@ import {
 } from "@/lib/youth-verification.functions";
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-const EXT: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "application/pdf": "pdf",
-};
 
 const LABELS: Record<YouthDocKey, { label: string; hint?: string }> = {
   consent: {
@@ -54,11 +55,20 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
 
       const submissionId = crypto.randomUUID();
       for (const key of YOUTH_DOC_KEYS) {
-        const file = files[key]!;
+        // Nur echte Bilder: Typ + Magic Bytes prüfen, Bild neu erzeugen (entfernt versteckte Daten/EXIF).
+        let prepared: File;
+        try {
+          prepared = await prepareImageForUpload(files[key]!, { maxBytes: MAX_BYTES });
+        } catch (e) {
+          if (e instanceof ImageValidationError) {
+            throw new Error(`Bitte wähle ein anderes Bild (${LABELS[key].label}). ${e.message}`);
+          }
+          throw e;
+        }
         const { error } = await supabase.storage
           .from(YOUTH_DOC_BUCKET)
-          .upload(`${uid}/${submissionId}/${key}.${EXT[file.type]}`, file, {
-            contentType: file.type,
+          .upload(`${uid}/${submissionId}/${key}.${UPLOAD_EXT}`, prepared, {
+            contentType: UPLOAD_MIME,
             upsert: false,
           });
         if (error) throw new Error(`Upload fehlgeschlagen (${LABELS[key].label}).`);
@@ -88,17 +98,21 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
     },
   });
 
-  function pick(key: YouthDocKey, file: File | undefined) {
+  async function pick(key: YouthDocKey, input: HTMLInputElement) {
+    const file = input.files?.[0];
     if (!file) return;
-    if (!ALLOWED.includes(file.type)) {
-      toast.error("Erlaubt sind Fotos (JPG, PNG, WebP) und PDF.");
-      return;
+    try {
+      await assertImageFile(file, MAX_BYTES);
+      setFiles((prev) => ({ ...prev, [key]: file }));
+    } catch (e) {
+      setFiles((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      input.value = "";
+      toast.error(e instanceof ImageValidationError ? e.message : "Die Datei konnte nicht geprüft werden.");
     }
-    if (file.size > MAX_BYTES) {
-      toast.error("Die Datei ist größer als 10 MB.");
-      return;
-    }
-    setFiles((prev) => ({ ...prev, [key]: file }));
   }
 
   return (
@@ -162,9 +176,13 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
           <Input
             id={`doc-${key}`}
             type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={(e) => pick(key, e.target.files?.[0])}
+            accept={IMAGE_ACCEPT}
+            onChange={(e) => void pick(key, e.target)}
           />
+          <p className="text-[11px] text-muted-foreground">
+            Nur Bilder (JPG, PNG, WebP), höchstens 10 MB. Auch die unterschriebene Einverständniserklärung bitte als
+            Foto oder Scan-Bild hochladen, nicht als PDF.
+          </p>
           {files[key] && (
             <p className="truncate text-[11px] text-muted-foreground">{files[key]!.name}</p>
           )}
