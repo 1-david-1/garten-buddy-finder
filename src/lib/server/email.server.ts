@@ -52,9 +52,13 @@ export function sanitizeSubject(value: string): string {
 
 /** Für die Systemstatus-Seite im Admin: ist der E-Mail-Versand eingerichtet? */
 export function getEmailConfig() {
+  const fromConfigured = Boolean(getEnv("EMAIL_FROM_ADDRESS"));
   return {
     resendConfigured: Boolean(getEnv("RESEND_API_KEY")),
-    fromAddress: getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <no-reply@greenmatch.app> (Standard)",
+    fromConfigured,
+    fromAddress:
+      getEnv("EMAIL_FROM_ADDRESS") ||
+      "GreenMatch <onboarding@resend.dev> (Resend-Test-Absender – nur an die eigene Resend-Konto-Mail)",
     replyToAddress: getEnv("EMAIL_REPLY_TO") || undefined,
     siteUrlConfigured: Boolean(getEnv("PUBLIC_SITE_URL")),
     effectiveSiteUrl: getSiteUrl(),
@@ -68,24 +72,34 @@ interface SendEmailInput {
   replyTo?: string;
 }
 
+export type SendEmailResult =
+  | { ok: true }
+  | { ok: false; error: string; status?: number };
+
 /**
- * Versendet eine E-Mail über die Resend-API und liefert zurück, ob sie versendet wurde.
- * Wirft absichtlich nie einen Fehler:
- * Fehlt der API-Key oder schlägt der Request fehl, wird nur geloggt. Eine
- * Benachrichtigung darf niemals eine eigentliche Aktion (Gebot, Zusage, ...)
- * zum Scheitern bringen.
+ * Versendet eine E-Mail über die Resend-API.
+ * Wirft absichtlich nie: Fehlt der API-Key oder scheitert Resend, kommt
+ * { ok: false, error }. Aufrufer (Gebote, Freigaben, …) dürfen davon nicht
+ * blockiert werden – die Eltern-Einladung zeigt die Ursache aber an.
  */
-export async function sendEmail({ to, subject: rawSubject, html, replyTo }: SendEmailInput): Promise<boolean> {
+export async function sendEmail({
+  to,
+  subject: rawSubject,
+  html,
+  replyTo,
+}: SendEmailInput): Promise<SendEmailResult> {
   const subject = sanitizeSubject(rawSubject);
   const apiKey = getEnv("RESEND_API_KEY");
   if (!apiKey) {
-    console.warn(
-      `[email] RESEND_API_KEY ist nicht gesetzt - E-Mail wurde NICHT versendet: "${subject}" an ${to}`,
-    );
-    return false;
+    const error =
+      "RESEND_API_KEY fehlt in der Server-Umgebung (.env / Hosting). Ohne diesen Schlüssel werden keine E-Mails versendet.";
+    console.warn(`[email] ${error} Betreff: "${subject}" an ${to}`);
+    return { ok: false, error };
   }
 
-  const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <no-reply@greenmatch.app>";
+  // Standard nur für lokale Tests mit Resend-Onboarding-Domain.
+  // Produktion: EMAIL_FROM_ADDRESS mit verifizierter Domain setzen.
+  const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <onboarding@resend.dev>";
   const reply_to = replyTo || getEnv("EMAIL_REPLY_TO") || undefined;
 
   try {
@@ -106,13 +120,22 @@ export async function sendEmail({ to, subject: rawSubject, html, replyTo }: Send
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error(`[email] Resend-Versand fehlgeschlagen (${res.status}):`, body);
-      return false;
+      let detail = body.slice(0, 400);
+      try {
+        const parsed = JSON.parse(body) as { message?: string };
+        if (parsed.message) detail = parsed.message;
+      } catch {
+        /* raw body behalten */
+      }
+      const error = `Resend hat abgelehnt (${res.status}): ${detail || "unbekannter Fehler"}`;
+      console.error(`[email] ${error}`);
+      return { ok: false, error, status: res.status };
     }
-    return true;
+    return { ok: true };
   } catch (err) {
-    console.error("[email] Netzwerkfehler beim E-Mail-Versand:", err);
-    return false;
+    const error = `Netzwerkfehler beim E-Mail-Versand: ${(err as Error).message}`;
+    console.error(`[email] ${error}`);
+    return { ok: false, error };
   }
 }
 

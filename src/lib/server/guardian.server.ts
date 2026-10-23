@@ -53,6 +53,8 @@ export async function createGuardianInvite(
   emailMasked: string | null;
   /** false, wenn der E-Mail-Versand nicht eingerichtet ist oder fehlgeschlagen ist */
   emailSent: boolean;
+  /** Technische Ursache, wenn emailSent === false (für Toast / Admin) */
+  emailError: string | null;
   /** true, wenn für die Eltern automatisch ein Konto angelegt wurde */
   accountCreated: boolean;
 }> {
@@ -97,6 +99,7 @@ export async function createGuardianInvite(
 
   const link = `${getSiteUrl()}/eltern-einladung/${token}`;
   let emailSent = false;
+  let emailError: string | null = null;
   let accountCreated = false;
 
   if (email) {
@@ -107,6 +110,7 @@ export async function createGuardianInvite(
       .maybeSingle();
     const childName = child?.display_name?.trim() || "Ihr Kind";
     const name = escapeHtml(childName);
+    const siteUrl = getSiteUrl();
 
     // Eltern-Konto automatisch anlegen: Mit der angegebenen E-Mail-Adresse wird ein Konto erstellt (bzw. ein
     // vorhandenes genutzt) und ein Einmal-Anmeldelink erzeugt. Mit dem Klick bestätigen die Eltern zugleich ihre
@@ -114,34 +118,50 @@ export async function createGuardianInvite(
     const action = await createGuardianAccountLink(email, link, token);
     accountCreated = action.created;
 
-    emailSent = await sendEmail({
+    const sendResult = await sendEmail({
       to: email,
       subject: `${childName} möchte bei GreenMatch Gartenhilfe anbieten – Ihre Zustimmung wird benötigt`,
       html: emailTemplate({
         badge: "Kinderschutz & Registrierung",
-        heading: "Einverständniserklärung und Eltern-Konto",
+        heading: "Einverständnis und Eltern-Konto für GreenMatch",
         greeting: "Liebe Erziehungsberechtigte,",
-        previewText: `${childName} möchte bei GreenMatch Gartenhilfe anbieten – Ihre Zustimmung wird benötigt.`,
+        previewText: `${childName} möchte bei GreenMatch helfen – bitte Eltern-Konto öffnen und zustimmen.`,
         bodyLines: [
-          `<strong>${name}</strong> möchte bei GreenMatch leichte Gartenarbeiten für Nachbarn übernehmen. Das ist ab 13 Jahren nur mit Ihrer Zustimmung möglich.`,
+          `<strong>${name}</strong> möchte über GreenMatch leichte Gartenarbeiten in der Nachbarschaft anbieten. Das ist für Jugendliche ab 13 Jahren nur mit Ihrer Zustimmung möglich.`,
           action.created
-            ? "Wir haben für Sie bereits ein Eltern-Konto mit dieser E-Mail-Adresse angelegt. Mit dem Button unten melden Sie sich ohne Passwort an; dort können Sie Ihren Namen und ein Passwort festlegen."
-            : "Mit dem Button unten öffnen Sie Ihr Eltern-Konto.",
-          "<strong>Was jetzt zu tun ist:</strong><br/>1. Eltern-Konto öffnen (kostenlos) – über den Button unten.<br/>2. Einverständniserklärung ausdrucken, unterschreiben und gemeinsam mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Danach prüft unser Team die Unterlagen.",
-          "<strong>Ihr Eltern-Konto ist Pflicht</strong> – es dient der Sicherheit Ihres Kindes: Dort sehen Sie alle Auftragsdaten (Ort, Zeit, Auftraggeber, Art der Tätigkeit), geben jeden einzelnen Auftrag frei und können das Konto jederzeit pausieren sowie Auftraggeber melden oder blockieren.",
-          "Für Jugendliche gelten höchstens 2 Stunden pro Tag, nur zwischen 08:00 und 18:00 Uhr, nicht während des Schulunterrichts und nur leichte, ungefährliche Tätigkeiten.",
-          `Die Einverständniserklärung zum Ausdrucken: <a href="${getSiteUrl()}/einverstaendniserklaerung" style="color:#059669;font-weight:600;">${getSiteUrl()}/einverstaendniserklaerung</a>`,
+            ? "Wir haben für Sie bereits ein kostenloses Eltern-Konto mit dieser E-Mail-Adresse angelegt. Über den Button unten melden Sie sich ohne Passwort an und können danach Namen und Passwort festlegen."
+            : "Über den Button unten öffnen Sie Ihr Eltern-Konto (anmelden oder neu anlegen).",
+          "<strong>Ihre nächsten Schritte:</strong><br/>1. Eltern-Konto öffnen (Button unten).<br/>2. Einverständniserklärung ausdrucken, unterschreiben und zusammen mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Unser Team prüft die Unterlagen – danach kann Ihr Kind Aufträge annehmen.",
+          "<strong>Warum ein Eltern-Konto Pflicht ist:</strong> Sie sehen Ort, Zeit, Auftraggeber und Art der Tätigkeit, geben jeden Auftrag einzeln frei und können das Konto jederzeit pausieren sowie Personen melden oder blockieren.",
+          "Jugendschutz: höchstens 2 Stunden pro Tag, nur zwischen 08:00 und 18:00 Uhr, nicht während des Schulunterrichts, nur leichte und ungefährliche Tätigkeiten.",
+          `Einverständniserklärung zum Ausdrucken: <a href="${siteUrl}/einverstaendniserklaerung" style="color:#15803d;font-weight:600;">${siteUrl}/einverstaendniserklaerung</a>`,
+          `Falls der Button nicht funktioniert, nutzen Sie diesen Link: <a href="${escapeHtml(action.url)}" style="color:#15803d;word-break:break-all;">${escapeHtml(action.url)}</a>`,
           `Der Link ist ${INVITE_VALID_DAYS} Tage gültig. Wenn Sie nicht zustimmen möchten, ignorieren Sie diese E-Mail einfach.`,
         ],
-        ctaLabel: action.created ? "Eltern-Konto öffnen" : "Eltern-Konto anlegen oder anmelden",
+        infoTable: [
+          { label: "Kind", value: name },
+          { label: "Plattform", value: "GreenMatch – Gartenhilfe in der Nachbarschaft" },
+          { label: "Gültigkeit", value: `${INVITE_VALID_DAYS} Tage` },
+        ],
+        trustNotice:
+          "🛡️ <strong>Sicherer Nachbarschaftsservice:</strong> Alle Aufträge werden auf Jugendschutz geprüft. Ohne Ihre Freigabe kann kein Auftrag angenommen werden.",
+        ctaLabel: action.created ? "Eltern-Konto jetzt öffnen" : "Eltern-Konto anlegen oder anmelden",
         ctaUrl: action.url,
         footer:
           "Sie erhalten diese E-Mail, weil Ihr Kind Ihre Adresse bei GreenMatch angegeben hat. Wenn Sie das nicht erwartet haben, können Sie sie ignorieren.",
       }),
     });
+    emailSent = sendResult.ok;
+    emailError = sendResult.ok ? null : sendResult.error;
   }
 
-  return { link, emailMasked: email ? maskEmail(email) : null, emailSent, accountCreated };
+  return {
+    link,
+    emailMasked: email ? maskEmail(email) : null,
+    emailSent,
+    emailError,
+    accountCreated,
+  };
 }
 
 /**
