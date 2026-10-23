@@ -13,6 +13,7 @@
 //   4. Im Eltern-Konto sehen die Eltern Konto- und Auftragsdaten, geben Aufträge frei
 //      und können das Konto pausieren, melden und blockieren.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { coerceDisplayName } from "@/lib/sanitize";
 import { assertServiceRole } from "@/lib/server/service-role.server";
 import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
@@ -234,7 +235,8 @@ export async function acceptGuardianInvite(
 
   // Das Profil wird bei der Registrierung mit dem E-Mail-Anfang als Name angelegt. Für den
   // Abgleich mit dem Ausweis (Team) übernehmen wir den angegebenen vollen Namen.
-  const fullName = (auth.user.user_metadata?.full_name as string | undefined)?.trim();
+  // Der Name stammt aus nutzergesteuerten Metadaten: nur bereinigt übernehmen (XSS-Schutz).
+  const fullName = coerceDisplayName(auth.user.user_metadata?.full_name, "");
   if (fullName) {
     const { data: gp } = await supabaseAdmin
       .from("profiles")
