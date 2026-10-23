@@ -97,7 +97,6 @@ export async function sendEmail({
     return { ok: false, error };
   }
 
-  const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <noreply@mail.inbox-elevate.de>";
   const reply_to = replyTo || getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de";
 
   try {
@@ -108,7 +107,7 @@ export async function sendEmail({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from,
+        from: "GreenMatch <noreply@mail.inbox-elevate.de>",
         to,
         subject,
         html,
