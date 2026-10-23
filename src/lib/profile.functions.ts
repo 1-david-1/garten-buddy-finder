@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { businessNameSchema, displayNameSchema, optionalCitySchema } from "@/lib/sanitize";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
 import {
@@ -25,11 +26,11 @@ export interface ProfileUpdateInput {
 
 const profileUpdateSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(100).optional(),
-    city: z.string().trim().max(100).optional(),
+    displayName: displayNameSchema.optional(),
+    city: optionalCitySchema.optional(),
     postalCode: z.string().trim().max(10).optional(),
     bio: z.string().trim().max(2000).optional(),
-    businessName: z.string().trim().max(200).optional(),
+    businessName: businessNameSchema.optional(),
     ustId: z
       .string()
       .trim()

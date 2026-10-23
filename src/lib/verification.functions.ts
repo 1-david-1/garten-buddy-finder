@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { CUSTOMER_RULES_VERSION, HELPER_SAFETY_VERSION } from "@/lib/consent-texts";
+import { CUSTOMER_RULES_VERSION, HELPER_SAFETY_VERSION, ID_CONSENT_VERSION } from "@/lib/consent-texts";
 import { deriveVerificationStatus, type VerificationStatus } from "@/lib/verification-status";
 
 /**
@@ -213,6 +213,8 @@ export const requestIdentityVerification = createServerFn({ method: "POST" })
       .object({
         submissionId: z.string().uuid(),
         note: z.string().trim().max(500).optional(),
+        // Version des angezeigten Einwilligungstextes (siehe consent-texts.ts)
+        consentVersion: z.literal(ID_CONSENT_VERSION),
       })
       .parse(input),
   )
@@ -247,7 +249,8 @@ export const requestIdentityVerification = createServerFn({ method: "POST" })
       .from(IDENTITY_DOC_BUCKET)
       .list(folder);
     if (listError) throw listError;
-    const match = (listed ?? []).find((f) => f.name.startsWith(`${IDENTITY_DOC_KEY}.`));
+    // Nur Bild-Dateien akzeptieren (Defense-in-Depth zusätzlich zur MIME-Beschränkung des Buckets).
+    const match = (listed ?? []).find((f) => new RegExp(`^${IDENTITY_DOC_KEY}\\.(jpg|jpeg|png|webp)$`).test(f.name));
     if (!match) throw new Error("missing_documents:identity_id");
 
     const { error } = await supabaseAdmin.from("verification_requests").insert({
@@ -255,7 +258,11 @@ export const requestIdentityVerification = createServerFn({ method: "POST" })
       kind: "identity",
       status: "pending",
       note: data.note || null,
-      documents: { submissionId: data.submissionId, files: { [IDENTITY_DOC_KEY]: `${folder}/${match.name}` } },
+      documents: {
+        submissionId: data.submissionId,
+        files: { [IDENTITY_DOC_KEY]: `${folder}/${match.name}` },
+        consent: { version: data.consentVersion, acceptedAt: new Date().toISOString() },
+      },
     });
     if (error) throw error;
     return { ok: true as const, alreadyPending: false };

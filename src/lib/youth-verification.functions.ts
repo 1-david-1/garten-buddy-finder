@@ -103,7 +103,8 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
 
     const files: Partial<Record<YouthDocKey, string>> = {};
     for (const key of YOUTH_DOC_KEYS) {
-      const match = (listed ?? []).find((f) => f.name.startsWith(`${key}.`));
+      // Nur Bild-Dateien akzeptieren (zusätzlich zur MIME-Beschränkung des Buckets).
+      const match = (listed ?? []).find((f) => new RegExp(`^${key}\\.(jpg|jpeg|png|webp)$`).test(f.name));
       if (match) files[key] = `${folder}/${match.name}`;
     }
     const missing = YOUTH_DOC_KEYS.filter((k) => !files[k]);

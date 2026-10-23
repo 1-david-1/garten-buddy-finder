@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { businessNameSchema, displayNameSchema, optionalCitySchema } from "@/lib/sanitize";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -6,11 +7,11 @@ const roleEnum = z.enum(["customer", "helper_youth", "helper_adult", "helper_pro
 
 const OnboardingSchema = z.object({
   role: roleEnum,
-  displayName: z.string().min(2).max(80),
-  city: z.string().max(80).optional().nullable(),
+  displayName: displayNameSchema,
+  city: optionalCitySchema.optional().nullable(),
   postalCode: z.string().max(20).optional().nullable(),
   birthdate: z.string().optional().nullable(), // ISO date
-  businessName: z.string().max(120).optional().nullable(),
+  businessName: businessNameSchema.optional().nullable(),
   vatId: z.string().max(40).optional().nullable(),
   guardianEmail: z.string().email().optional().nullable(),
   language: z.enum(["de", "en"]).default("de"),

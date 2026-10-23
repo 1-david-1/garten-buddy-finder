@@ -38,6 +38,15 @@ export const HELPER_SAFETY_POINTS = [
 export const ID_REDACTION_CONFIRMATION =
   "Ich bestätige, dass ich nicht benötigte Angaben dauerhaft geschwärzt habe und dass nur die für die Identitäts- und Altersprüfung erforderlichen Angaben sichtbar sind.";
 
+/**
+ * Einwilligung in die Verarbeitung der Ausweiskopie (Erwachsene, Profis, Auftraggeber).
+ * Die Version wird bei der Einreichung in verification_requests.documents.consent gespeichert.
+ * Bei Textänderung die Version erhöhen.
+ */
+export const ID_CONSENT_VERSION = "ausweis-einwilligung-2026-10-v1";
+export const ID_CONSENT_TEXT =
+  "Ich willige ein, dass GreenMatch die von mir hochgeladene Ausweiskopie einmalig zur Prüfung meiner Identität und meines Alters verarbeitet. Die Kopie wird nach der Prüfung gelöscht, gespeichert bleiben nur Ergebnis, Prüfdatum und Prüfverfahren. Ich kann meine Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen. Hinweise dazu stehen in der";
+
 /** Auswahltext, wenn die E-Mail der Eltern nicht eingegeben wird */
 export const NO_PARENT_EMAIL_OPTION =
   "Ich kann oder möchte die E-Mail-Adresse meiner gesetzlichen Vertretung nicht eingeben.";
@@ -45,7 +54,9 @@ export const NO_PARENT_EMAIL_OPTION =
 /** Erkennbare Risiken je Tätigkeit - für die Eltern-Mail und die Freigabeseite */
 export const ACTIVITY_RISK_NOTES: Record<string, string> = {
   rasenmähen:
-    "Rasenmäher sind Maschinen mit scharfen, schnell drehenden Teilen. Bitte prüfen, ob die Tätigkeit für das Alter geeignet ist (z. B. nur Handmäher, nur ebene Flächen).",
+    "Rasenmäher sind Maschinen mit scharfen, schnell drehenden Teilen und grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Bitte nur nach Absprache mit den Erziehungsberechtigten freigeben und genau prüfen, ob sie für das Alter geeignet ist.",
+  heckenschnitt:
+    "Heckenscheren sind Werkzeuge mit scharfen, schnell bewegten Schneiden und grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Bitte nur nach Absprache mit den Erziehungsberechtigten freigeben und genau prüfen, ob sie für das Alter geeignet ist.",
   unkraut: "Gebückte Haltung, ggf. Dornen oder Stechpflanzen. Keine Unkrautvernichtungsmittel.",
   blumenbeete: "Geringes Risiko. Handschuhe empfohlen; keine Düngemittel oder Pflanzenschutzmittel handhaben.",
   laub: "Geringes Risiko. Keine Laubbläser oder Häcksler; rutschiges Laub beachten.",
