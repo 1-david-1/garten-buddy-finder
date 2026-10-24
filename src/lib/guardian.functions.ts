@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { displayNameSchema } from "@/lib/sanitize";
 
 /**
  * Eltern-Zusatzkonto (Pflicht für Jugendliche 13-17).
@@ -62,6 +63,51 @@ export const acceptGuardianInviteFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { acceptGuardianInvite } = await import("@/lib/server/guardian.server");
     return acceptGuardianInvite(context.userId, data.token);
+  });
+
+// ---- Eltern-Registrierung per E-Mail-Link ----------------------------------
+
+/** Daten für die Registrierungsseite (öffentlich, nur mit dem geheimen Token aus der Eltern-Mail). */
+export const getGuardianRegistration = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) => z.object({ token: tokenSchema }).parse(input))
+  .handler(async ({ data }) => {
+    const { enforceIpRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("token_lookup", 60, 600);
+    const { lookupGuardianRegistration } = await import("@/lib/server/guardian.server");
+    return lookupGuardianRegistration(data.token);
+  });
+
+/** Legt das Eltern-Konto an (E-Mail aus der Einladung, Name + Passwort von den Eltern) und verknüpft es. */
+export const registerGuardianFn = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        token: tokenSchema,
+        fullName: displayNameSchema,
+        password: z.string().min(8).max(72),
+        confirmedParent: z.literal(true),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { enforceIpRateLimit, enforceRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceIpRateLimit("guardian_register", 10, 3600);
+    await enforceRateLimit({ action: "guardian_register_token", key: data.token.slice(0, 16), max: 10, windowSeconds: 3600 });
+    const { registerGuardianFromEmailLink } = await import("@/lib/server/guardian.server");
+    return registerGuardianFromEmailLink({
+      token: data.token,
+      fullName: data.fullName,
+      password: data.password,
+    });
+  });
+
+/** Eltern mit bestehendem Konto: nach der Anmeldung auf der Registrierungsseite verknüpfen. */
+export const acceptGuardianByRegistrationFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ token: tokenSchema }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { acceptGuardianByRegistrationToken } = await import("@/lib/server/guardian.server");
+    return acceptGuardianByRegistrationToken(context.userId, data.token);
   });
 
 // ---- Eltern-Konto ----------------------------------------------------------
