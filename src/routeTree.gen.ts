@@ -32,6 +32,7 @@ import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSellRouteRouteImport } from './routes/_authenticated/sell/route'
 import { Route as AuftragFreigabeTokenRouteImport } from './routes/auftrag-freigabe.$token'
 import { Route as ElternEinladungTokenRouteImport } from './routes/eltern-einladung.$token'
+import { Route as ElternRegistrierungTokenRouteImport } from './routes/eltern-registrierung.$token'
 import { Route as ElternZustimmungTokenRouteImport } from './routes/eltern-zustimmung.$token'
 import { Route as AuthenticatedHelpersHelperIdRouteImport } from './routes/_authenticated/helpers/$helperId'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages/index'
@@ -159,6 +160,11 @@ const ElternEinladungTokenRoute = ElternEinladungTokenRouteImport.update({
   path: '/eltern-einladung/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ElternRegistrierungTokenRoute = ElternRegistrierungTokenRouteImport.update({
+  id: '/eltern-registrierung/$token',
+  path: '/eltern-registrierung/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ElternZustimmungTokenRoute = ElternZustimmungTokenRouteImport.update({
   id: '/eltern-zustimmung/$token',
   path: '/eltern-zustimmung/$token',
@@ -233,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
   '/eltern-einladung/$token': typeof ElternEinladungTokenRoute
+  '/eltern-registrierung/$token': typeof ElternRegistrierungTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
   '/eltern-einladung/$token': typeof ElternEinladungTokenRoute
+  '/eltern-registrierung/$token': typeof ElternRegistrierungTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/auftrag-freigabe/$token': typeof AuftragFreigabeTokenRoute
   '/eltern-einladung/$token': typeof ElternEinladungTokenRoute
+  '/eltern-registrierung/$token': typeof ElternRegistrierungTokenRoute
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/_authenticated/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/_authenticated/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
@@ -334,6 +343,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/auftrag-freigabe/$token'
     | '/eltern-einladung/$token'
+    | '/eltern-registrierung/$token'
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/auftrag-freigabe/$token'
     | '/eltern-einladung/$token'
+    | '/eltern-registrierung/$token'
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
@@ -399,6 +410,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/auftrag-freigabe/$token'
     | '/eltern-einladung/$token'
+    | '/eltern-registrierung/$token'
     | '/eltern-zustimmung/$token'
     | '/_authenticated/helpers/$helperId'
     | '/_authenticated/messages/$conversationId'
@@ -421,6 +433,7 @@ export interface RootRouteChildren {
   VermittlerRoute: typeof VermittlerRoute
   AuftragFreigabeTokenRoute: typeof AuftragFreigabeTokenRoute
   ElternEinladungTokenRoute: typeof ElternEinladungTokenRoute
+  ElternRegistrierungTokenRoute: typeof ElternRegistrierungTokenRoute
   ElternZustimmungTokenRoute: typeof ElternZustimmungTokenRoute
 }
 
@@ -587,6 +600,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ElternEinladungTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/eltern-registrierung/$token': {
+      id: '/eltern-registrierung/$token'
+      path: '/eltern-registrierung/$token'
+      fullPath: '/eltern-registrierung/$token'
+      preLoaderRoute: typeof ElternRegistrierungTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/eltern-zustimmung/$token': {
       id: '/eltern-zustimmung/$token'
       path: '/eltern-zustimmung/$token'
@@ -741,6 +761,7 @@ const rootRouteChildren: RootRouteChildren = {
   VermittlerRoute: VermittlerRoute,
   AuftragFreigabeTokenRoute: AuftragFreigabeTokenRoute,
   ElternEinladungTokenRoute: ElternEinladungTokenRoute,
+  ElternRegistrierungTokenRoute: ElternRegistrierungTokenRoute,
   ElternZustimmungTokenRoute: ElternZustimmungTokenRoute,
 }
 export const routeTree = rootRouteImport
