@@ -55,7 +55,7 @@ export async function createGuardianInvite(
   emailSent: boolean;
   /** Technische Ursache, wenn emailSent === false (für Toast / Admin) */
   emailError: string | null;
-  /** true, wenn für die Eltern automatisch ein Konto angelegt wurde */
+  /** Veraltet: Das Eltern-Konto wird jetzt erst auf der Registrierungsseite angelegt (immer false). */
   accountCreated: boolean;
 }> {
   await assertServiceRole();
@@ -83,11 +83,15 @@ export async function createGuardianInvite(
   }
 
   const token = newToken();
+  // Eigener Registrierungs-Token: geht NUR per E-Mail an die Eltern (nie an das Kind). Der weiterleitbare
+  // Einladungslink (token) bleibt davon getrennt.
+  const registrationToken = email ? newToken() : null;
   const { error } = await supabaseAdmin.from("guardian_links").insert({
     child_id: childId,
     status: "invited",
     invited_email: email,
     token_hash: await sha256Hex(token),
+    registration_token_hash: registrationToken ? await sha256Hex(registrationToken) : null,
     last_sent_at: email ? new Date().toISOString() : null,
   });
   if (error) throw error;
@@ -100,7 +104,6 @@ export async function createGuardianInvite(
   const link = `${getSiteUrl()}/eltern-einladung/${token}`;
   let emailSent = false;
   let emailError: string | null = null;
-  let accountCreated = false;
 
   if (email) {
     const { data: child } = await supabaseAdmin
@@ -112,11 +115,10 @@ export async function createGuardianInvite(
     const name = escapeHtml(childName);
     const siteUrl = getSiteUrl();
 
-    // Eltern-Konto automatisch anlegen: Mit der angegebenen E-Mail-Adresse wird ein Konto erstellt (bzw. ein
-    // vorhandenes genutzt) und ein Einmal-Anmeldelink erzeugt. Mit dem Klick bestätigen die Eltern zugleich ihre
-    // E-Mail-Adresse. Dieser Link geht NUR per E-Mail an die Eltern - nie an das Kind.
-    const action = await createGuardianAccountLink(email, link, token);
-    accountCreated = action.created;
+    // Die Eltern bekommen einen Link auf eine eigene Registrierungsseite: Ihre E-Mail-Adresse ist dort schon
+    // eingetragen, sie legen nur noch Namen und Passwort fest. Das Konto entsteht erst dort (nicht schon beim
+    // Einladen), damit keine halbfertigen Konten ohne Passwort herumliegen.
+    const registerUrl = `${siteUrl}/eltern-registrierung/${registrationToken}`;
 
     const sendResult = await sendEmail({
       to: email,
@@ -125,17 +127,15 @@ export async function createGuardianInvite(
         badge: "Kinderschutz & Registrierung",
         heading: "Einverständnis und Eltern-Konto für GreenMatch",
         greeting: "Liebe Erziehungsberechtigte,",
-        previewText: `${childName} möchte bei GreenMatch helfen – bitte Eltern-Konto öffnen und zustimmen.`,
+        previewText: `${childName} möchte bei GreenMatch helfen – bitte Eltern-Konto anlegen (nur Passwort festlegen).`,
         bodyLines: [
           `<strong>${name}</strong> möchte über GreenMatch leichte Gartenarbeiten in der Nachbarschaft anbieten. Das ist für Jugendliche ab 13 Jahren nur mit Ihrer Zustimmung möglich.`,
-          action.created
-            ? "Wir haben für Sie bereits ein kostenloses Eltern-Konto mit dieser E-Mail-Adresse angelegt. Über den Button unten melden Sie sich ohne Passwort an und können danach Namen und Passwort festlegen."
-            : "Über den Button unten öffnen Sie Ihr Eltern-Konto (anmelden oder neu anlegen).",
-          "<strong>Ihre nächsten Schritte:</strong><br/>1. Eltern-Konto öffnen (Button unten).<br/>2. Einverständniserklärung ausdrucken, unterschreiben und zusammen mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Unser Team prüft die Unterlagen – danach kann Ihr Kind Aufträge annehmen.",
+          "Über den Button unten gelangen Sie auf eine eigene Seite für Eltern. Ihre E-Mail-Adresse ist dort bereits eingetragen – Sie müssen nur noch Ihren Namen und ein Passwort festlegen. Das Eltern-Konto ist kostenlos.",
+          "<strong>Ihre nächsten Schritte:</strong><br/>1. Eltern-Konto anlegen (Button unten, nur Passwort festlegen).<br/>2. Einverständniserklärung ausdrucken, unterschreiben und zusammen mit den Ausweisen von Ihnen und Ihrem Kind hochladen lassen.<br/>3. Unser Team prüft die Unterlagen – danach kann Ihr Kind Aufträge annehmen.",
           "<strong>Warum ein Eltern-Konto Pflicht ist:</strong> Sie sehen Ort, Zeit, Auftraggeber und Art der Tätigkeit, geben jeden Auftrag einzeln frei und können das Konto jederzeit pausieren sowie Personen melden oder blockieren.",
           "Jugendschutz: höchstens 2 Stunden pro Tag, nur zwischen 08:00 und 18:00 Uhr, nicht während des Schulunterrichts, nur leichte und ungefährliche Tätigkeiten.",
           `Einverständniserklärung zum Ausdrucken: <a href="${siteUrl}/einverstaendniserklaerung" style="color:#15803d;font-weight:600;">${siteUrl}/einverstaendniserklaerung</a>`,
-          `Falls der Button nicht funktioniert, nutzen Sie diesen Link: <a href="${escapeHtml(action.url)}" style="color:#15803d;word-break:break-all;">${escapeHtml(action.url)}</a>`,
+          `Falls der Button nicht funktioniert, nutzen Sie diesen Link: <a href="${escapeHtml(registerUrl)}" style="color:#15803d;word-break:break-all;">${escapeHtml(registerUrl)}</a>`,
           `Der Link ist ${INVITE_VALID_DAYS} Tage gültig. Wenn Sie nicht zustimmen möchten, ignorieren Sie diese E-Mail einfach.`,
         ],
         infoTable: [
@@ -145,8 +145,8 @@ export async function createGuardianInvite(
         ],
         trustNotice:
           "🛡️ <strong>Sicherer Nachbarschaftsservice:</strong> Alle Aufträge werden auf Jugendschutz geprüft. Ohne Ihre Freigabe kann kein Auftrag angenommen werden.",
-        ctaLabel: action.created ? "Eltern-Konto jetzt öffnen" : "Eltern-Konto anlegen oder anmelden",
-        ctaUrl: action.url,
+        ctaLabel: "Eltern-Konto anlegen",
+        ctaUrl: registerUrl,
         footer:
           "Sie erhalten diese E-Mail, weil Ihr Kind Ihre Adresse bei GreenMatch angegeben hat. Wenn Sie das nicht erwartet haben, können Sie sie ignorieren.",
       }),
@@ -160,46 +160,8 @@ export async function createGuardianInvite(
     emailMasked: email ? maskEmail(email) : null,
     emailSent,
     emailError,
-    accountCreated,
+    accountCreated: false,
   };
-}
-
-/**
- * Erzeugt den Link, den die Eltern per E-Mail erhalten:
- *  - neue E-Mail-Adresse  -> Konto wird angelegt (Rolle "guardian" in den Metadaten) + Einmal-Anmeldelink
- *  - vorhandenes Konto    -> Einmal-Anmeldelink (Magic Link)
- *  - nicht möglich        -> normaler Einladungslink (Eltern registrieren sich selbst)
- * Der Einladungs-Token steht zusätzlich in den Metadaten, falls die Weiterleitung auf die Einladungsseite
- * (Redirect-Liste in Supabase) nicht klappt: die Eltern-Seite verknüpft dann trotzdem.
- */
-async function createGuardianAccountLink(
-  email: string,
-  inviteUrl: string,
-  token: string,
-): Promise<{ url: string; created: boolean }> {
-  try {
-    let created = true;
-    let res = await supabaseAdmin.auth.admin.generateLink({
-      type: "invite",
-      email,
-      options: { redirectTo: inviteUrl, data: { signup_role: "guardian", guardian_invite: token } },
-    });
-    if (res.error) {
-      // Bereits registriert -> Einmal-Anmeldelink für das vorhandene Konto
-      created = false;
-      res = await supabaseAdmin.auth.admin.generateLink({
-        type: "magiclink",
-        email,
-        options: { redirectTo: inviteUrl },
-      });
-    }
-    const actionLink = res.data?.properties?.action_link;
-    if (actionLink) return { url: actionLink, created };
-    if (res.error) console.error("[Eltern-Konto] generateLink fehlgeschlagen:", res.error.message);
-  } catch (e) {
-    console.error("[Eltern-Konto] Konto/Anmeldelink konnte nicht erzeugt werden:", e);
-  }
-  return { url: inviteUrl, created: false };
 }
 
 export type InviteLookup =
@@ -225,6 +187,31 @@ export async function lookupGuardianInvite(token: string): Promise<InviteLookup>
   return { state: expired ? "expired" : "open", childName: child?.display_name?.trim() || "Ihr Kind" };
 }
 
+const INVITE_VALID_MS = INVITE_VALID_DAYS * 24 * 60 * 60 * 1000;
+
+interface OpenLink {
+  id: string;
+  child_id: string;
+  invited_email: string | null;
+  created_at: string;
+  last_sent_at: string | null;
+}
+
+function isExpired(link: Pick<OpenLink, "created_at" | "last_sent_at">): boolean {
+  return Date.now() - new Date(link.last_sent_at ?? link.created_at).getTime() > INVITE_VALID_MS;
+}
+
+/** Offene Einladung zum Registrierungs-Token (aus der Eltern-Mail) oder null. */
+async function findLinkByRegistrationToken(token: string): Promise<OpenLink | null> {
+  const { data } = await supabaseAdmin
+    .from("guardian_links")
+    .select("id, child_id, invited_email, created_at, last_sent_at")
+    .eq("registration_token_hash", await sha256Hex(token))
+    .eq("status", "invited")
+    .maybeSingle();
+  return (data as OpenLink | null) ?? null;
+}
+
 /** Verknüpft das angemeldete Konto als Eltern-Konto mit dem Kind. */
 export async function acceptGuardianInvite(
   guardianUserId: string,
@@ -233,14 +220,23 @@ export async function acceptGuardianInvite(
   await assertServiceRole();
   const { data: link } = await supabaseAdmin
     .from("guardian_links")
-    .select("id, child_id, created_at, last_sent_at")
+    .select("id, child_id, invited_email, created_at, last_sent_at")
     .eq("token_hash", await sha256Hex(token))
     .eq("status", "invited")
     .maybeSingle();
   if (!link) throw new VerificationError("invalid_token");
+  return completeGuardianLink(link as OpenLink, guardianUserId);
+}
 
-  const sent = new Date(link.last_sent_at ?? link.created_at).getTime();
-  if (Date.now() - sent > INVITE_VALID_DAYS * 24 * 60 * 60 * 1000) throw new VerificationError("expired");
+/**
+ * Gemeinsamer Abschluss: prüft das Eltern-Konto und aktiviert die Verknüpfung.
+ * Wird vom weiterleitbaren Einladungslink UND von der Registrierungsseite (E-Mail-Link) genutzt.
+ */
+async function completeGuardianLink(
+  link: OpenLink,
+  guardianUserId: string,
+): Promise<{ childName: string }> {
+  if (isExpired(link)) throw new VerificationError("expired");
   if (link.child_id === guardianUserId) throw new VerificationError("own_account");
 
   // Ein Jugendlichen-Konto kann kein Eltern-Konto sein.
@@ -270,17 +266,20 @@ export async function acceptGuardianInvite(
   }
 
   const nowIso = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const { data: updated, error } = await supabaseAdmin
     .from("guardian_links")
     .update({
       status: "active",
       guardian_user_id: guardianUserId,
       accepted_at: nowIso,
       token_hash: null, // Einladung ist einmalig
+      registration_token_hash: null,
     })
     .eq("id", link.id)
-    .eq("status", "invited");
+    .eq("status", "invited")
+    .select("id");
   if (error) throw error;
+  if (!updated || updated.length === 0) throw new VerificationError("invalid_token");
 
   const { data: child } = await supabaseAdmin
     .from("profiles")
@@ -308,6 +307,98 @@ export async function acceptGuardianInvite(
   });
 
   return { childName: child?.display_name?.trim() || "Ihr Kind" };
+}
+
+// ---------------------------------------------------------------------------
+// Eltern-Registrierung per E-Mail-Link (/eltern-registrierung/<token>)
+// ---------------------------------------------------------------------------
+
+export type RegistrationLookup =
+  | { state: "invalid" }
+  | { state: "expired"; childName: string }
+  | { state: "open"; childName: string; email: string };
+
+/**
+ * Daten für die Registrierungsseite. Der Token wurde ausschließlich an die Eltern-E-Mail gesendet; wer ihn
+ * kennt, hat die Mail erhalten - deshalb darf die Adresse hier vollständig angezeigt (vorausgefüllt) werden.
+ */
+export async function lookupGuardianRegistration(token: string): Promise<RegistrationLookup> {
+  const link = await findLinkByRegistrationToken(token);
+  if (!link || !link.invited_email) return { state: "invalid" };
+  const { data: child } = await supabaseAdmin
+    .from("profiles")
+    .select("display_name")
+    .eq("id", link.child_id)
+    .maybeSingle();
+  const childName = child?.display_name?.trim() || "Ihr Kind";
+  if (isExpired(link)) return { state: "expired", childName };
+  return { state: "open", childName, email: link.invited_email };
+}
+
+/**
+ * Legt das Eltern-Konto mit der eingeladenen E-Mail-Adresse an und verknüpft es sofort mit dem Kind.
+ * Die E-Mail-Adresse gilt als bestätigt, weil der Token nur per E-Mail an diese Adresse ging.
+ * Die Adresse kommt aus der Einladung - sie wird NICHT vom Browser übernommen.
+ */
+export async function registerGuardianFromEmailLink(input: {
+  token: string;
+  fullName: string;
+  password: string;
+}): Promise<{ email: string; childName: string }> {
+  await assertServiceRole();
+  const link = await findLinkByRegistrationToken(input.token);
+  if (!link || !link.invited_email) throw new VerificationError("invalid_token");
+  if (isExpired(link)) throw new VerificationError("expired");
+  const email = link.invited_email.trim().toLowerCase();
+
+  const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { full_name: input.fullName, signup_role: "guardian" },
+  });
+  if (error || !created?.user) {
+    const code = (error as { code?: string } | null)?.code ?? "";
+    const msg = (error?.message ?? "").toLowerCase();
+    if (code === "email_exists" || msg.includes("already") || msg.includes("registered")) {
+      throw new VerificationError("account_exists");
+    }
+    if (code === "weak_password" || msg.includes("password")) {
+      throw new VerificationError("weak_password");
+    }
+    console.error("[Eltern-Registrierung] Konto konnte nicht angelegt werden:", error?.message);
+    throw new VerificationError("register_failed");
+  }
+
+  try {
+    const res = await completeGuardianLink(link, created.user.id);
+    return { email, childName: res.childName };
+  } catch (e) {
+    // Konto existiert, Verknüpfung nicht: nicht stillschweigend scheitern, die Eltern können sich anmelden
+    // und über denselben Link (Anmelden-Variante) verknüpfen. Ein verwaistes Konto wird NICHT gelöscht,
+    // weil die Eltern das Passwort bereits vergeben haben.
+    console.error("[Eltern-Registrierung] Verknüpfung nach Kontoanlage fehlgeschlagen:", (e as Error)?.message);
+    throw e;
+  }
+}
+
+/**
+ * Für Eltern, die mit dieser E-Mail-Adresse schon ein Konto haben: nach der Anmeldung auf der
+ * Registrierungsseite wird das angemeldete Konto verknüpft. Die E-Mail-Adresse des Kontos muss zur
+ * eingeladenen Adresse passen.
+ */
+export async function acceptGuardianByRegistrationToken(
+  guardianUserId: string,
+  token: string,
+): Promise<{ childName: string }> {
+  await assertServiceRole();
+  const link = await findLinkByRegistrationToken(token);
+  if (!link || !link.invited_email) throw new VerificationError("invalid_token");
+  const { data: auth } = await supabaseAdmin.auth.admin.getUserById(guardianUserId);
+  if ((auth?.user?.email ?? "").trim().toLowerCase() !== link.invited_email.trim().toLowerCase()) {
+    throw new VerificationError("email_mismatch");
+  }
+  return completeGuardianLink(link, guardianUserId);
 }
 
 // ---------------------------------------------------------------------------
