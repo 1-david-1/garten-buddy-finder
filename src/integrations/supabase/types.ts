@@ -529,6 +529,7 @@ export type Database = {
           paused_at: string | null;
           status: string;
           token_hash: string | null;
+          registration_token_hash: string | null;
           consent_given_at: string | null;
           consent_text_version: string | null;
           ended_at: string | null;
@@ -545,6 +546,7 @@ export type Database = {
           paused_at?: string | null;
           status?: string;
           token_hash?: string | null;
+          registration_token_hash?: string | null;
           consent_given_at?: string | null;
           consent_text_version?: string | null;
           ended_at?: string | null;
@@ -561,6 +563,7 @@ export type Database = {
           paused_at?: string | null;
           status?: string;
           token_hash?: string | null;
+          registration_token_hash?: string | null;
           consent_given_at?: string | null;
           consent_text_version?: string | null;
           ended_at?: string | null;
