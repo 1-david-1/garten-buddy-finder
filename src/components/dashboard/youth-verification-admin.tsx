@@ -125,6 +125,16 @@ function ReviewCard({ item, onDone }: { item: YouthVerificationItem; onDone: () 
           </p>
         </div>
 
+        {item.parentIdInGuardianAccount && (
+          <p className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs">
+            Ausweis des Elternteils: wurde im <strong>Eltern-Konto</strong> eingereicht (
+            {item.parentIdInGuardianAccount === "verified"
+              ? "bereits geprüft und freigegeben"
+              : "dort noch in Prüfung – unter „Ausweisprüfung“ prüfen"}
+            ). Name des Eltern-Kontos mit der Einverständniserklärung abgleichen.
+          </p>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-3">
           {item.documents.map((d) => (
             <a
