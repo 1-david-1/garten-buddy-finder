@@ -59,7 +59,7 @@ export const getSystemStatus = createServerFn({ method: "GET" })
       ok: mail.siteUrlConfigured,
       detail: mail.siteUrlConfigured
         ? mail.effectiveSiteUrl
-        : `PUBLIC_SITE_URL fehlt. Aktuell verwendet: ${mail.effectiveSiteUrl} (aus der Anfrage abgeleitet).`,
+        : `PUBLIC_SITE_URL fehlt oder zeigt auf localhost. Aktuell verwendet: ${mail.effectiveSiteUrl} (Standardadresse).`,
       fix: mail.siteUrlConfigured ? undefined : "PUBLIC_SITE_URL auf die echte Adresse setzen, z. B. https://deine-domain.de",
     });
 
