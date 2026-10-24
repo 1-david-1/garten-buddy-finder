@@ -50,6 +50,11 @@ export interface MyVerification {
     guardianVerified: boolean;
     /** "Elternbestätigung ausstehend" bis Konto, Verifizierung und Einwilligung vollständig sind */
     parentConfirmation: "pending" | "complete";
+    /**
+     * Ausweis des Elternteils im Eltern-Konto: "pending" = eingereicht (in Prüfung), "verified" = geprüft.
+     * Dann muss das Kind den Ausweis der Eltern NICHT nochmal hochladen.
+     */
+    guardianIdentity: "none" | "pending" | "verified";
   } | null;
 }
 
@@ -137,6 +142,25 @@ export const getMyVerification = createServerFn({ method: "GET" })
       guardianVerified = Boolean(gp?.verified_at && !gp.reverification_required_at && !gp.suspended_at);
     }
 
+    // Hat das Elternteil seinen Ausweis im Eltern-Konto schon eingereicht (oder ist es schon geprüft)?
+    let guardianIdentity: "none" | "pending" | "verified" = guardianVerified ? "verified" : "none";
+    if (!guardianVerified && linkRes.data?.status === "active" && linkRes.data.guardian_user_id) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: gReq } = await supabaseAdmin
+          .from("verification_requests")
+          .select("id")
+          .eq("user_id", linkRes.data.guardian_user_id)
+          .eq("kind", "identity")
+          .eq("status", "pending")
+          .limit(1)
+          .maybeSingle();
+        if (gReq) guardianIdentity = "pending";
+      } catch {
+        /* ohne Service-Schlüssel: Kind lädt den Ausweis wie bisher selbst hoch */
+      }
+    }
+
     const requests = (reqRes.data ?? []).filter((r) => r.status !== "cancelled");
     const latestGuardian = requests.find((r) => r.kind === "youth_documents");
     const latestIdentity = requests.find((r) => r.kind === "identity");
@@ -184,6 +208,7 @@ export const getMyVerification = createServerFn({ method: "GET" })
                 linkRes.data?.status === "active" && linkRes.data.consent_given_at && guardianVerified
                   ? "complete"
                   : "pending",
+              guardianIdentity,
             }
           : null,
       identity:

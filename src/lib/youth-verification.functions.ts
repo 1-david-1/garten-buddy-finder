@@ -21,6 +21,9 @@ export const YOUTH_DOC_KEYS = [
 ] as const;
 export type YouthDocKey = (typeof YOUTH_DOC_KEYS)[number];
 
+/** Ausweis des Elternteils: wird nicht vom Kind verlangt, wenn er im Eltern-Konto schon eingereicht/geprüft ist. */
+export const PARENT_ID_KEYS: readonly YouthDocKey[] = ["parent_id_front", "parent_id_back"];
+
 /**
  * true  = Dateien werden nach der Entscheidung (Freigabe ODER Ablehnung) gelöscht.
  *         Nur die Tatsache der Prüfung bleibt (Datensparsamkeit).
@@ -37,8 +40,35 @@ type StoredDocuments = {
   guardianAccount?: { name: string | null; email: string | null } | null;
   submissionId?: string;
   files?: Partial<Record<YouthDocKey, string>>;
+  /** Ausweis des Elternteils kam aus dem Eltern-Konto (nicht nochmal vom Kind hochgeladen) */
+  parentIdFromGuardianAccount?: boolean;
   deletedAt?: string;
 };
+
+/** Ausweis-Stand des Elternteils im Eltern-Konto (Datenbank-Abfrage per Service-Role). */
+async function guardianIdentityState(
+  supabaseAdmin: typeof import("@/integrations/supabase/client.server").supabaseAdmin,
+  guardianUserId: string | null | undefined,
+): Promise<"none" | "pending" | "verified"> {
+  if (!guardianUserId) return "none";
+  const [{ data: gp }, { data: pending }] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("verified_at, reverification_required_at, suspended_at")
+      .eq("id", guardianUserId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("verification_requests")
+      .select("id")
+      .eq("user_id", guardianUserId)
+      .eq("kind", "identity")
+      .eq("status", "pending")
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (gp?.verified_at && !gp.reverification_required_at && !gp.suspended_at) return "verified";
+  return pending ? "pending" : "none";
+}
 
 // ---------------------------------------------------------------------------
 // Jugendliche/r: Unterlagen einreichen (Dateien sind vorher direkt in den privaten
@@ -107,7 +137,11 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
       const match = (listed ?? []).find((f) => new RegExp(`^${key}\\.(jpg|jpeg|png|webp)$`).test(f.name));
       if (match) files[key] = `${folder}/${match.name}`;
     }
-    const missing = YOUTH_DOC_KEYS.filter((k) => !files[k]);
+    // Ausweis des Elternteils schon im Eltern-Konto? Dann nicht nochmal vom Kind verlangen.
+    const parentIdCovered =
+      (await guardianIdentityState(supabaseAdmin, guardianLink?.guardian_user_id)) !== "none";
+    const required = YOUTH_DOC_KEYS.filter((k) => !(parentIdCovered && PARENT_ID_KEYS.includes(k)));
+    const missing = required.filter((k) => !files[k]);
     if (missing.length > 0) throw new Error(`missing_documents:${missing.join(",")}`);
 
     const guardianEmail = privateProfile?.guardian_email ?? guardianLink?.invited_email ?? null;
@@ -135,6 +169,7 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
       guardianAccount,
       submissionId: data.submissionId,
       files,
+      parentIdFromGuardianAccount: parentIdCovered && !files.parent_id_front && !files.parent_id_back,
     };
     const { error } = await supabaseAdmin.from("verification_requests").insert({
       user_id: userId,
@@ -171,6 +206,8 @@ export interface YouthVerificationItem {
   guardianAccount: { name: string; email: string | null } | null;
   submittedAt: string;
   documents: { key: YouthDocKey; url: string | null; isPdf: boolean }[];
+  /** Ausweis des Elternteils liegt im Eltern-Konto (nicht hier): "pending" = dort in Prüfung, "verified" = geprüft */
+  parentIdInGuardianAccount: "pending" | "verified" | null;
 }
 
 export const listYouthVerifications = createServerFn({ method: "GET" })
@@ -221,6 +258,13 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
         };
       }
 
+      const hasParentIdHere = PARENT_ID_KEYS.some((k) => !!docs.files?.[k]);
+      let parentIdInGuardianAccount: YouthVerificationItem["parentIdInGuardianAccount"] = null;
+      if (!hasParentIdHere) {
+        const gState = await guardianIdentityState(supabaseAdmin, link?.guardian_user_id);
+        parentIdInGuardianAccount = gState === "none" ? null : gState;
+      }
+
       const paths = YOUTH_DOC_KEYS.map((k) => docs.files?.[k]).filter((p): p is string => !!p);
       const { data: signed } = await supabaseAdmin.storage
         .from(YOUTH_DOC_BUCKET)
@@ -237,7 +281,10 @@ export const listYouthVerifications = createServerFn({ method: "GET" })
           r.guardian_email ?? docs.guardianEmail ?? priv?.guardian_email ?? link?.invited_email ?? null,
         guardianAccount,
         submittedAt: r.created_at,
-        documents: YOUTH_DOC_KEYS.map((key) => {
+        parentIdInGuardianAccount,
+        documents: YOUTH_DOC_KEYS.filter(
+          (key) => hasParentIdHere || !PARENT_ID_KEYS.includes(key) || parentIdInGuardianAccount === null,
+        ).map((key) => {
           const path = docs.files?.[key];
           return {
             key,
