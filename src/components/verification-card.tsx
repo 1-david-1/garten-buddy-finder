@@ -252,7 +252,14 @@ export function VerificationCard() {
             {data.guardian &&
               !data.verifiedAt &&
               data.guardian.state !== "pending" &&
-              data.guardian.state !== "approved" && <YouthDocumentsForm onSubmitted={refresh} />}
+              data.guardian.state !== "approved" && (
+                <YouthDocumentsForm
+                  onSubmitted={refresh}
+                  parentIdCovered={
+                    data.guardianAccount?.state === "active" && data.guardianAccount.guardianIdentity !== "none"
+                  }
+                />
+              )}
 
             {/* Eltern-E-Mail: dorthin gehen die Freigabe-Anfragen für einzelne Aufträge */}
             {data.guardian && (

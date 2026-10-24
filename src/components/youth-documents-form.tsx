@@ -22,6 +22,7 @@ import {
   submitYouthVerification,
   YOUTH_DOC_BUCKET,
   YOUTH_DOC_KEYS,
+  PARENT_ID_KEYS,
   type YouthDocKey,
 } from "@/lib/youth-verification.functions";
 
@@ -39,13 +40,22 @@ const LABELS: Record<YouthDocKey, { label: string; hint?: string }> = {
 };
 
 /** Unterlagen für die Verifizierung Jugendlicher: Einverständnis + Ausweise (Eltern und Kind). */
-export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void }) {
+export function YouthDocumentsForm({
+  onSubmitted,
+  parentIdCovered = false,
+}: {
+  onSubmitted: () => void;
+  /** Der Ausweis des Elternteils liegt schon im Eltern-Konto (eingereicht oder geprüft) */
+  parentIdCovered?: boolean;
+}) {
   const submitFn = useServerFn(submitYouthVerification);
   const [guardianName, setGuardianName] = useState("");
   const [files, setFiles] = useState<Partial<Record<YouthDocKey, File>>>({});
   const [accepted, setAccepted] = useState(false);
 
-  const complete = YOUTH_DOC_KEYS.every((k) => files[k]) && guardianName.trim().length >= 2;
+  // Nur die Unterlagen, die noch fehlen: Den Ausweis der Eltern liefert dann das Eltern-Konto.
+  const keys = YOUTH_DOC_KEYS.filter((k) => !(parentIdCovered && PARENT_ID_KEYS.includes(k)));
+  const complete = keys.every((k) => files[k]) && guardianName.trim().length >= 2;
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -54,7 +64,7 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
       if (!uid) throw new Error("Bitte melde dich erneut an.");
 
       const submissionId = crypto.randomUUID();
-      for (const key of YOUTH_DOC_KEYS) {
+      for (const key of keys) {
         // Nur echte Bilder: Typ + Magic Bytes prüfen, Bild neu erzeugen (entfernt versteckte Daten/EXIF).
         let prepared: File;
         try {
@@ -149,7 +159,14 @@ export function YouthDocumentsForm({ onSubmitted }: { onSubmitted: () => void })
         />
       </div>
 
-      {YOUTH_DOC_KEYS.map((key) => (
+      {parentIdCovered && (
+        <p className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs">
+          Den Ausweis deines Elternteils musst du <strong>nicht nochmal</strong> hochladen: Er wurde schon im
+          Eltern-Konto eingereicht. Hier fehlen nur noch die Einverständniserklärung und dein eigener Ausweis.
+        </p>
+      )}
+
+      {keys.map((key) => (
         <div key={key} className="space-y-1.5">
           <Label htmlFor={`doc-${key}`} className="flex items-center gap-1.5 text-xs">
             <FileUp className="size-3.5" />
