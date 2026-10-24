@@ -10,23 +10,32 @@ function getEnv(key: string): string | undefined {
   return fromProcess || fromVite || undefined;
 }
 
+/** Echte Adresse der App. Wird verwendet, wenn PUBLIC_SITE_URL fehlt oder auf localhost zeigt. */
+export const DEFAULT_SITE_URL = "https://project.inbox-elevate.de";
+
+function isLocalAddress(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(url.trim());
+}
+
 /**
  * Öffentliche Adresse der App für Links in E-Mails. Reihenfolge:
- * 1. PUBLIC_SITE_URL (empfohlen, in der Hosting-Umgebung setzen)
- * 2. http://localhost:3000 (nur lokale Entwicklung)
+ * 1. PUBLIC_SITE_URL, wenn gesetzt (localhost-Adressen zählen nur in der lokalen Entwicklung)
+ * 2. https://project.inbox-elevate.de (Standard - so zeigen Mail-Links nie versehentlich auf localhost)
  *
  * SECURITY: x-forwarded-host / x-forwarded-proto werden absichtlich NICHT
  * verwendet – sie können von Angreifern manipuliert werden (Host-Header-
  * Injection), sodass E-Mail-Links auf Phishing-Domains zeigen würden.
  */
 export function getSiteUrl(): string {
-  const configured = getEnv("PUBLIC_SITE_URL");
-  if (configured) return configured.replace(/\/+$/, "");
-  console.warn(
-    "[email] PUBLIC_SITE_URL ist nicht gesetzt – E-Mail-Links zeigen auf localhost. " +
-      "Bitte die Umgebungsvariable in der Hosting-Umgebung setzen.",
-  );
-  return "http://localhost:3000";
+  const configured = getEnv("PUBLIC_SITE_URL")?.trim();
+  if (configured) {
+    const clean = configured.replace(/\/+$/, "");
+    if (!isLocalAddress(clean) || import.meta.env.DEV) return clean;
+    console.warn(
+      `[email] PUBLIC_SITE_URL zeigt auf ${clean} (localhost) – in Produktion wird stattdessen ${DEFAULT_SITE_URL} verwendet.`,
+    );
+  }
+  return DEFAULT_SITE_URL;
 }
 
 /**
@@ -60,7 +69,7 @@ export function getEmailConfig() {
       getEnv("EMAIL_FROM_ADDRESS") ||
       "GreenMatch <noreply@mail.inbox-elevate.de>",
     replyToAddress: getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de",
-    siteUrlConfigured: Boolean(getEnv("PUBLIC_SITE_URL")),
+    siteUrlConfigured: Boolean(getEnv("PUBLIC_SITE_URL")) && !isLocalAddress(getEnv("PUBLIC_SITE_URL") ?? ""),
     effectiveSiteUrl: getSiteUrl(),
   };
 }
@@ -97,6 +106,7 @@ export async function sendEmail({
     return { ok: false, error };
   }
 
+  const from = getEnv("EMAIL_FROM_ADDRESS") || "GreenMatch <noreply@mail.inbox-elevate.de>";
   const reply_to = replyTo || getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de";
 
   try {
@@ -107,7 +117,7 @@ export async function sendEmail({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "GreenMatch <noreply@mail.inbox-elevate.de>",
+        from,
         to,
         subject,
         html,
@@ -168,8 +178,9 @@ export interface EmailTemplateOptions {
 }
 
 /**
- * High-End HTML E-Mail Template im offiziellen GreenMatch Design
- * Optimiert für Apple Mail, Gmail, Outlook (MSO), Thunderbird und Mobile Clients.
+ * Schlichtes, dezentes HTML-Template (weiße Karte, ein Akzent in Dunkelgrün).
+ * Alles inline gestylt und tabellenbasiert, damit es in Apple Mail, Gmail, Outlook und
+ * auf dem Handy gleich aussieht. Die Optionen sind unverändert, bestehende Aufrufe funktionieren weiter.
  */
 export function emailTemplate(options: EmailTemplateOptions): string {
   const { greeting, bodyLines, infoTable, trustNotice, ctaPath, ctaUrl, secondaryCta, footer } =
@@ -184,376 +195,126 @@ export function emailTemplate(options: EmailTemplateOptions): string {
   const siteUrl = getSiteUrl();
   const supportEmail = getEnv("EMAIL_REPLY_TO") || "david@inbox-elevate.de";
 
+  const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  const INK = "#1f2937";
+  const MUTED = "#6b7280";
+  const LINE = "#e5e7eb";
+  const ACCENT = "#166534";
+
   const preheader = previewText
-    ? `<div style="display:none; max-height:0px; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; max-width:0px; opacity:0;">
-        ${previewText}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
-      </div>`
+    ? `<div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; opacity:0;">${previewText}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>`
     : "";
 
   const badgeHtml = badge
-    ? `<span class="badge-tag" style="display:inline-block; background-color:#dcfce7; color:#15803d; font-size:11px; font-weight:bold; text-transform:uppercase; letter-spacing:1.2px; padding:6px 12px; border-radius:20px; margin-bottom:16px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${badge}</span>`
+    ? `<p style="margin:0 0 10px 0; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; color:${ACCENT}; font-family:${FONT};">${badge}</p>`
     : "";
 
   const greetingHtml = greeting
-    ? `<p class="text-p" style="font-size:15px; line-height:1.6; color:#334155; margin:0 0 16px 0; font-family:Georgia, 'Times New Roman', serif; font-weight:bold;">${greeting}</p>`
+    ? `<p style="margin:0 0 14px 0; font-size:15px; line-height:1.65; color:${INK}; font-family:${FONT};">${greeting}</p>`
     : "";
 
   const paragraphs = bodyLines
     .map(
       (line) =>
-        `<p class="text-p" style="font-size:15px; line-height:1.6; color:#334155; margin:0 0 16px 0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${line}</p>`,
+        `<p style="margin:0 0 14px 0; font-size:15px; line-height:1.65; color:${INK}; font-family:${FONT};">${line}</p>`,
     )
     .join("");
 
   let infoBoxHtml = "";
   if (infoTable && infoTable.length > 0) {
     const rows = infoTable
-      .map(
-        (row, idx) => `
-        <tr class="details-row">
-          <td class="label-col" style="padding:10px 0; border-bottom:${idx === infoTable.length - 1 ? "none" : "1px solid #f1f5f9"}; font-size:12px; color:#64748b; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; width:32%; vertical-align:top; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${row.label}</td>
-          <td class="val-col" style="padding:10px 0; border-bottom:${idx === infoTable.length - 1 ? "none" : "1px solid #f1f5f9"}; font-size:14px; color:#0f172a; font-weight:500; vertical-align:top; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${row.value}</td>
-        </tr>`,
-      )
+      .map((row, idx) => {
+        const border = idx === infoTable.length - 1 ? "none" : `1px solid ${LINE}`;
+        return `<tr>
+          <td style="padding:9px 12px 9px 0; border-bottom:${border}; font-size:13px; color:${MUTED}; width:32%; vertical-align:top; font-family:${FONT};">${row.label}</td>
+          <td style="padding:9px 0; border-bottom:${border}; font-size:14px; color:${INK}; vertical-align:top; font-family:${FONT};">${row.value}</td>
+        </tr>`;
+      })
       .join("");
-
-    infoBoxHtml = `
-      <div class="details-card" style="background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin:24px 0;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; border-collapse:collapse;">
-          ${rows}
-        </table>
-      </div>
-    `;
+    infoBoxHtml = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; margin:20px 0; border-top:1px solid ${LINE}; border-bottom:1px solid ${LINE}; border-collapse:collapse;">${rows}</table>`;
   }
 
   const defaultTrustNotice =
     trustNotice ||
     (badge?.includes("Jugend") || badge?.includes("Kinder")
-      ? "🛡️ <strong>Sicherer Nachbarschaftsservice:</strong> Alle Aufträge auf GreenMatch werden vorab auf Jugendschutzkonformität geprüft (keine gefährlichen Arbeitsmittel, max. 2 Stunden Tagesarbeitszeit)."
+      ? "<strong>Sicherer Nachbarschaftsservice:</strong> Alle Aufträge auf GreenMatch werden vorab auf Jugendschutzkonformität geprüft (keine gefährlichen Arbeitsmittel, max. 2 Stunden Tagesarbeitszeit)."
       : "");
 
+  // Zusatzhinweis: nur eine feine Linie links, keine farbige Box. Emojis aus Alt-Texten entfernen.
   const trustBoxHtml = defaultTrustNotice
-    ? `<div class="trust-box" style="background-color:#f0fdf4; border-left:4px solid #22c55e; padding:14px 16px; border-radius:0 8px 8px 0; margin-bottom:24px; font-size:13px; color:#166534; line-height:1.5; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        ${defaultTrustNotice}
-      </div>`
+    ? `<p style="margin:20px 0; padding:2px 0 2px 14px; border-left:2px solid ${LINE}; font-size:13px; line-height:1.6; color:${MUTED}; font-family:${FONT};">${defaultTrustNotice.replace(/^\s*(?:🛡️|🛡)\s*/u, "")}</p>`
     : "";
 
   let buttonsHtml = "";
   if (ctaLabel && (ctaPath || ctaUrl)) {
     const primaryUrl = ctaUrl ?? `${siteUrl}${ctaPath}`;
-    buttonsHtml += `<a href="${escapeHtml(primaryUrl)}" class="btn-primary" target="_blank" style="background-color:#15803d; color:#ffffff !important; padding:14px 28px; text-decoration:none; border-radius:8px; font-size:15px; font-weight:bold; display:inline-block; box-shadow:0 4px 12px rgba(21, 128, 61, 0.25); margin-right:8px; margin-bottom:12px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${ctaLabel}</a>`;
+    buttonsHtml += `<a href="${escapeHtml(primaryUrl)}" target="_blank" style="display:inline-block; background-color:${ACCENT}; color:#ffffff !important; padding:12px 24px; border-radius:6px; font-size:15px; font-weight:600; text-decoration:none; font-family:${FONT};">${ctaLabel}</a>`;
   }
   if (secondaryCta) {
-    buttonsHtml += `<a href="${escapeHtml(secondaryCta.url)}" class="btn-secondary" target="_blank" style="background-color:#ffffff; color:#64748b !important; padding:14px 20px; text-decoration:none; border-radius:8px; font-size:14px; display:inline-block; border:1px solid #cbd5e1; margin-bottom:12px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${escapeHtml(secondaryCta.label)}</a>`;
+    const color = secondaryCta.variant === "danger" ? "#b91c1c" : MUTED;
+    buttonsHtml += `<a href="${escapeHtml(secondaryCta.url)}" target="_blank" style="display:inline-block; margin-left:8px; padding:11px 18px; border:1px solid ${LINE}; border-radius:6px; font-size:14px; color:${color} !important; text-decoration:none; font-family:${FONT};">${escapeHtml(secondaryCta.label)}</a>`;
   }
+  const buttonBlock = buttonsHtml
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 8px 0;"><tr><td>${buttonsHtml}</td></tr></table>`
+    : "";
 
   const footerText =
     footer ??
     "Sie erhalten diese E-Mail als registrierter Nutzer im Rahmen der GreenMatch-Funktionen.";
 
   return `<!DOCTYPE html>
-<html lang="de" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>${heading}</title>
-    <!--[if mso]>
-    <noscript>
-        <xml>
-            <o:OfficeDocumentSettings>
-                <o:AllowPNG/>
-                <o:PixelsPerInch>96</o:PixelsPerInch>
-            </o:OfficeDocumentSettings>
-        </xml>
-    </noscript>
-    <![endif]-->
-    <style>
-        /* Reset Styles */
-        html, body {
-            margin: 0 !important;
-            padding: 0 !important;
-            height: 100% !important;
-            width: 100% !important;
-            background-color: #f0fdf4;
-        }
-        * {
-            -ms-text-size-adjust: 100%;
-            -webkit-text-size-adjust: 100%;
-        }
-        table, td {
-            mso-table-lspace: 0pt !important;
-            mso-table-rspace: 0pt !important;
-        }
-        table {
-            border-spacing: 0 !important;
-            border-collapse: collapse !important;
-            table-layout: fixed !important;
-            margin: 0 auto !important;
-        }
-        img {
-            -ms-interpolation-mode: bicubic;
-            border: 0;
-            outline: none;
-            text-decoration: none;
-        }
-
-        /* Typography & Layout */
-        body, td, th {
-            font-family: Georgia, 'Times New Roman', serif;
-            color: #166534;
-        }
-
-        .email-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 25px -5px rgba(22, 101, 52, 0.08), 0 8px 10px -6px rgba(22, 101, 52, 0.05);
-            border: 1px solid #dcfce7;
-        }
-
-        /* Header Bar */
-        .header-bar {
-            background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-            padding: 32px 36px;
-            text-align: left;
-        }
-        .brand-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #ffffff;
-            letter-spacing: -0.5px;
-            margin: 0;
-            font-family: Georgia, 'Times New Roman', serif;
-        }
-
-        /* Content Body */
-        .content-body {
-            padding: 36px 36px 28px 36px;
-        }
-
-        .badge-tag {
-            display: inline-block;
-            background-color: #dcfce7;
-            color: #15803d;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            margin-bottom: 16px;
-        }
-
-        .mail-heading {
-            font-size: 22px;
-            line-height: 1.35;
-            color: #0f172a;
-            font-weight: bold;
-            margin: 0 0 16px 0;
-            font-family: Georgia, 'Times New Roman', serif;
-        }
-
-        .text-p {
-            font-size: 15px;
-            line-height: 1.6;
-            color: #334155;
-            margin: 0 0 16px 0;
-        }
-
-        /* Card Box for Details */
-        .details-card {
-            background-color: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            margin: 24px 0;
-        }
-
-        .details-row {
-            padding: 10px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-        .details-row:last-child {
-            border-bottom: none;
-        }
-
-        .label-col {
-            font-size: 12px;
-            color: #64748b;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            width: 32%;
-        }
-
-        .val-col {
-            font-size: 14px;
-            color: #0f172a;
-            font-weight: 500;
-        }
-
-        .status-verified {
-            color: #16a34a;
-            font-weight: bold;
-            font-size: 13px;
-        }
-
-        .price-highlight {
-            font-size: 16px;
-            color: #15803d;
-            font-weight: bold;
-        }
-
-        /* Trust Box */
-        .trust-box {
-            background-color: #f0fdf4;
-            border-left: 4px solid #22c55e;
-            padding: 14px 16px;
-            border-radius: 0 8px 8px 0;
-            margin-bottom: 28px;
-            font-size: 13px;
-            color: #166534;
-            line-height: 1.5;
-        }
-
-        /* Bulletproof CTA Buttons */
-        .btn-primary {
-            background-color: #15803d;
-            color: #ffffff !important;
-            padding: 14px 28px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: bold;
-            display: inline-block;
-            box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
-            margin-right: 8px;
-            margin-bottom: 12px;
-        }
-
-        .btn-secondary {
-            background-color: #ffffff;
-            color: #64748b !important;
-            padding: 14px 20px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-size: 14px;
-            display: inline-block;
-            border: 1px solid #cbd5e1;
-            margin-bottom: 12px;
-        }
-
-        /* Footer */
-        .email-footer {
-            background-color: #f8fafc;
-            border-top: 1px solid #f1f5f9;
-            padding: 24px 36px;
-            font-size: 12px;
-            color: #64748b;
-            line-height: 1.6;
-        }
-
-        .email-footer a {
-            color: #15803d;
-            text-decoration: underline;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .email-container {
-                width: 100% !important;
-                border-radius: 0 !important;
-            }
-            .content-body, .header-bar, .email-footer {
-                padding: 24px 20px !important;
-            }
-            .label-col {
-                width: 100% !important;
-                display: block !important;
-                padding-bottom: 2px !important;
-            }
-            .val-col {
-                width: 100% !important;
-                display: block !important;
-                padding-bottom: 8px !important;
-            }
-            .btn-primary, .btn-secondary {
-                display: block !important;
-                width: 100% !important;
-                text-align: center !important;
-                box-sizing: border-box !important;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>${heading}</title>
+  <style>
+    body { margin:0; padding:0; background-color:#f5f5f4; }
+    @media only screen and (max-width: 600px) {
+      .card { width:100% !important; }
+      .pad { padding:24px 20px !important; }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 30px 0; background-color: #f0fdf4;">
-
-    ${preheader}
-
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-        <tr>
-            <td align="center">
-                <table role="presentation" class="email-container" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; margin:0 auto; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 25px -5px rgba(22, 101, 52, 0.08), 0 8px 10px -6px rgba(22, 101, 52, 0.05); border:1px solid #dcfce7;">
-                    
-                    <!-- Header Bar -->
-                    <tr>
-                        <td class="header-bar" style="background:linear-gradient(135deg, #166534 0%, #15803d 100%); padding:32px 36px; text-align:left;">
-                            <h1 class="brand-title" style="font-size:24px; font-weight:bold; color:#ffffff; letter-spacing:-0.5px; margin:0; font-family:Georgia, 'Times New Roman', serif;">🌱 GreenMatch</h1>
-                        </td>
-                    </tr>
-
-                    <!-- Body Content -->
-                    <tr>
-                        <td class="content-body" style="padding:36px 36px 28px 36px;">
-                            ${badgeHtml}
-                            <h2 class="mail-heading" style="font-size:22px; line-height:1.35; color:#0f172a; font-weight:bold; margin:0 0 16px 0; font-family:Georgia, 'Times New Roman', serif;">${heading}</h2>
-                            ${greetingHtml}
-                            ${paragraphs}
-                            ${infoBoxHtml}
-                            ${trustBoxHtml}
-
-                            ${
-                              buttonsHtml
-                                ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 10px;">
-                                <tr>
-                                    <td align="center">
-                                        ${buttonsHtml}
-                                    </td>
-                                </tr>
-                            </table>`
-                                : ""
-                            }
-
-                            <p style="font-size: 13px; color: #64748b; line-height: 1.5; text-align: center; margin-top: 24px; margin-bottom: 0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                ${footerText}
-                            </p>
-
-                        </td>
-                    </tr>
-
-                    <!-- Footer Bar -->
-                    <tr>
-                        <td class="email-footer" style="background-color:#f8fafc; border-top:1px solid #f1f5f9; padding:24px 36px; font-size:12px; color:#64748b; line-height:1.6; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            <p style="margin: 0 0 8px 0;">
-                                Fragen oder Hilfe? Antworten Sie einfach auf diese E-Mail oder schreiben Sie uns an 
-                                <a href="mailto:${supportEmail}" style="color: #15803d; text-decoration: underline;">${supportEmail}</a>.
-                            </p>
-                            <p style="margin: 0 0 8px 0; color: #94a3b8; font-size: 11px;">
-                                GreenMatch • Sichere Gartenhilfe für Nachbarn
-                            </p>
-                            <p style="margin: 0; color: #94a3b8; font-size: 11px;">
-                                © ${new Date().getFullYear()} GreenMatch &nbsp;•&nbsp; <a href="${siteUrl}/datenschutz" style="color: #64748b;">Datenschutz</a> &nbsp;•&nbsp; <a href="${siteUrl}/impressum" style="color: #64748b;">Impressum</a>
-                            </p>
-                        </td>
-                    </tr>
-
-                </table>
+<body style="margin:0; padding:0; background-color:#f5f5f4;">
+  ${preheader}
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f5f5f4;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+        <table role="presentation" class="card" width="560" cellspacing="0" cellpadding="0" border="0" style="width:560px; max-width:560px; background-color:#ffffff; border:1px solid ${LINE}; border-radius:8px;">
+          <tr>
+            <td class="pad" style="padding:28px 36px 0 36px;">
+              <a href="${escapeHtml(siteUrl)}" target="_blank" style="font-size:18px; font-weight:600; color:${ACCENT}; text-decoration:none; font-family:${FONT};">GreenMatch</a>
             </td>
-        </tr>
-    </table>
-
+          </tr>
+          <tr>
+            <td class="pad" style="padding:20px 36px 12px 36px;">
+              ${badgeHtml}
+              <h1 style="margin:0 0 18px 0; font-size:21px; line-height:1.35; font-weight:600; color:${INK}; font-family:${FONT};">${heading}</h1>
+              ${greetingHtml}
+              ${paragraphs}
+              ${infoBoxHtml}
+              ${trustBoxHtml}
+              ${buttonBlock}
+              <p style="margin:20px 0 0 0; font-size:13px; line-height:1.6; color:${MUTED}; font-family:${FONT};">${footerText}</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="pad" style="padding:20px 36px 28px 36px; border-top:1px solid ${LINE};">
+              <p style="margin:0 0 6px 0; font-size:12px; line-height:1.6; color:${MUTED}; font-family:${FONT};">
+                Fragen? Antworten Sie einfach auf diese E-Mail oder schreiben Sie an
+                <a href="mailto:${escapeHtml(supportEmail)}" style="color:${MUTED}; text-decoration:underline;">${escapeHtml(supportEmail)}</a>.
+              </p>
+              <p style="margin:0; font-size:12px; line-height:1.6; color:#9ca3af; font-family:${FONT};">
+                GreenMatch · Gartenhilfe in der Nachbarschaft · <a href="${escapeHtml(siteUrl)}/datenschutz" style="color:#9ca3af; text-decoration:underline;">Datenschutz</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }
