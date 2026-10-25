@@ -134,17 +134,44 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
       throw new Error("Du kannst dich nicht selbst buchen.");
     }
 
+    // Maßgebliche Prüfung auf dem Server mit echten Daten des Helfers: Helfer-Rolle, Konto-Status,
+    // Urlaub, Eltern-Zustimmung (Jugendliche), Termin frei, Jugendschutz-Zeiten.
+    const { assertBookable, BookingError } = await import("@/lib/server/booking.server");
+    let info;
+    try {
+      info = await assertBookable(data.helperId, userId, data.scheduledAt);
+    } catch (e) {
+      if (e instanceof BookingError) throw new Error(e.message);
+      throw e;
+    }
+
+    // Preis und Leistung kommen vom gebuchten Angebot des Helfers (nicht vom Browser).
+    let serviceType: string = data.serviceType;
+    let budgetCents = data.budgetCents;
+    let title = `Buchungsanfrage: ${data.serviceType}`;
+    let listingId: string | null = null;
+    if (data.listingId) {
+      const service = info.services.find((s) => s.listingId === data.listingId);
+      if (!service) throw new Error("Dieses Angebot ist nicht (mehr) buchbar. Bitte lade die Seite neu.");
+      serviceType = service.serviceType;
+      budgetCents = service.priceCents;
+      title = `Buchung: ${service.title}`;
+      listingId = service.listingId;
+    }
+
     const { data: gig, error } = await supabase
       .from("gigs")
       .insert({
         customer_id: userId,
-        title: `Buchungsanfrage: ${data.serviceType}`,
+        title,
         description: data.description || null,
-        service_type: data.serviceType,
-        budget_cents: data.budgetCents,
+        service_type: serviceType,
+        budget_cents: budgetCents,
         address: data.address,
         scheduled_at: data.scheduledAt,
+        duration_minutes: 60,
         assigned_helper_id: data.helperId,
+        source_listing_id: listingId,
         status: "pending_helper",
       })
       .select()
@@ -152,23 +179,40 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
+    // Zahlungsvorgang wie bei Geboten und Angebots-Buchungen (vorher fehlte er bei Direktbuchungen).
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { PLATFORM_FEE_CUSTOMER_RATE, PLATFORM_FEE_HELPER_RATE } = await import("@/lib/platform-fees");
+    const { error: escrowError } = await supabaseAdmin.from("escrow_transactions").insert({
+      gig_id: gig.id,
+      customer_id: userId,
+      helper_id: data.helperId,
+      bid_cents: budgetCents,
+      customer_fee_cents: Math.round(budgetCents * PLATFORM_FEE_CUSTOMER_RATE),
+      helper_fee_cents: Math.round(budgetCents * PLATFORM_FEE_HELPER_RATE),
+      state: "pending",
+    });
+    if (escrowError) {
+      await supabaseAdmin.from("gigs").delete().eq("id", gig.id);
+      throw escrowError;
+    }
+
     const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
     const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
     await notifyUserByEmail({
       userId: data.helperId,
       category: "gig_updates",
-      subject: `Neue Buchungsanfrage: ${data.serviceType}`,
+      subject: `Neue Buchungsanfrage: ${title}`,
       html: emailTemplate({
         heading: "Neue Buchungsanfrage erhalten",
         bodyLines: [
-          `Ein Kunde möchte dich direkt für „${escapeHtml(data.serviceType)}“ buchen. Bitte bestätige oder lehne die Anfrage ab.`,
+          `Ein Kunde möchte dich direkt für „${escapeHtml(title)}“ buchen (${new Date(data.scheduledAt).toLocaleString("de-DE", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Berlin" })}). Bitte bestätige oder lehne die Anfrage ab.`,
         ],
         ctaLabel: "Anfrage ansehen",
         ctaPath: "/dashboard",
       }),
       inApp: {
         title: "Neue Buchungsanfrage",
-        body: `Ein Kunde möchte dich für „${data.serviceType}“ buchen.`,
+        body: `Ein Kunde möchte dich für „${title}“ buchen.`,
         link: "/dashboard",
       },
     });

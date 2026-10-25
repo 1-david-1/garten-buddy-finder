@@ -7,6 +7,7 @@ import {
   negotiationIdSchema,
   negotiationInputSchema,
   parseInput,
+  rebidSchema,
 } from "@/lib/validation";
 import {
   PLATFORM_FEE_CUSTOMER_RATE,
@@ -66,6 +67,53 @@ export const createBid = createServerFn({ method: "POST" })
       );
     }
 
+    // Nur auf offene Aufträge bieten, und nur ein aktives Gebot pro Auftrag: Wer schon geboten hat und ein
+    // Gegenangebot bekam, antwortet darauf (annehmen / neues Gebot) statt ein zweites Gebot anzulegen.
+    {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: targetGig } = await supabaseAdmin
+        .from("gigs")
+        .select("status, customer_id")
+        .eq("id", data.gigId)
+        .maybeSingle();
+      if (!targetGig || !["open", "negotiating"].includes(targetGig.status)) {
+        throw new Error("Auf diesen Auftrag kann nicht mehr geboten werden.");
+      }
+      if (targetGig.customer_id === userId) throw new Error("Du kannst nicht auf deinen eigenen Auftrag bieten.");
+      const { data: activeBid } = await supabaseAdmin
+        .from("negotiations")
+        .select("id, status")
+        .eq("gig_id", data.gigId)
+        .eq("helper_id", userId)
+        .in("status", ["pending", "countered"])
+        .maybeSingle();
+      if (activeBid) {
+        throw new Error(
+          activeBid.status === "countered"
+            ? "Der Kunde hat dir schon ein Gegenangebot gemacht. Öffne „Meine Gebote“, um es anzunehmen oder ein neues Gebot abzugeben."
+            : "Du hast auf diesen Auftrag schon ein Gebot abgegeben. Es wartet auf die Antwort des Kunden.",
+        );
+      }
+    }
+
+    // Jugendschutz: Gebote Jugendlicher werden nicht sofort abgegeben, sondern den Eltern vorgelegt.
+    // Erst nach deren Freigabe im Eltern-Konto geht das Gebot an den Auftraggeber.
+    if (roles.some((r) => r.role === "helper_youth")) {
+      const { requestBidApproval, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
+      try {
+        await requestBidApproval(userId, {
+          gigId: data.gigId,
+          bidCents: data.bidCents,
+          message: data.message ?? null,
+        });
+      } catch (e) {
+        if (e instanceof OfferApprovalRequired) {
+          return { negotiation: null, awaitingGuardian: e.message as string | null };
+        }
+        throw e;
+      }
+    }
+
     // Erstelle Gebot
     const { data: negotiation, error } = await supabase
       .from("negotiations")
@@ -119,11 +167,157 @@ export const createBid = createServerFn({ method: "POST" })
       });
     }
 
-    return { negotiation };
+    return { negotiation, awaitingGuardian: null as string | null };
   });
 
+// ---------------------------------------------------------------------------
+// Verhandlung: wer ist wann dran?
+//   pending   = Gebot des Helfers, der KUNDE ist dran (annehmen / Gegenangebot / ablehnen)
+//   countered = Gegenangebot des Kunden, der HELFER ist dran (annehmen / neues Gebot / ablehnen)
+//   accepted / declined / withdrawn = beendet
+// Berechtigung und Status werden VOR jeder Änderung geprüft, Änderungen sind an den erwarteten Status
+// gebunden (kein Überschreiben bei gleichzeitigen Klicks).
+// ---------------------------------------------------------------------------
+
+type NegotiationRow = {
+  id: string;
+  gig_id: string;
+  helper_id: string;
+  bid_cents: number;
+  counter_bid_cents: number | null;
+  message: string | null;
+  status: string;
+};
+type NegGig = { id: string; title: string; status: string; customer_id: string };
+
+const eur = (cents: number) =>
+  (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+
+async function loadNegotiation(negotiationId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("negotiations")
+    .select("*, gigs (id, title, status, customer_id)")
+    .eq("id", negotiationId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || !data.gigs) throw new Error("Gebot nicht gefunden.");
+  const { gigs, ...n } = data as typeof data & { gigs: NegGig };
+  return { supabaseAdmin, n: n as NegotiationRow, gig: gigs };
+}
+
+const CHANGED_MSG = "Das Gebot wurde inzwischen geändert. Bitte lade die Seite neu.";
+
+/** Gig zurück auf "offen", wenn kein aktives Gebot mehr übrig ist (sonst bleibt er ewig "in Verhandlung"). */
+async function reopenGigIfNoActiveBids(
+  supabaseAdmin: Awaited<ReturnType<typeof loadNegotiation>>["supabaseAdmin"],
+  gigId: string,
+) {
+  const { count } = await supabaseAdmin
+    .from("negotiations")
+    .select("id", { count: "exact", head: true })
+    .eq("gig_id", gigId)
+    .in("status", ["pending", "countered"]);
+  if (!count) {
+    await supabaseAdmin.from("gigs").update({ status: "open" }).eq("id", gigId).eq("status", "negotiating");
+  }
+}
+
+async function notify(
+  userId: string,
+  subject: string,
+  body: string,
+  ctaPath: string,
+  ctaLabel: string,
+) {
+  const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+  const { emailTemplate } = await import("@/lib/server/email.server");
+  await notifyUserByEmail({
+    userId,
+    category: "bid_updates",
+    subject,
+    html: emailTemplate({ heading: subject, bodyLines: [body], ctaLabel, ctaPath }),
+    inApp: { title: subject, body, link: ctaPath },
+  });
+}
+
 /**
- * Customer macht ein Gegenangebot
+ * Preis vereinbart: Verhandlung beenden, Helfer zuweisen (wartet auf die finale Bestätigung / Eltern-Freigabe
+ * bei Jugendlichen), Zahlungsvorgang anlegen und alle übrigen Gebote auf diesen Auftrag schließen.
+ */
+async function finalizeAgreement(
+  ctx: Awaited<ReturnType<typeof loadNegotiation>>,
+  amountCents: number,
+): Promise<void> {
+  const { supabaseAdmin, n, gig } = ctx;
+
+  const { data: claimed } = await supabaseAdmin
+    .from("negotiations")
+    .update({ status: "accepted" })
+    .eq("id", n.id)
+    .in("status", ["pending", "countered"])
+    .select("id");
+  if (!claimed || claimed.length === 0) throw new Error(CHANGED_MSG);
+
+  const { data: assigned, error: gigError } = await supabaseAdmin
+    .from("gigs")
+    .update({ assigned_helper_id: n.helper_id, status: "pending_helper", budget_cents: amountCents })
+    .eq("id", n.gig_id)
+    .in("status", ["open", "negotiating"])
+    .select("id");
+  if (gigError || !assigned || assigned.length === 0) {
+    // Auftrag ist nicht mehr offen (z. B. schon vergeben): Verhandlung wieder zurückstellen.
+    await supabaseAdmin.from("negotiations").update({ status: n.status }).eq("id", n.id);
+    throw new Error("Dieser Auftrag ist nicht mehr offen und wurde bereits vergeben oder beendet.");
+  }
+
+  const { data: existingEscrow } = await supabaseAdmin
+    .from("escrow_transactions")
+    .select("id")
+    .eq("gig_id", n.gig_id)
+    .maybeSingle();
+  const fees = {
+    customer_fee_cents: Math.round(amountCents * PLATFORM_FEE_CUSTOMER_RATE),
+    helper_fee_cents: Math.round(amountCents * PLATFORM_FEE_HELPER_RATE),
+  };
+  if (existingEscrow) {
+    await supabaseAdmin
+      .from("escrow_transactions")
+      .update({ helper_id: n.helper_id, bid_cents: amountCents, ...fees })
+      .eq("id", existingEscrow.id);
+  } else {
+    const { error: escrowError } = await supabaseAdmin.from("escrow_transactions").insert({
+      gig_id: n.gig_id,
+      customer_id: gig.customer_id,
+      helper_id: n.helper_id,
+      bid_cents: amountCents,
+      ...fees,
+      state: "pending",
+    });
+    if (escrowError) throw escrowError;
+  }
+
+  // Alle übrigen offenen Gebote auf diesen Auftrag sind erledigt.
+  const { data: others } = await supabaseAdmin
+    .from("negotiations")
+    .update({ status: "declined" })
+    .eq("gig_id", n.gig_id)
+    .neq("id", n.id)
+    .in("status", ["pending", "countered"])
+    .select("helper_id");
+  for (const o of others ?? []) {
+    await notify(
+      o.helper_id,
+      "Der Auftrag wurde anderweitig vergeben",
+      `Für „${gig.title}“ hat sich der Auftraggeber für ein anderes Gebot entschieden.`,
+      "/marketplace",
+      "Weitere Aufträge finden",
+    );
+  }
+}
+
+/**
+ * Customer macht ein Gegenangebot (nur auf ein Gebot des Helfers, bei dem er selbst dran ist)
  */
 export const counterBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -131,203 +325,187 @@ export const counterBid = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
     await enforceUserRateLimit(context.userId, "counter_bid", 30, 3600);
-    const { supabase, userId } = context;
+    const { userId } = context;
 
-    const { data: negotiation, error } = await supabase
-      .from("negotiations")
-      .update({
-        counter_bid_cents: data.counterBidCents,
-        status: "countered",
-      })
-      .eq("id", data.negotiationId)
-      .select(
-        `
-        *,
-        gigs!inner (customer_id)
-      `,
-      )
-      .single();
-
-    if (error) throw error;
-
-    if (negotiation.gigs.customer_id !== userId) {
-      throw new Error("Nicht autorisiert");
+    const { supabaseAdmin, n, gig } = await loadNegotiation(data.negotiationId);
+    if (gig.customer_id !== userId) throw new Error("Nicht autorisiert");
+    if (!["open", "negotiating"].includes(gig.status)) throw new Error("Dieser Auftrag ist nicht mehr offen.");
+    if (n.status === "countered") {
+      throw new Error("Du hast bereits ein Gegenangebot gemacht. Jetzt ist der Helfer dran.");
+    }
+    if (n.status !== "pending") throw new Error(CHANGED_MSG);
+    if (data.counterBidCents === n.bid_cents) {
+      throw new Error("Das Gegenangebot entspricht dem Gebot. Nimm das Gebot einfach an.");
     }
 
-    const { notifyUserByEmail } =
-      await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
-    await notifyUserByEmail({
-      userId: negotiation.helper_id,
-      category: "bid_updates",
-      subject: "Du hast ein Gegenangebot erhalten",
-      html: emailTemplate({
-        heading: "Gegenangebot erhalten",
-        bodyLines: [
-          `Der Kunde hat dir ein Gegenangebot von ${(data.counterBidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} gemacht.`,
-        ],
-        ctaLabel: "Angebot ansehen",
-        ctaPath: "/gigs",
-      }),
-      inApp: {
-        title: "Gegenangebot erhalten",
-        body: `Der Kunde bietet dir ${(data.counterBidCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}.`,
-        link: "/gigs",
-      },
-    });
+    const { data: updated, error } = await supabaseAdmin
+      .from("negotiations")
+      .update({ counter_bid_cents: data.counterBidCents, status: "countered" })
+      .eq("id", n.id)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    if (!updated) throw new Error(CHANGED_MSG);
 
-    return { negotiation };
+    await notify(
+      n.helper_id,
+      "Du hast ein Gegenangebot erhalten",
+      `Der Kunde hat dir für „${gig.title}“ ein Gegenangebot von ${eur(data.counterBidCents)} gemacht (dein Gebot: ${eur(n.bid_cents)}). Du kannst es annehmen, ein neues Gebot abgeben oder ablehnen.`,
+      "/marketplace",
+      "Gegenangebot ansehen",
+    );
+
+    return { negotiation: updated };
   });
 
 /**
- * Helper akzeptiert ein Gebot/Gegenangebot
+ * Customer nimmt das Gebot des Helfers an (nur solange es seine Antwort braucht, also status "pending").
+ * Auf ein Gegenangebot (countered) antwortet der Helfer - siehe acceptCounter.
  */
 export const acceptBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => parseInput(negotiationIdSchema, data))
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const ctx = await loadNegotiation(data.negotiationId);
+    const { n, gig } = ctx;
 
-    // Hole Negotiation Details
-    const { data: negotiation, error: negError } = await supabase
-      .from("negotiations")
-      .select("*, gigs (*)")
-      .eq("id", data.negotiationId)
-      .single();
-
-    if (negError) throw negError;
-
-    const gig = negotiation.gigs as {
-      customer_id: string;
-      title: string;
-    } | null;
-    if (!gig) throw new Error("Auftrag nicht gefunden.");
-
-    // Nur der Kunde (Auftraggeber) kann ein Gebot annehmen
-    if (gig.customer_id !== userId) {
-      throw new Error("Nicht autorisiert");
+    if (gig.customer_id !== context.userId) throw new Error("Nicht autorisiert");
+    if (n.status === "countered") {
+      throw new Error("Du hast dem Helfer ein Gegenangebot gemacht. Er muss es erst annehmen oder darauf antworten.");
     }
+    if (n.status !== "pending") throw new Error(CHANGED_MSG);
 
-    // Update Negotiation Status
-    const { error: updateError } = await supabase
-      .from("negotiations")
-      .update({ status: "accepted" })
-      .eq("id", data.negotiationId);
+    await finalizeAgreement(ctx, n.bid_cents);
 
-    if (updateError) throw updateError;
-
-    // Update Gig: Helfer zuweisen und Status auf "pending_helper" setzen,
-    // damit der Helfer den Auftrag noch final bestätigen muss.
-    const { error: gigError } = await supabase
-      .from("gigs")
-      .update({
-        assigned_helper_id: negotiation.helper_id,
-        status: "pending_helper",
-        budget_cents: negotiation.counter_bid_cents ?? negotiation.bid_cents,
-      })
-      .eq("id", negotiation.gig_id);
-
-    if (gigError) throw gigError;
-
-    // Erstelle Escrow Transaction
-    const finalAmount = negotiation.counter_bid_cents ?? negotiation.bid_cents;
-    const customerFee = Math.round(finalAmount * PLATFORM_FEE_CUSTOMER_RATE);
-    const helperFee = Math.round(finalAmount * PLATFORM_FEE_HELPER_RATE);
-
-    const { error: escrowError } = await supabase
-      .from("escrow_transactions")
-      .insert({
-        gig_id: negotiation.gig_id,
-        customer_id: gig.customer_id,
-        helper_id: negotiation.helper_id,
-        bid_cents: finalAmount,
-        customer_fee_cents: customerFee,
-        helper_fee_cents: helperFee,
-        state: "pending",
-      });
-
-    if (escrowError) throw escrowError;
-
-    const { notifyUserByEmail } =
-      await import("@/lib/server/notifications.server");
-    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
-    await notifyUserByEmail({
-      userId: negotiation.helper_id,
-      category: "bid_updates",
-      subject: "Dein Gebot wurde angenommen",
-      html: emailTemplate({
-        heading: "Dein Gebot wurde angenommen",
-        bodyLines: [
-          `Dein Gebot für „${escapeHtml(gig.title)}“ wurde angenommen. Der Auftrag ist jetzt dir zugewiesen.`,
-        ],
-        ctaLabel: "Auftrag ansehen",
-        ctaPath: "/gigs",
-      }),
-      inApp: {
-        title: "Gebot angenommen",
-        body: `Dein Gebot für „${gig.title}“ wurde angenommen.`,
-        link: "/gigs",
-      },
-    });
-
+    await notify(
+      n.helper_id,
+      "Dein Gebot wurde angenommen",
+      `Dein Gebot (${eur(n.bid_cents)}) für „${gig.title}“ wurde angenommen. Bitte bestätige den Auftrag unter „Meine Aufträge“.`,
+      "/gigs",
+      "Auftrag ansehen",
+    );
     return { success: true };
   });
 
 /**
- * Lehne ein Gebot ab
+ * Helfer nimmt das Gegenangebot des Kunden an.
+ */
+export const acceptCounter = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => parseInput(negotiationIdSchema, data))
+  .handler(async ({ context, data }) => {
+    const ctx = await loadNegotiation(data.negotiationId);
+    const { n, gig } = ctx;
+
+    if (n.helper_id !== context.userId) throw new Error("Nicht autorisiert");
+    if (n.status !== "countered" || n.counter_bid_cents == null) throw new Error(CHANGED_MSG);
+
+    await finalizeAgreement(ctx, n.counter_bid_cents);
+
+    await notify(
+      gig.customer_id,
+      "Der Helfer hat dein Gegenangebot angenommen",
+      `Der Helfer hat dein Gegenangebot von ${eur(n.counter_bid_cents)} für „${gig.title}“ angenommen. Bitte lege den Termin fest.`,
+      "/my-gigs",
+      "Auftrag ansehen",
+    );
+    return { success: true };
+  });
+
+/**
+ * Helfer antwortet auf ein Gegenangebot mit einem neuen Gebot (dieselbe Verhandlung, kein zweites Gebot).
+ * Jugendliche: Das neue Gebot geht zuerst an die Eltern.
+ */
+export const rebid = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => parseInput(rebidSchema, data))
+  .handler(async ({ context, data }) => {
+    const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
+    await enforceUserRateLimit(context.userId, "rebid", 30, 3600);
+    const { n, gig, supabaseAdmin } = await loadNegotiation(data.negotiationId);
+
+    if (n.helper_id !== context.userId) throw new Error("Nicht autorisiert");
+    if (n.status !== "countered") throw new Error(CHANGED_MSG);
+    if (!["open", "negotiating"].includes(gig.status)) throw new Error("Dieser Auftrag ist nicht mehr offen.");
+
+    const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", context.userId);
+    if ((roles ?? []).some((r) => r.role === "helper_youth")) {
+      const { requestBidApproval, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
+      try {
+        await requestBidApproval(context.userId, {
+          gigId: n.gig_id,
+          bidCents: data.bidCents,
+          message: data.message ?? null,
+        });
+      } catch (e) {
+        if (e instanceof OfferApprovalRequired) return { awaitingGuardian: e.message as string | null };
+        throw e;
+      }
+    }
+
+    const { data: updated, error } = await supabaseAdmin
+      .from("negotiations")
+      .update({
+        bid_cents: data.bidCents,
+        counter_bid_cents: null,
+        message: data.message ?? n.message,
+        status: "pending",
+      })
+      .eq("id", n.id)
+      .eq("status", "countered")
+      .select("id");
+    if (error) throw error;
+    if (!updated || updated.length === 0) throw new Error(CHANGED_MSG);
+
+    await notify(
+      gig.customer_id,
+      "Neues Gebot für deinen Auftrag",
+      `Der Helfer hat dir für „${gig.title}“ ein neues Gebot von ${eur(data.bidCents)} gemacht.`,
+      "/my-gigs",
+      "Gebot ansehen",
+    );
+    return { awaitingGuardian: null as string | null };
+  });
+
+/**
+ * Lehne ein Gebot ab (Kunde) bzw. ziehe es zurück (Helfer). Nur solange die Verhandlung läuft.
  */
 export const declineBid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => parseInput(negotiationIdSchema, data))
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
+    const { supabaseAdmin, n, gig } = await loadNegotiation(data.negotiationId);
 
-    const { data: negotiation, error } = await supabase
+    const isCustomer = gig.customer_id === userId;
+    const isHelper = n.helper_id === userId;
+    if (!isCustomer && !isHelper) throw new Error("Nicht autorisiert");
+    if (!["pending", "countered"].includes(n.status)) throw new Error(CHANGED_MSG);
+
+    const { data: updated, error } = await supabaseAdmin
       .from("negotiations")
-      .update({ status: "declined" })
-      .eq("id", data.negotiationId)
-      .select(
-        `
-        *,
-        gigs!inner (customer_id)
-      `,
-      )
-      .single();
-
+      .update({ status: isCustomer ? "declined" : "withdrawn" })
+      .eq("id", n.id)
+      .in("status", ["pending", "countered"])
+      .select("*")
+      .maybeSingle();
     if (error) throw error;
+    if (!updated) throw new Error(CHANGED_MSG);
 
-    // Customer oder Helper können ablehnen
-    const isCustomer = negotiation.gigs.customer_id === userId;
-    const isHelper = negotiation.helper_id === userId;
+    await reopenGigIfNoActiveBids(supabaseAdmin, n.gig_id);
 
-    if (!isCustomer && !isHelper) {
-      throw new Error("Nicht autorisiert");
-    }
+    await notify(
+      isCustomer ? n.helper_id : gig.customer_id,
+      isCustomer ? "Dein Gebot wurde abgelehnt" : "Ein Helfer hat sein Gebot zurückgezogen",
+      isCustomer
+        ? `Dein Gebot für „${gig.title}“ wurde abgelehnt.`
+        : `Ein Helfer hat sein Gebot für „${gig.title}“ zurückgezogen.`,
+      isCustomer ? "/marketplace" : "/my-gigs",
+      isCustomer ? "Weitere Aufträge finden" : "Meine Aufträge",
+    );
 
-    const { notifyUserByEmail } =
-      await import("@/lib/server/notifications.server");
-    const { emailTemplate } = await import("@/lib/server/email.server");
-    const recipientId = isCustomer
-      ? negotiation.helper_id
-      : negotiation.gigs.customer_id;
-    await notifyUserByEmail({
-      userId: recipientId,
-      category: "bid_updates",
-      subject: "Ein Gebot wurde abgelehnt",
-      html: emailTemplate({
-        heading: "Gebot abgelehnt",
-        bodyLines: ["Ein Gebot für einen deiner Aufträge wurde abgelehnt."],
-        ctaLabel: isCustomer ? "Aufträge finden" : "Meine Aufträge",
-        ctaPath: isCustomer ? "/marketplace" : "/my-gigs",
-      }),
-      inApp: {
-        title: "Gebot abgelehnt",
-        body: "Ein Gebot für einen deiner Aufträge wurde abgelehnt.",
-        link: isCustomer ? "/marketplace" : "/my-gigs",
-      },
-    });
-
-    return { negotiation };
+    return { negotiation: updated };
   });
 
 /**

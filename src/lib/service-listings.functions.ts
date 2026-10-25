@@ -298,6 +298,11 @@ export const createServiceListing = createServerFn({ method: "POST" })
     }
     if (data.publish !== false) await assertCanPublish(supabase, userId);
 
+    // Jugendschutz: Jugendliche veröffentlichen nicht selbst. Das Angebot wird als Entwurf gespeichert
+    // und den Eltern zur Freigabe vorgelegt (siehe youth-offers.server.ts).
+    const { isYouthUser } = await import("@/lib/server/youth-offers.server");
+    const needsGuardian = data.publish !== false && (await isYouthUser(userId));
+
     const { data: listing, error } = await supabase
       .from("service_listings")
       .insert({
@@ -321,13 +326,24 @@ export const createServiceListing = createServerFn({ method: "POST" })
         location: data.location || null,
         postal_code: data.postalCode || null,
         photos: data.photos ?? [],
-        status: data.publish === false ? "draft" : "active",
+        status: data.publish === false || needsGuardian ? "draft" : "active",
       })
       .select()
       .single();
 
     if (error) throw error;
-    return mapListing(listing as ListingRow);
+    if (needsGuardian) {
+      const { ensureListingApproval, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
+      try {
+        await ensureListingApproval(userId, (listing as ListingRow).id);
+      } catch (e) {
+        if (e instanceof OfferApprovalRequired) {
+          return { ...mapListing(listing as ListingRow), awaitingGuardian: e.message as string | null };
+        }
+        throw e;
+      }
+    }
+    return { ...mapListing(listing as ListingRow), awaitingGuardian: null as string | null };
   });
 
 export interface ServiceListingFilters {
@@ -553,6 +569,29 @@ export const publishServiceListing = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     await assertCanPublish(supabase, userId);
 
+    // Jugendliche: zuerst die Eltern fragen (liegt die Freigabe schon vor, geht es normal weiter).
+    {
+      const { isYouthUser, ensureListingApproval, OfferApprovalRequired } = await import(
+        "@/lib/server/youth-offers.server"
+      );
+      if (await isYouthUser(userId)) {
+        try {
+          await ensureListingApproval(userId, id);
+        } catch (e) {
+          if (e instanceof OfferApprovalRequired) {
+            const { data: current, error: curError } = await supabase
+              .from("service_listings")
+              .select("*")
+              .eq("id", id)
+              .single();
+            if (curError) throw curError;
+            return { ...mapListing(current as ListingRow), awaitingGuardian: e.message as string | null };
+          }
+          throw e;
+        }
+      }
+    }
+
     const { data: existing, error: fetchError } = await supabase
       .from("service_listings")
       .select("*")
@@ -586,7 +625,7 @@ export const publishServiceListing = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw error;
-    return mapListing(listing as ListingRow);
+    return { ...mapListing(listing as ListingRow), awaitingGuardian: null as string | null };
   });
 
 /**
@@ -907,6 +946,32 @@ export const acceptOffer = createServerFn({ method: "POST" })
 // Purchase
 // ---------------------------------------------------------------------------
 
+/** Fehlercodes der Datenbank-Funktionen in verständliche Meldungen übersetzen (vorher sah man z. B. "listing_not_active"). */
+const RPC_MESSAGES: Record<string, string> = {
+  listing_not_found: "Dieses Angebot gibt es nicht mehr.",
+  listing_not_active: "Dieses Angebot ist nicht mehr verfügbar.",
+  cannot_purchase_own_listing: "Du kannst dein eigenes Angebot nicht buchen.",
+  auctions_cannot_be_booked_directly: "Auktionen können nicht direkt gebucht werden.",
+  listing_has_no_price: "Für dieses Angebot ist kein Preis hinterlegt.",
+  scheduled_too_soon: "Der Termin muss mindestens 2 Stunden in der Zukunft liegen.",
+  account_restricted: "Dein Konto ist derzeit eingeschränkt.",
+  user_blocked: "Dieser Helfer ist für dich nicht buchbar.",
+  helper_not_bookable: "Dieser Helfer ist derzeit nicht buchbar.",
+  helper_on_vacation: "Der Helfer ist zu diesem Zeitpunkt im Urlaub.",
+  helper_not_available: "Zu diesem Zeitpunkt hat der Helfer schon einen anderen Termin. Bitte wähle eine andere Zeit.",
+  gig_not_found: "Dieser Auftrag wurde nicht gefunden.",
+  gig_not_pending_helper: "Diese Anfrage wurde schon beantwortet.",
+  not_authorized: "Dafür fehlt dir die Berechtigung.",
+  not_authenticated: "Bitte melde dich an.",
+};
+
+function rpcError(error: { message?: string } | null): Error {
+  const msg = error?.message ?? "";
+  const hit = Object.entries(RPC_MESSAGES).find(([code]) => msg.includes(code));
+  return new Error(hit ? hit[1] : msg || "Das hat nicht geklappt.");
+}
+
+
 /**
  * Angebot kaufen: Festpreis/Verhandlungspreis direkt, oder Sofortkauf-Preis
  * bei einer Auktion. Läuft über die purchase_service_listing()
@@ -924,7 +989,7 @@ export const purchaseServiceListing = createServerFn({ method: "POST" })
       p_buy_now: input.buyNow ?? false,
     });
 
-    if (error) throw error;
+    if (error) throw rpcError(error);
     return data;
   });
 
@@ -934,7 +999,30 @@ export const purchaseWithSchedule = createServerFn({ method: "POST" })
   .handler(async ({ context, data: input }) => {
     const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
     await enforceUserRateLimit(context.userId, "purchase_schedule", 20, 3600);
-    const { supabase } = context;
+    const { supabase, userId } = context;
+
+    // Echte Daten des Helfers prüfen, bevor der Auftrag angelegt wird (Urlaub, belegte Termine,
+    // Jugendschutz-Zeiten, Eltern-Zustimmung). Die Datenbank-Funktion prüft zusätzlich.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: listingRow } = await supabaseAdmin
+      .from("service_listings")
+      .select("helper_id, title")
+      .eq("id", input.listingId)
+      .maybeSingle();
+    if (!listingRow) throw new Error("Dieses Angebot ist nicht mehr verfügbar.");
+    const minutes = input.scheduledEnd
+      ? Math.max(
+          15,
+          Math.round((new Date(input.scheduledEnd).getTime() - new Date(input.scheduledAt).getTime()) / 60_000),
+        )
+      : 60;
+    const { assertBookable, BookingError } = await import("@/lib/server/booking.server");
+    try {
+      await assertBookable(listingRow.helper_id, userId, input.scheduledAt, minutes);
+    } catch (e) {
+      if (e instanceof BookingError) throw new Error(e.message);
+      throw e;
+    }
 
     const { data, error } = await supabase.rpc("purchase_with_schedule", {
       p_listing_id: input.listingId,
@@ -943,7 +1031,35 @@ export const purchaseWithSchedule = createServerFn({ method: "POST" })
       p_message: input.message || null,
     });
 
-    if (error) throw error;
+    if (error) throw rpcError(error);
+
+    // Der Helfer muss von der Anfrage erfahren (vorher gab es keine Benachrichtigung).
+    const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+    const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
+    const when = new Date(input.scheduledAt).toLocaleString("de-DE", {
+      dateStyle: "full",
+      timeStyle: "short",
+      timeZone: "Europe/Berlin",
+    });
+    await notifyUserByEmail({
+      userId: listingRow.helper_id,
+      category: "gig_updates",
+      subject: `Neue Buchungsanfrage: ${listingRow.title}`,
+      html: emailTemplate({
+        heading: "Neue Buchungsanfrage erhalten",
+        bodyLines: [
+          `Ein Kunde möchte „${escapeHtml(listingRow.title)}“ bei dir buchen (${escapeHtml(when)}). Bitte bestätige oder lehne die Anfrage ab.`,
+        ],
+        ctaLabel: "Anfrage ansehen",
+        ctaPath: "/gigs",
+      }),
+      inApp: {
+        title: "Neue Buchungsanfrage",
+        body: `„${listingRow.title}“ – ${when}`,
+        link: "/gigs",
+      },
+    });
+
     return data;
   });
 
@@ -971,7 +1087,7 @@ export const respondToBooking = createServerFn({ method: "POST" })
       p_accept: input.accept,
     });
 
-    if (error) throw error;
+    if (error) throw rpcError(error);
 
     if (gigBefore) {
       const { notifyUserByEmail } = await import("@/lib/server/notifications.server");

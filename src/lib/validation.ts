@@ -67,6 +67,8 @@ export const directBookingSchema = z.object({
   address: z.string().trim().min(1).max(250),
   scheduledAt: isoDateTimeSchema,
   budgetCents: centsSchema,
+  /** Angebot des Helfers, das gebucht wird: Preis und Leistung kommen dann vom Angebot, nicht vom Browser */
+  listingId: uuidSchema.optional(),
 });
 
 export const gigIdSchema = z.object({ gigId: uuidSchema });
@@ -99,6 +101,13 @@ export const negotiationInputSchema = z.object({
 export const counterBidSchema = z.object({ negotiationId: uuidSchema, counterBidCents: centsSchema });
 
 export const negotiationIdSchema = z.object({ negotiationId: uuidSchema });
+
+/** Helfer macht nach einem Gegenangebot ein neues Gebot (gleiche Verhandlung, neuer Preis). */
+export const rebidSchema = z.object({
+  negotiationId: uuidSchema,
+  bidCents: centsSchema,
+  message: z.string().trim().max(1000).optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Bewertungen, Profile, Benachrichtigungen
