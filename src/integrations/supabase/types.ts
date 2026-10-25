@@ -162,6 +162,7 @@ export type Database = {
           id: string;
           postal_code: string | null;
           scheduled_at: string | null;
+          source_listing_id: string | null;
           service_type: string;
           status: Database["public"]["Enums"]["gig_status"];
           title: string;
@@ -180,6 +181,7 @@ export type Database = {
           id?: string;
           postal_code?: string | null;
           scheduled_at?: string | null;
+          source_listing_id?: string | null;
           service_type: string;
           status?: Database["public"]["Enums"]["gig_status"];
           title: string;
@@ -198,6 +200,7 @@ export type Database = {
           id?: string;
           postal_code?: string | null;
           scheduled_at?: string | null;
+          source_listing_id?: string | null;
           service_type?: string;
           status?: Database["public"]["Enums"]["gig_status"];
           title?: string;
@@ -514,6 +517,54 @@ export type Database = {
           method?: string;
           status?: string;
           user_id?: string;
+        };
+        Relationships: [];
+      };
+      youth_offer_approvals: {
+        Row: {
+          id: string;
+          child_id: string;
+          kind: string;
+          listing_id: string | null;
+          gig_id: string | null;
+          bid_cents: number | null;
+          message: string | null;
+          snapshot: Json;
+          status: string;
+          expires_at: string | null;
+          decided_at: string | null;
+          decided_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          child_id: string;
+          kind: string;
+          listing_id?: string | null;
+          gig_id?: string | null;
+          bid_cents?: number | null;
+          message?: string | null;
+          snapshot?: Json;
+          status?: string;
+          expires_at?: string | null;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          child_id?: string;
+          kind?: string;
+          listing_id?: string | null;
+          gig_id?: string | null;
+          bid_cents?: number | null;
+          message?: string | null;
+          snapshot?: Json;
+          status?: string;
+          expires_at?: string | null;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
