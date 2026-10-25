@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BookingScheduler } from "@/components/booking/booking-scheduler";
+import { getHelperBookingInfo } from "@/lib/booking.functions";
+import { BOOKING_WINDOW_DAYS, buildSchedule } from "@/lib/booking-slots";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import { useI18n } from "@/lib/i18n";
@@ -78,6 +80,7 @@ export function CustomerDashboard() {
       address: string;
       scheduledAt: string;
       budgetCents: number;
+      listingId?: string;
     }) => createBookingRequest({ data: input }),
     onSuccess: () => {
       toast.success(
@@ -85,6 +88,8 @@ export function CustomerDashboard() {
       );
       setSelectedHelper(null);
       queryClient.invalidateQueries({ queryKey: ["marketplace-helpers"] });
+      queryClient.invalidateQueries({ queryKey: ["helper-booking-info"] });
+      queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
     },
     onError: (error: unknown) => {
       toast.error(
@@ -105,6 +110,17 @@ export function CustomerDashboard() {
   );
 
   const { navItems } = useAppNavItems();
+
+  // Echte Daten des Helfers für die Buchungsmaske: freie Zeiten, Urlaub, Angebote mit Preis.
+  const getBookingInfo = useServerFn(getHelperBookingInfo);
+  const [bookingDayOffset, setBookingDayOffset] = useState(0);
+  const bookingInfoQuery = useQuery({
+    queryKey: ["helper-booking-info", selectedHelper?.id],
+    queryFn: () => getBookingInfo({ data: { helperId: selectedHelper!.id } }),
+    enabled: !!selectedHelper,
+    staleTime: 15_000,
+  });
+  const bookingInfo = bookingInfoQuery.data;
 
   const allHelpers: DisplayHelper[] = useMemo(() => {
     return (helpersQuery.data?.helpers ?? []).map(
@@ -345,7 +361,10 @@ export function CustomerDashboard() {
                       </span>
                     )}
                   </span>
-                  <Button size="sm" onClick={() => setSelectedHelper(h)}>
+                  <Button size="sm" onClick={() => {
+                      setBookingDayOffset(0);
+                      setSelectedHelper(h);
+                    }}>
                     Jetzt buchen
                   </Button>
                 </div>
@@ -361,27 +380,51 @@ export function CustomerDashboard() {
       >
         <DialogContent className="max-w-3xl overflow-y-auto p-0 sm:max-h-[90vh]">
           <DialogTitle className="sr-only">Termin buchen</DialogTitle>
-          {selectedHelper && (
+          {selectedHelper && bookingInfoQuery.isLoading && (
+            <p className="p-8 text-center text-sm text-muted-foreground">Verfügbarkeit wird geladen…</p>
+          )}
+          {selectedHelper && bookingInfoQuery.isError && (
+            <p className="p-8 text-center text-sm text-destructive">
+              Die Verfügbarkeit konnte nicht geladen werden. Bitte versuche es erneut.
+            </p>
+          )}
+          {selectedHelper && bookingInfo && !bookingInfo.bookable && (
+            <div className="p-8 text-center">
+              <p className="font-semibold">{selectedHelper.name} ist aktuell nicht buchbar</p>
+              <p className="mt-2 text-sm text-muted-foreground">{bookingInfo.reason}</p>
+            </div>
+          )}
+          {selectedHelper && bookingInfo?.bookable && (
             <BookingScheduler
               helper={{
                 id: selectedHelper.id,
-                name: selectedHelper.name,
+                name: bookingInfo.helperName || selectedHelper.name,
                 title: selectedHelper.title ?? "",
                 location: selectedHelper.location ?? "",
                 rating: selectedHelper.rating ?? 0,
                 reviewCount: selectedHelper.reviewCount,
                 imageUrl: selectedHelper.imageUrl ?? "",
-                hourlyRate: selectedHelper.hourlyRate ?? 0,
+                hourlyRate: 0,
               }}
+              services={bookingInfo.services}
+              weekSchedule={buildSchedule(bookingInfo, bookingDayOffset)}
+              onWeekChange={(direction) =>
+                setBookingDayOffset((o) =>
+                  Math.max(0, Math.min(BOOKING_WINDOW_DAYS - 6, o + (direction === "next" ? 6 : -6))),
+                )
+              }
               onBookingRequest={(data) => {
                 if (bookingMutation.isPending) return;
                 bookingMutation.mutate({
                   helperId: data.helperId,
                   serviceType: data.serviceType,
-                  description: `Direktbuchung über "Helfer finden": ${data.serviceType}`,
+                  description: data.listingId
+                    ? "Buchung über „Helfer finden“"
+                    : `Anfrage über „Helfer finden“ (Preisvorschlag des Kunden)`,
                   address: data.address,
                   scheduledAt: data.scheduledAt,
                   budgetCents: data.budgetCents,
+                  ...(data.listingId ? { listingId: data.listingId } : {}),
                 });
               }}
             />
