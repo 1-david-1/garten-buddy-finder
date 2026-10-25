@@ -23,8 +23,9 @@ import {
 } from "@/lib/guardian.functions";
 import { VERIFICATION_STATUS_LABEL } from "@/lib/verification-status";
 import { useAuth } from "@/lib/auth";
-import { acceptGuardianInviteFn } from "@/lib/guardian.functions";
+import { acceptGuardianInviteFn, decideOfferAsGuardianFn } from "@/lib/guardian.functions";
 import type { GuardianApprovalItem, GuardianChildOverview } from "@/lib/server/guardian.server";
+import type { GuardianOfferItem } from "@/lib/server/youth-offers.server";
 
 /**
  * Eltern-Konto: Überblick über Konto und Aufträge des Kindes, Freigaben und Sicherheitsfunktionen
@@ -33,7 +34,9 @@ import type { GuardianApprovalItem, GuardianChildOverview } from "@/lib/server/g
 export const Route = createFileRoute("/_authenticated/eltern")({
   // Links aus der Eltern-Mail: /eltern?request=<id>&aktion=freigeben|ablehnen|melden
   // Entschieden wird erst per Klick hier im Konto - der Link allein ändert nichts.
-  validateSearch: (search: Record<string, unknown>): { request?: string; aktion?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { request?: string; aktion?: string; angebot?: string } => ({
+    angebot:
+      typeof search.angebot === "string" && /^[0-9a-f-]{36}$/i.test(search.angebot) ? search.angebot : undefined,
     request:
       typeof search.request === "string" && /^[0-9a-f-]{36}$/i.test(search.request) ? search.request : undefined,
     aktion:
@@ -56,6 +59,10 @@ function decisionError(e: unknown): string {
   if (m.includes("job_already_started")) return "Der Auftrag läuft bereits und kann nicht mehr zurückgezogen werden.";
   if (m.includes("expired")) return "Die Anfrage ist abgelaufen. Ihr Kind kann den Auftrag in der App erneut anfragen.";
   if (m.includes("already_decided")) return "Über diese Anfrage wurde bereits entschieden.";
+  if (m.includes("offer_changed"))
+    return "Das Angebot wurde seit der Anfrage geändert. Ihr Kind muss es erneut zur Freigabe senden, damit Sie die aktuellen Angaben sehen.";
+  if (m.includes("offer_gone")) return "Das Angebot bzw. der Auftrag ist nicht mehr verfügbar.";
+  if (m.includes("account_paused")) return "Das Konto ist pausiert. Bitte aktivieren Sie es zuerst wieder.";
   if (m.includes("forbidden")) return "Dafür haben Sie keine Berechtigung.";
   return "Das hat nicht geklappt. Bitte versuchen Sie es erneut.";
 }
@@ -327,6 +334,33 @@ function ChildSection({ child, guardianVerified }: { child: GuardianChildOvervie
         )}
       </div>
 
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Angebote und Gebote Ihres Kindes
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Angebote, die {child.childName} einstellt, und Gebote auf Aufträge werden erst veröffentlicht bzw. abgegeben,
+          wenn Sie zustimmen.
+        </p>
+        {child.offers.filter((o) => o.status === "pending").length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aktuell nichts zu prüfen.</p>
+        ) : (
+          child.offers
+            .filter((o) => o.status === "pending")
+            .map((o) => <OfferCard key={o.approvalId} item={o} onDone={refresh} />)
+        )}
+        {child.offers.filter((o) => o.status !== "pending").length > 0 && (
+          <div className="space-y-3 pt-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bisher entschieden</h4>
+            {child.offers
+              .filter((o) => o.status !== "pending")
+              .map((o) => (
+                <OfferCard key={o.approvalId} item={o} onDone={refresh} />
+              ))}
+          </div>
+        )}
+      </div>
+
       <div className="flex justify-end">
         <Button variant="ghost" size="sm" className="text-destructive" disabled={endLink.isPending} onClick={endLinkConfirm}>
           Verknüpfung mit {child.childName} beenden
@@ -470,6 +504,100 @@ function ApprovalCard({
             onChanged={onDone}
           />
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const OFFER_STATUS_LABEL: Record<GuardianOfferItem["status"], string> = {
+  pending: "Wartet auf Freigabe",
+  approved: "Freigegeben",
+  declined: "Nicht freigegeben",
+  expired: "Abgelaufen",
+};
+
+function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => void }) {
+  const decideFn = useServerFn(decideOfferAsGuardianFn);
+  const { angebot } = Route.useSearch();
+  const focused = angebot === item.approvalId;
+  const [confirmed, setConfirmed] = useState(false);
+  const decide = useMutation({
+    mutationFn: (decision: "approve" | "decline" | "revoke") =>
+      decideFn({ data: { approvalId: item.approvalId, decision } }),
+    onSuccess: (_r, decision) => {
+      toast.success(
+        decision === "approve"
+          ? item.kind === "bid"
+            ? "Gebot freigegeben und abgegeben."
+            : "Angebot freigegeben und veröffentlicht."
+          : decision === "decline"
+            ? "Nicht freigegeben."
+            : "Freigabe zurückgezogen.",
+      );
+      onDone();
+    },
+    onError: (e) => {
+      toast.error(decisionError(e));
+      onDone();
+    },
+  });
+
+  return (
+    <Card
+      id={`offer-${item.approvalId}`}
+      className={`bg-glass backdrop-blur ${focused ? "border-primary ring-2 ring-primary/40" : "border-glass-border"}`}
+    >
+      <CardContent className="space-y-4 pt-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {item.kind === "bid" ? "Gebot auf einen Auftrag" : "Eigenes Angebot"}
+            </p>
+            <p className="font-semibold">{item.title}</p>
+          </div>
+          <Badge variant="outline">{OFFER_STATUS_LABEL[item.status]}</Badge>
+        </div>
+
+        <dl className="divide-y divide-glass-border text-sm">
+          <Row label="Art der Tätigkeit" value={item.activity || "—"} />
+          {item.description && <Row label="Beschreibung" value={item.description} />}
+          <Row label={item.kind === "bid" ? "Gebotener Preis" : "Preis"} value={item.priceLabel} />
+          {item.location && <Row label="Ort" value={item.location} />}
+          {item.when && <Row label="Termin" value={item.when} />}
+          {item.customerName && (
+            <Row
+              label="Auftraggeber"
+              value={`${item.customerName} · ${item.customerVerified ? "Identität geprüft" : "nicht verifiziert"}`}
+            />
+          )}
+          {item.message && <Row label="Nachricht Ihres Kindes" value={item.message} />}
+          {item.photoCount > 0 && <Row label="Fotos" value={`${item.photoCount} Foto(s) im Angebot`} />}
+        </dl>
+
+        {item.status === "pending" && (
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 text-sm">
+              <Checkbox checked={confirmed} onCheckedChange={(v) => setConfirmed(v === true)} className="mt-0.5" />
+              <span>
+                Ich habe die Angaben gemeinsam mit meinem Kind geprüft und stimme
+                {item.kind === "bid" ? " dem Gebot " : " dem Angebot "}zu.
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
+                {decide.isPending ? <Loader2 className="size-4 animate-spin" /> : item.kind === "bid" ? "Gebot freigeben" : "Angebot freigeben"}
+              </Button>
+              <Button variant="outline" disabled={decide.isPending} onClick={() => decide.mutate("decline")}>
+                Nicht freigeben
+              </Button>
+            </div>
+          </div>
+        )}
+        {item.status === "approved" && item.kind === "listing" && (
+          <Button variant="outline" size="sm" disabled={decide.isPending} onClick={() => decide.mutate("revoke")}>
+            Freigabe zurückziehen (Angebot wird offline genommen)
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

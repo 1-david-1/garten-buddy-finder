@@ -36,7 +36,13 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getAvailableGigs } from "@/lib/gigs.functions";
-import { createBid, getMyBids } from "@/lib/negotiations.functions";
+import {
+  acceptCounter,
+  createBid,
+  declineBid,
+  getMyBids,
+  rebid,
+} from "@/lib/negotiations.functions";
 import { QueryErrorCard } from "@/components/query-error-card";
 import {
   PLATFORM_FEES_ENABLED,
@@ -90,6 +96,12 @@ function MarketplacePage() {
   const getGigsFn = useServerFn(getAvailableGigs);
   const createBidFn = useServerFn(createBid);
   const getMyBidsFn = useServerFn(getMyBids);
+  const acceptCounterFn = useServerFn(acceptCounter);
+  const rebidFn = useServerFn(rebid);
+  const withdrawFn = useServerFn(declineBid);
+  // Antwort auf ein Gegenangebot: neues Gebot in derselben Verhandlung
+  const [rebidId, setRebidId] = useState<string | null>(null);
+  const [rebidAmount, setRebidAmount] = useState("");
 
   const gigsQuery = useQuery({
     queryKey: ["available-gigs"],
@@ -110,8 +122,12 @@ function MarketplacePage() {
           message: bidMessage,
         },
       }),
-    onSuccess: () => {
-      toast.success("Angebot erfolgreich abgegeben!");
+    onSuccess: (res) => {
+      if (res.awaitingGuardian) {
+        toast.info("Deine Eltern müssen zustimmen", { description: res.awaitingGuardian, duration: 10000 });
+      } else {
+        toast.success("Angebot erfolgreich abgegeben!");
+      }
       queryClient.invalidateQueries({ queryKey: ["available-gigs"] });
       queryClient.invalidateQueries({ queryKey: ["my-bids"] });
       setSelectedGig(null);
@@ -120,6 +136,50 @@ function MarketplacePage() {
     },
     onError: (err) =>
       toast.error((err as Error).message || "Fehler beim Abgeben des Angebots"),
+  });
+
+  const refreshBids = () => {
+    queryClient.invalidateQueries({ queryKey: ["my-bids"] });
+    queryClient.invalidateQueries({ queryKey: ["available-gigs"] });
+  };
+  const acceptCounterMutation = useMutation({
+    mutationFn: (negotiationId: string) => acceptCounterFn({ data: { negotiationId } }),
+    onSuccess: () => {
+      toast.success("Gegenangebot angenommen! Bitte bestätige den Auftrag unter „Meine Aufträge“.");
+      refreshBids();
+    },
+    onError: (err) => {
+      toast.error((err as Error).message);
+      refreshBids();
+    },
+  });
+  const rebidMutation = useMutation({
+    mutationFn: (v: { negotiationId: string; bidCents: number }) => rebidFn({ data: v }),
+    onSuccess: (res) => {
+      if (res.awaitingGuardian) {
+        toast.info("Deine Eltern müssen zustimmen", { description: res.awaitingGuardian, duration: 10000 });
+      } else {
+        toast.success("Neues Gebot gesendet.");
+      }
+      setRebidId(null);
+      setRebidAmount("");
+      refreshBids();
+    },
+    onError: (err) => {
+      toast.error((err as Error).message);
+      refreshBids();
+    },
+  });
+  const withdrawMutation = useMutation({
+    mutationFn: (negotiationId: string) => withdrawFn({ data: { negotiationId } }),
+    onSuccess: () => {
+      toast.success("Gebot zurückgezogen.");
+      refreshBids();
+    },
+    onError: (err) => {
+      toast.error((err as Error).message);
+      refreshBids();
+    },
   });
 
   const { navItems } = useAppNavItems();
@@ -412,6 +472,78 @@ function MarketplacePage() {
                     <p className="mt-2 text-xs text-muted-foreground bg-muted/30 rounded p-2 italic">
                       „{neg.message}"
                     </p>
+                  )}
+
+                  {/* Verhandlung: bei einem Gegenangebot ist der Helfer dran */}
+                  {neg.status === "countered" && neg.counter_bid_cents != null && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Dein Gebot: {formatEuros(neg.bid_cents)} · Gegenangebot: {formatEuros(neg.counter_bid_cents)}
+                      </p>
+                      {rebidId === neg.id ? (
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            min="1"
+                            step="0.5"
+                            placeholder="Neues Gebot (€)"
+                            value={rebidAmount}
+                            onChange={(e) => setRebidAmount(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                          <Button size="sm" variant="outline" onClick={() => setRebidId(null)}>
+                            Abbrechen
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={!rebidAmount || rebidMutation.isPending}
+                            onClick={() =>
+                              rebidMutation.mutate({
+                                negotiationId: neg.id,
+                                bidCents: Math.round(parseFloat(rebidAmount) * 100),
+                              })
+                            }
+                          >
+                            Senden
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            disabled={acceptCounterMutation.isPending}
+                            onClick={() => acceptCounterMutation.mutate(neg.id)}
+                          >
+                            Gegenangebot annehmen ({formatEuros(neg.counter_bid_cents)})
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setRebidId(neg.id)}>
+                            Neues Gebot
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            disabled={withdrawMutation.isPending}
+                            onClick={() => withdrawMutation.mutate(neg.id)}
+                          >
+                            Ablehnen
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {neg.status === "pending" && (
+                    <div className="mt-3">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        disabled={withdrawMutation.isPending}
+                        onClick={() => withdrawMutation.mutate(neg.id)}
+                      >
+                        Gebot zurückziehen
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>

@@ -562,8 +562,23 @@ function MyGigsPage() {
                           </Badge>
                         </div>
 
-                        {neg.status === "pending" ||
-                        neg.status === "countered" ? (
+                        {neg.status === "countered" && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Dein Gegenangebot liegt beim Helfer. Er kann es annehmen oder ein neues Gebot machen.
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => declineMutation.mutate(neg.id)}
+                              disabled={declineMutation.isPending}
+                            >
+                              <XCircle className="size-3.5 mr-1" />
+                              Verhandlung beenden
+                            </Button>
+                          </div>
+                        )}
+                        {neg.status === "pending" ? (
                           <div className="flex gap-2 flex-wrap">
                             {counterNegId === neg.id ? (
                               <div className="flex gap-2 w-full">
