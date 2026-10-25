@@ -12,6 +12,7 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SERVICE_TYPES } from "@/lib/service-types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -39,8 +40,17 @@ interface DaySchedule {
   hasAvailability: boolean;
 }
 
+interface BookableServiceOption {
+  listingId: string;
+  title: string;
+  serviceType: string;
+  priceCents: number;
+}
+
 interface BookingSchedulerProps {
   helper?: Helper;
+  /** Buchbare Angebote des Helfers (echte Leistungen und Preise). Ohne Angebote: freie Anfrage mit eigenem Budget. */
+  services?: BookableServiceOption[];
   weekSchedule?: DaySchedule[];
   onBookingRequest?: (data: BookingData) => void;
   onWeekChange?: (direction: "prev" | "next") => void;
@@ -54,6 +64,8 @@ interface BookingData {
   serviceType: string;
   address: string;
   budgetCents: number;
+  /** Gebuchtes Angebot des Helfers: Preis und Leistung kommen dann vom Angebot */
+  listingId?: string;
 }
 
 const defaultHelper: Helper = {
@@ -67,14 +79,7 @@ const defaultHelper: Helper = {
   hourlyRate: 2500, // €25
 };
 
-const serviceTypes = [
-  "Rasenmähen",
-  "Heckeschneiden",
-  "Unkraut jäten",
-  "Blumen pflanzen",
-  "Laub entfernen",
-  "Gartenarbeit allgemein",
-];
+/** Interne Werte (value) werden an den Server geschickt, nur das Label wird angezeigt. */
 
 const STANDARD_SLOT_TIMES = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
 const WEEKDAY_NAMES = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
@@ -92,7 +97,8 @@ function buildWeek(weekOffset: number): DaySchedule[] {
   for (let i = 0; i < 6; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + weekOffset + i);
-    const iso = d.toISOString().slice(0, 10);
+    // Lokales Datum (toISOString() verschiebt den Tag um die Zeitzone: die Buchung landete einen Tag früher)
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const isToday = weekOffset === 0 && i === 0;
     days.push({
       date: iso,
@@ -112,6 +118,7 @@ function formatDayLabel(iso: string): string {
 
 export function BookingScheduler({
   helper = defaultHelper,
+  services,
   weekSchedule,
   onBookingRequest,
   onWeekChange,
@@ -130,6 +137,11 @@ export function BookingScheduler({
   const [serviceType, setServiceType] = useState("");
   const [address, setAddress] = useState("");
   const [budget, setBudget] = useState("");
+  const [listingId, setListingId] = useState<string | null>(null);
+  const hasServices = !!services && services.length > 0;
+  const serviceLabel = listingId
+    ? (services?.find((x) => x.listingId === listingId)?.title ?? "")
+    : (SERVICE_TYPES.find((x) => x.value === serviceType)?.label ?? "");
   const shouldReduceMotion = useReducedMotion();
   const shouldAnimate = enableAnimations && !shouldReduceMotion;
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -181,6 +193,7 @@ export function BookingScheduler({
 
   const handleConfirmBooking = () => {
     if (!selectedTimeSlot || !serviceType || !address || !budget) return;
+    if (!(parseFloat(budget.replace(",", ".")) > 0)) return;
 
     const scheduledAt = new Date(
       `${selectedTimeSlot.day}T${selectedTimeSlot.time}:00`,
@@ -191,7 +204,8 @@ export function BookingScheduler({
       scheduledAt,
       serviceType,
       address,
-      budgetCents: parseInt(budget) * 100,
+      budgetCents: Math.round(parseFloat(budget.replace(",", ".")) * 100),
+      ...(listingId ? { listingId } : {}),
     });
   };
 
@@ -240,11 +254,20 @@ export function BookingScheduler({
         <motion.div variants={shouldAnimate ? itemVariants : {}} className="p-6 pb-4">
           <div className="flex items-start justify-between gap-6">
             <motion.div whileHover={shouldAnimate ? { scale: 1.05 } : {}} className="flex-shrink-0">
-              <img
-                src={helper.imageUrl}
-                alt={helper.name}
-                className="w-16 h-16 rounded-lg object-cover"
-              />
+              {helper.imageUrl ? (
+                <img
+                  src={helper.imageUrl}
+                  alt={helper.name}
+                  className="w-16 h-16 rounded-lg object-cover"
+                />
+              ) : (
+                <div
+                  aria-hidden
+                  className="w-16 h-16 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-2xl font-semibold"
+                >
+                  {helper.name.trim().charAt(0).toUpperCase() || "?"}
+                </div>
+              )}
             </motion.div>
 
             <div className="flex-1 min-w-0 space-y-2">
@@ -264,42 +287,72 @@ export function BookingScheduler({
               </div>
             </div>
 
-            <motion.div
-              initial={shouldAnimate ? { opacity: 0, scale: 0.8 } : {}}
-              animate={shouldAnimate ? { opacity: 1, scale: 1 } : {}}
-              className="text-right flex-shrink-0"
-            >
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                Stundensatz
-              </p>
-              <p className="text-2xl font-bold text-emerald-500">
-                {formatPrice(helper.hourlyRate)}
-              </p>
-            </motion.div>
+            {helper.hourlyRate > 0 && (
+              <motion.div
+                initial={shouldAnimate ? { opacity: 0, scale: 0.8 } : {}}
+                animate={shouldAnimate ? { opacity: 1, scale: 1 } : {}}
+                className="text-right flex-shrink-0"
+              >
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                  Stundensatz
+                </p>
+                <p className="text-2xl font-bold text-emerald-500">
+                  {formatPrice(helper.hourlyRate)}
+                </p>
+              </motion.div>
+            )}
           </div>
         </motion.div>
 
         {/* Service Type Selector */}
         <motion.div variants={shouldAnimate ? itemVariants : {}} className="px-6 pb-4">
-          <label className="block text-sm text-muted-foreground mb-2">Art der Gartenarbeit</label>
+          <label className="block text-sm text-muted-foreground mb-2">
+            {hasServices ? "Angebot des Helfers" : "Art der Gartenarbeit"}
+          </label>
           <div className="flex flex-wrap gap-2">
-            {serviceTypes.map((type) => (
+            {hasServices &&
+              services!.map((svc) => (
+                <button
+                  key={svc.listingId}
+                  type="button"
+                  onClick={() => {
+                    setServiceType(svc.serviceType);
+                    setListingId(svc.listingId);
+                    setBudget(String(svc.priceCents / 100));
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 text-sm rounded-lg border transition-colors text-left",
+                    listingId === svc.listingId
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-border/50 hover:border-border text-foreground",
+                  )}
+                >
+                  {svc.title} · {formatPrice(svc.priceCents)}
+                </button>
+              ))}
+            {!hasServices && SERVICE_TYPES.map((type) => (
               <motion.button
-                key={type}
+                key={type.value}
                 whileHover={shouldAnimate ? { scale: 1.05 } : {}}
                 whileTap={shouldAnimate ? { scale: 0.95 } : {}}
-                onClick={() => setServiceType(type)}
+                onClick={() => setServiceType(type.value)}
                 className={cn(
                   "px-3 py-1.5 text-sm rounded-lg border transition-colors",
-                  serviceType === type
+                  serviceType === type.value
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-background border-border/50 hover:border-border text-foreground",
                 )}
               >
-                {type}
+                {type.label}
               </motion.button>
             ))}
           </div>
+          {!hasServices && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Dieser Helfer hat noch kein festes Angebot. Du sendest eine Anfrage mit deinem Preisvorschlag, der Helfer
+              kann sie annehmen oder ablehnen.
+            </p>
+          )}
         </motion.div>
 
         {/* Address Input */}
@@ -316,10 +369,15 @@ export function BookingScheduler({
 
         {/* Budget Input */}
         <motion.div variants={shouldAnimate ? itemVariants : {}} className="px-6 pb-4">
-          <label className="block text-sm text-muted-foreground mb-2">Budget (€)</label>
+          <label className="block text-sm text-muted-foreground mb-2">
+            {listingId ? "Preis laut Angebot (€)" : "Dein Preisvorschlag (€)"}
+          </label>
           <input
             type="number"
+            min="1"
+            step="0.5"
             value={budget}
+            readOnly={!!listingId}
             onChange={(e) => setBudget(e.target.value)}
             placeholder="z.B. 50"
             className="w-full p-3 bg-muted rounded-lg border border-border/50 hover:border-border transition-colors text-foreground placeholder:text-muted-foreground"
@@ -426,11 +484,20 @@ export function BookingScheduler({
 
           {/* Helper info summary */}
           <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
-            <img
-              src={helper.imageUrl}
-              alt={helper.name}
-              className="w-12 h-12 rounded-lg object-cover"
-            />
+            {helper.imageUrl ? (
+              <img
+                src={helper.imageUrl}
+                alt={helper.name}
+                className="w-12 h-12 rounded-lg object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden
+                className="w-12 h-12 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-lg font-semibold"
+              >
+                {helper.name.trim().charAt(0).toUpperCase() || "?"}
+              </div>
+            )}
             <div>
               <h4 className="font-semibold text-foreground">{helper.name}</h4>
               <p className="text-sm text-muted-foreground">{helper.title}</p>
@@ -457,7 +524,7 @@ export function BookingScheduler({
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Leistung:</span>
-                  <span className="text-foreground font-medium">{serviceType || "-"}</span>
+                  <span className="text-foreground font-medium">{serviceLabel || "-"}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Adresse:</span>
