@@ -212,7 +212,7 @@ export const JOB_APPROVAL_VALID_DAYS = 3;
 /** Wird mit einer Nutzer-lesbaren deutschen Meldung geworfen (wird in der App als Hinweis angezeigt). */
 export class JobApprovalRequired extends Error {}
 
-function formatEuro(cents: number): string {
+export function formatEuro(cents: number): string {
   return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 }
 
@@ -257,7 +257,7 @@ export function toSnapshot(job: JobDetails): JobSnapshot {
   };
 }
 
-function serviceLabel(value: string): string {
+export function serviceLabel(value: string): string {
   return SERVICE_TYPES.find((s) => s.value === value)?.label ?? value;
 }
 
@@ -332,7 +332,7 @@ export async function loadJobDetails(gigId: string): Promise<(JobDetails & { cus
 }
 
 /** E-Mail-Empfänger für Eltern-Mails: Eltern-Konto (Login-Adresse) und die vom Kind angegebene Adresse. */
-async function guardianRecipients(
+export async function guardianRecipients(
   guardianUserId: string | null,
   statedEmail: string | null | undefined,
 ): Promise<string[]> {

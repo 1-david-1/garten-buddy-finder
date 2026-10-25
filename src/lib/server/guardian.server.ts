@@ -18,6 +18,7 @@ import { assertServiceRole } from "@/lib/server/service-role.server";
 import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { GUARDIAN_CONSENT_VERSION } from "@/lib/consent-texts";
+import { listOffersForChild, type GuardianOfferItem } from "@/lib/server/youth-offers.server";
 import { deriveVerificationStatus, type VerificationStatus } from "@/lib/verification-status";
 import {
   escapeHtml,
@@ -423,6 +424,8 @@ export interface GuardianChildOverview {
   consentGiven: boolean;
   linkedSince: string | null;
   approvals: GuardianApprovalItem[];
+  /** Angebote und Gebote des Kindes im Marktplatz, die die Eltern freigeben müssen */
+  offers: GuardianOfferItem[];
   blockedUserIds: string[];
 }
 
@@ -482,6 +485,7 @@ export async function getGuardianOverview(
       consentGiven: Boolean(link.consent_given_at),
       linkedSince: link.accepted_at,
       approvals,
+      offers: await listOffersForChild(link.child_id),
       blockedUserIds: (blocks ?? []).map((b) => b.blocked_id),
     });
   }
