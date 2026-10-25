@@ -546,6 +546,123 @@ export const getNegotiationsForGig = createServerFn({ method: "GET" })
     };
   });
 
+export type RequestState =
+  | "awaiting_guardian" // Jugendliche/r: Eltern müssen das Gebot noch freigeben
+  | "pending" // Gebot liegt beim Kunden
+  | "countered" // Gegenangebot des Kunden: der Helfer ist dran
+  | "accepted" // Preis vereinbart
+  | "declined" // Kunde hat abgelehnt
+  | "withdrawn" // selbst zurückgezogen
+  | "guardian_declined" // Eltern haben nicht freigegeben
+  | "expired"; // Eltern-Freigabe abgelaufen
+
+export interface HelperRequestItem {
+  /** negotiation-ID (Gebot) bzw. Freigabe-ID (noch nicht abgegeben) */
+  id: string;
+  source: "negotiation" | "approval";
+  gigId: string;
+  title: string;
+  serviceType: string;
+  scheduledAt: string | null;
+  customerName: string;
+  /** Preisvorstellung des Auftraggebers */
+  gigBudgetCents: number;
+  bidCents: number;
+  counterBidCents: number | null;
+  message: string | null;
+  state: RequestState;
+  gigStatus: string;
+  createdAt: string;
+}
+
+/**
+ * Alle Anfragen des Helfers an Aufträge von Kunden (Gebote) mit Status, für das Aufträge-Fenster.
+ * Jugendliche sehen zusätzlich Gebote, die noch auf die Freigabe der Eltern warten.
+ */
+export const getMyRequests = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<HelperRequestItem[]> => {
+    const { userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const [{ data: negotiations }, { data: approvals }] = await Promise.all([
+      supabaseAdmin
+        .from("negotiations")
+        .select("id, gig_id, bid_cents, counter_bid_cents, message, status, created_at")
+        .eq("helper_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabaseAdmin
+        .from("youth_offer_approvals")
+        .select("id, gig_id, bid_cents, message, status, expires_at, created_at")
+        .eq("child_id", userId)
+        .eq("kind", "bid")
+        .in("status", ["pending", "declined", "expired"])
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    const gigIds = Array.from(
+      new Set([...(negotiations ?? []).map((n) => n.gig_id), ...(approvals ?? []).map((a) => a.gig_id as string)]),
+    );
+    if (gigIds.length === 0) return [];
+
+    const { data: gigs } = await supabaseAdmin
+      .from("gigs")
+      .select("id, title, service_type, status, scheduled_at, customer_id, budget_cents")
+      .in("id", gigIds);
+    const gigById = new Map((gigs ?? []).map((g) => [g.id, g]));
+    const customerIds = Array.from(new Set((gigs ?? []).map((g) => g.customer_id)));
+    const { data: profiles } = customerIds.length
+      ? await supabaseAdmin.from("profiles").select("id, display_name").in("id", customerIds)
+      : { data: [] as { id: string; display_name: string | null }[] };
+    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name?.trim() || "Kunde"]));
+
+    const base = (gigId: string) => {
+      const g = gigById.get(gigId);
+      return {
+        gigId,
+        title: g?.title ?? "Auftrag",
+        serviceType: g?.service_type ?? "",
+        scheduledAt: g?.scheduled_at ?? null,
+        customerName: g ? (nameById.get(g.customer_id) ?? "Kunde") : "Kunde",
+        gigBudgetCents: g?.budget_cents ?? 0,
+        gigStatus: g?.status ?? "",
+      };
+    };
+
+    const items: HelperRequestItem[] = [];
+    for (const n of negotiations ?? []) {
+      items.push({
+        id: n.id,
+        source: "negotiation",
+        ...base(n.gig_id),
+        bidCents: n.bid_cents,
+        counterBidCents: n.counter_bid_cents,
+        message: n.message,
+        state: (["pending", "countered", "accepted", "declined", "withdrawn"].includes(n.status)
+          ? n.status
+          : "pending") as RequestState,
+        createdAt: n.created_at,
+      });
+    }
+    const now = Date.now();
+    for (const a of approvals ?? []) {
+      const expired = a.status === "pending" && a.expires_at && new Date(a.expires_at).getTime() < now;
+      items.push({
+        id: a.id,
+        source: "approval",
+        ...base(a.gig_id as string),
+        bidCents: a.bid_cents ?? 0,
+        counterBidCents: null,
+        message: a.message,
+        state: expired ? "expired" : a.status === "declined" ? "guardian_declined" : a.status === "pending" ? "awaiting_guardian" : "expired",
+        createdAt: a.created_at,
+      });
+    }
+    return items.sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+  });
+
 /**
  * Hole alle eigenen Gebote (als Helper)
  */
