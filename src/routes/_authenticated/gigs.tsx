@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { HelperRequests } from "@/components/dashboard/helper-requests";
 import { useAppNavItems } from "@/lib/use-app-nav";
 import {
   getHelperDashboard,
@@ -267,6 +268,9 @@ function GigsPage() {
           </div>
         </div>
       )}
+
+      {/* Eigene Anfragen (Gebote) mit Status */}
+      <HelperRequests intlLocale={intlLocale} />
 
       {/* Zugewiesene & laufende Aufträge */}
       <Card className="mt-6 border-glass-border bg-glass backdrop-blur">
