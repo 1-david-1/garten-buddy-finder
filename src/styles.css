@@ -179,3 +179,109 @@
   );
   filter: blur(60px);
 }
+
+/* ==========================================================================
+   Verspieltes, helles Erscheinungsbild für Startseite und Infoseiten.
+   Wird über die Klasse .gm-playful aktiviert und überschreibt nur die Design-Variablen,
+   damit Button, Accordion & Co. dort automatisch passen. Die App selbst bleibt dunkel.
+
+   Palette:  Laubgrün #087f43 · Tiefgrün #04301e · Sonnenblume #ffd21f
+             Tomate #ff5a36 · Mintpapier #eef8e8
+   Schrift:  Bricolage Grotesque 800 für Überschriften, Inter für Fließtext.
+   ========================================================================== */
+.gm-playful {
+  --gm-leaf: #087f43;
+  --gm-deep: #04301e;
+  --gm-sun: #ffd21f;
+  --gm-tomato: #ff5a36;
+  --gm-paper: #eef8e8;
+
+  --background: #eef8e8;
+  --foreground: #04301e;
+  --card: #ffffff;
+  --card-foreground: #04301e;
+  --popover: #ffffff;
+  --popover-foreground: #04301e;
+  --primary: #087f43;
+  --primary-foreground: #ffffff;
+  --secondary: #ffe36b;
+  --secondary-foreground: #04301e;
+  --muted: #dff0d6;
+  --muted-foreground: #35584a;
+  --accent: #ffd21f;
+  --accent-foreground: #04301e;
+  --border: #04301e;
+  --input: #04301e;
+  --ring: #087f43;
+  --emerald: #087f43;
+  --emerald-soft: rgb(8 127 67 / 0.12);
+  --glass: #ffffff;
+  --glass-border: #04301e;
+
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Dicke 3D-Schrift: gestapelte Schatten in Tiefgrün */
+.gm-extrude {
+  text-shadow:
+    1px 1px 0 var(--gm-deep), 2px 2px 0 var(--gm-deep), 3px 3px 0 var(--gm-deep), 4px 4px 0 var(--gm-deep),
+    5px 5px 0 var(--gm-deep), 6px 6px 0 var(--gm-deep), 7px 7px 0 var(--gm-deep), 8px 8px 0 var(--gm-deep),
+    9px 9px 0 var(--gm-deep), 10px 10px 0 var(--gm-deep);
+}
+.gm-extrude-sm {
+  text-shadow:
+    1px 1px 0 var(--gm-deep), 2px 2px 0 var(--gm-deep), 3px 3px 0 var(--gm-deep), 4px 4px 0 var(--gm-deep);
+}
+
+/* Karten wie Aufkleber: dicke Kontur und harter Versatzschatten statt weichem Schatten */
+.gm-card {
+  border: 3px solid var(--gm-deep);
+  box-shadow: 6px 6px 0 var(--gm-deep);
+}
+.gm-card-sm {
+  border: 2.5px solid var(--gm-deep);
+  box-shadow: 4px 4px 0 var(--gm-deep);
+}
+.gm-btn {
+  border: 3px solid var(--gm-deep);
+  box-shadow: 4px 4px 0 var(--gm-deep);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.gm-btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--gm-deep); }
+.gm-btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--gm-deep); }
+.gm-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+.gm-grid-bg {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.14) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+}
+
+/* Bewegung: ein orchestrierter Einstieg im Kopfbereich, Schweben und Drehen nur als Blickfang */
+@keyframes gm-float {
+  0%, 100% { transform: translateY(0) rotate(var(--gm-rot, 0deg)); }
+  50% { transform: translateY(-14px) rotate(var(--gm-rot, 0deg)); }
+}
+@keyframes gm-spin { to { transform: rotate(360deg); } }
+@keyframes gm-pop {
+  0% { opacity: 0; transform: translateY(28px) scale(0.94) rotate(var(--gm-rot, 0deg)); }
+  70% { opacity: 1; transform: translateY(-4px) scale(1.01) rotate(var(--gm-rot, 0deg)); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(var(--gm-rot, 0deg)); }
+}
+@keyframes gm-wiggle {
+  0%, 100% { transform: rotate(var(--gm-rot, 0deg)); }
+  25% { transform: rotate(calc(var(--gm-rot, 0deg) - 4deg)); }
+  75% { transform: rotate(calc(var(--gm-rot, 0deg) + 4deg)); }
+}
+.gm-float { animation: gm-float 6s ease-in-out infinite; }
+.gm-spin { animation: gm-spin 16s linear infinite; }
+.gm-pop { animation: gm-pop 0.8s cubic-bezier(0.34, 1.36, 0.5, 1) both; }
+.gm-sticker { transform: rotate(var(--gm-rot, 0deg)); }
+.gm-sticker:hover { animation: gm-wiggle 0.5s ease-in-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-float, .gm-spin, .gm-pop, .gm-sticker:hover { animation: none !important; }
+  .gm-btn { transition: none; }
+}
