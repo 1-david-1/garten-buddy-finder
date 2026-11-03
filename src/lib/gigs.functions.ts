@@ -73,6 +73,13 @@ export const createGig = createServerFn({ method: "POST" })
       );
     }
 
+    // Jugendschutz: Verbotene Tätigkeiten und Heckenschnitt mit sehr gefährlichem Gerät / großer Höhe werden
+    // Jugendlichen gar nicht erst angezeigt. (Normaler Heckenschnitt bleibt möglich - mit Freigabe der Eltern.)
+    const { isYouthEligible } = await import("@/lib/hedge-rules");
+    const allowedAgeGroups = isYouthEligible(data.serviceType, data.title, data.description)
+      ? data.allowedAgeGroups
+      : data.allowedAgeGroups.filter((g) => g !== "helper_youth");
+
     const { data: gig, error } = await supabase
       .from("gigs")
       .insert({
@@ -85,7 +92,7 @@ export const createGig = createServerFn({ method: "POST" })
         postal_code: data.postalCode,
         scheduled_at: data.scheduledAt,
         duration_minutes: data.durationMinutes,
-        allowed_age_groups: data.allowedAgeGroups,
+        allowed_age_groups: allowedAgeGroups,
         status: "open",
       })
       .select()
@@ -349,7 +356,11 @@ export const proposeGigDate = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw error;
-    return { gig };
+
+    // Neuer Termin: bei einem minderjährigen Helfer gehen die Eltern jetzt (erneut) um Freigabe an.
+    const { requestJobApprovalIfNeeded } = await import("@/lib/server/verification.server");
+    const guardian = gig.assigned_helper_id ? await requestJobApprovalIfNeeded(gig.id) : null;
+    return { gig, guardian };
   });
 
 /**
@@ -395,7 +406,10 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
       },
     });
 
-    return { gig };
+    // Minderjähriger Helfer: Eltern (sobald Termin und Ort feststehen) um Freigabe bitten
+    const { requestJobApprovalIfNeeded } = await import("@/lib/server/verification.server");
+    const guardian = await requestJobApprovalIfNeeded(gig.id);
+    return { gig, guardian };
   });
 export const completeGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -569,6 +583,20 @@ export const cancelGig = createServerFn({ method: "POST" })
           link: "/dashboard",
         },
       });
+    }
+
+    // Ist der Helfer ein Jugendlicher, erfahren auch die Eltern von der Stornierung (egal von wem).
+    if (gig.assigned_helper_id) {
+      const { isYouthUser, notifyGuardiansAboutRefusal } = await import("@/lib/server/refusal.server");
+      if (await isYouthUser(gig.assigned_helper_id)) {
+        await notifyGuardiansAboutRefusal({
+          childId: gig.assigned_helper_id,
+          title: gig.title,
+          by: isCustomer ? "customer" : "helper",
+          kind: "cancel",
+          reason: data.reason,
+        });
+      }
     }
 
     return { ok: true };

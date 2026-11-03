@@ -56,13 +56,17 @@ export const ACTIVITY_RISK_NOTES: Record<string, string> = {
   rasenmähen:
     "Rasenmäher sind Maschinen mit scharfen, schnell drehenden Teilen und grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Bitte nur nach Absprache mit den Erziehungsberechtigten freigeben und genau prüfen, ob sie für das Alter geeignet ist.",
   heckenschnitt:
-    "Heckenscheren sind Werkzeuge mit scharfen, schnell bewegten Schneiden und grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Bitte nur nach Absprache mit den Erziehungsberechtigten freigeben und genau prüfen, ob sie für das Alter geeignet ist.",
+    "Heckenschnitt ist für Jugendliche nur mit Ihrer Zustimmung möglich und nur, wenn die Hecke niedrig ist (ohne Leiter erreichbar, ca. bis 1,5 m) und kein sehr gefährliches Gerät genutzt wird. Nicht erlaubt sind Motor- oder Kettensägen, Benzin- oder Stangenheckenscheren und Häcksler. Handschere oder eine leichte Akku-/Elektro-Heckenschere sind möglich; Handschuhe und Schutzbrille werden empfohlen. Heckenscheren haben scharfe, schnell bewegte Schneiden und sind grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein.",
   unkraut: "Gebückte Haltung, ggf. Dornen oder Stechpflanzen. Keine Unkrautvernichtungsmittel.",
   blumenbeete: "Geringes Risiko. Handschuhe empfohlen; keine Düngemittel oder Pflanzenschutzmittel handhaben.",
   laub: "Geringes Risiko. Keine Laubbläser oder Häcksler; rutschiges Laub beachten.",
   sonstiges:
     "Art und Risiko hängen von der Beschreibung ab. Bitte besonders sorgfältig prüfen, ob die Tätigkeit leicht und ungefährlich ist.",
 };
+/** Bedingungen für Heckenschnitt durch Jugendliche - die Eltern bestätigen sie bei der Freigabe ausdrücklich */
+export const HEDGE_YOUTH_CONDITIONS =
+  "Die Hecke ist niedrig (ohne Leiter erreichbar, ca. bis 1,5 m), und es wird kein sehr gefährliches Gerät genutzt (keine Motor-/Kettensäge, keine Benzin- oder Stangenheckenschere, kein Häcksler). Handschere oder leichte Akku-/Elektro-Heckenschere sind in Ordnung.";
+
 export const GENERAL_RISK_NOTE =
   "Allgemein: Sonne und Hitze (ausreichend trinken), Verletzungen durch Werkzeug, unbekannte Personen und Orte.";
 

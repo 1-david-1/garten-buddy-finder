@@ -8,6 +8,8 @@
 // Die Datenbank erzwingt dasselbe (Trigger/Policy in 20261024000100_youth_offer_approvals.sql).
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { emailTemplate, escapeHtml, getSiteUrl, sendEmail } from "@/lib/server/email.server";
+import { HEDGE_YOUTH_CONDITIONS } from "@/lib/consent-texts";
+import { mentionsDangerousHedgeEquipment, YOUTH_BLOCKED_SERVICE_TYPES } from "@/lib/hedge-rules";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import {
   formatEuro,
@@ -44,6 +46,8 @@ export interface GuardianOfferItem {
   when: string | null;
   /** Nur Angebot: Anzahl der Fotos */
   photoCount: number;
+  /** technischer Wert der Tätigkeit (z. B. "heckenschnitt") */
+  serviceType: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +198,16 @@ export async function ensureListingApproval(userId: string, listingId: string): 
   if (!listing) throw new OfferApprovalRequired("Angebot nicht gefunden.");
   const l = listing as unknown as ListingRowLite;
 
+  // Jugendschutz: nicht vermittelbare Tätigkeiten und gefährlicher Heckenschnitt gehen gar nicht erst an die Eltern.
+  if ((YOUTH_BLOCKED_SERVICE_TYPES as readonly string[]).includes(l.service_type)) {
+    throw new OfferApprovalRequired("Diese Tätigkeit wird Jugendlichen nicht vermittelt und kann nicht angeboten werden.");
+  }
+  if (l.service_type === "heckenschnitt" && mentionsDangerousHedgeEquipment(l.title, l.description)) {
+    throw new OfferApprovalRequired(
+      "Heckenschnitt ist für Jugendliche nur ohne sehr gefährliche Geräte (z. B. Motor-/Kettensäge, Benzin- oder Stangenheckenschere) und ohne Leiter möglich. Bitte ändere Titel und Beschreibung entsprechend.",
+    );
+  }
+
   const { data: existing } = await supabaseAdmin
     .from("youth_offer_approvals")
     .select("id, status, expires_at, snapshot")
@@ -246,6 +260,7 @@ export async function ensureListingApproval(userId: string, listingId: string): 
       ...(l.description ? [{ label: "Beschreibung", value: e(l.description) }] : []),
       { label: "Preis", value: e(listingPriceLabel(l)) },
       { label: "Ort", value: e([l.postal_code, l.location].filter(Boolean).join(" ") || "—") },
+      ...(l.service_type === "heckenschnitt" ? [{ label: "Heckenschnitt", value: e(HEDGE_YOUTH_CONDITIONS) }] : []),
     ],
     cta: "Angebot im Eltern-Konto prüfen",
   });
@@ -272,6 +287,15 @@ export async function requestBidApproval(
   if (!job) throw new OfferApprovalRequired("Auftrag nicht gefunden.");
   if (!["open", "negotiating"].includes(job.gigStatus)) {
     throw new OfferApprovalRequired("Auf diesen Auftrag kann nicht mehr geboten werden.");
+  }
+
+  if ((YOUTH_BLOCKED_SERVICE_TYPES as readonly string[]).includes(job.serviceType)) {
+    throw new OfferApprovalRequired("Diese Tätigkeit wird Jugendlichen nicht vermittelt.");
+  }
+  if (job.serviceType === "heckenschnitt" && mentionsDangerousHedgeEquipment(job.title, job.description)) {
+    throw new OfferApprovalRequired(
+      "Dieser Heckenschnitt ist für Jugendliche nicht geeignet (sehr gefährliches Gerät oder große Höhe).",
+    );
   }
 
   const { data: dup } = await supabaseAdmin
@@ -306,7 +330,14 @@ export async function requestBidApproval(
       message: input.message,
       status: "pending",
       expires_at: expiresAt(),
-      snapshot: { title: job.title, activity: job.activity, description: job.description, location: job.location, when: job.when },
+      snapshot: {
+        title: job.title,
+        activity: job.activity,
+        serviceType: job.serviceType,
+        description: job.description,
+        location: job.location,
+        when: job.when,
+      },
     })
     .select("id")
     .single();
@@ -328,6 +359,7 @@ export async function requestBidApproval(
       { label: "Termin", value: e(job.when) },
       { label: "Gebot", value: formatEuro(input.bidCents) },
       ...(input.message ? [{ label: "Nachricht", value: e(input.message) }] : []),
+      ...(job.serviceType === "heckenschnitt" ? [{ label: "Heckenschnitt", value: e(HEDGE_YOUTH_CONDITIONS) }] : []),
     ],
     cta: "Gebot im Eltern-Konto prüfen",
   });
@@ -345,6 +377,7 @@ export async function decideOfferAsGuardian(
   guardianUserId: string,
   approvalId: string,
   decision: "approve" | "decline" | "revoke",
+  activityChecked = false,
 ): Promise<{ state: "approved" | "declined" }> {
   const { data: a } = await supabaseAdmin
     .from("youth_offer_approvals")
@@ -397,6 +430,9 @@ export async function decideOfferAsGuardian(
 
   // approve
   if (link.paused_at) throw new VerificationError("account_paused");
+  if ((a.snapshot as { serviceType?: string } | null)?.serviceType === "heckenschnitt" && !activityChecked) {
+    throw new VerificationError("activity_check_required");
+  }
   if (a.kind === "listing") {
     const { data: listing } = await supabaseAdmin
       .from("service_listings")
@@ -571,6 +607,7 @@ export async function listOffersForChild(childId: string): Promise<GuardianOffer
         customerVerified: null,
         when: null,
         photoCount: (s.photos ?? []).length,
+        serviceType: s.serviceType ?? "",
       });
     } else {
       const job = a.gig_id ? await loadJobDetails(a.gig_id) : null;
@@ -591,6 +628,7 @@ export async function listOffersForChild(childId: string): Promise<GuardianOffer
         customerVerified: job ? job.customerVerified : null,
         when: job?.when ?? s.when ?? null,
         photoCount: 0,
+        serviceType: (s as { serviceType?: string }).serviceType ?? job?.serviceType ?? "",
       });
     }
   }

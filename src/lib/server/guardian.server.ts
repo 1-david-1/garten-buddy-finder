@@ -13,6 +13,7 @@
 //   4. Im Eltern-Konto sehen die Eltern Konto- und Auftragsdaten, geben Aufträge frei
 //      und können das Konto pausieren, melden und blockieren.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { missingApprovalDetails } from "@/lib/job-approval-gaps";
 import { coerceDisplayName } from "@/lib/sanitize";
 import { assertServiceRole } from "@/lib/server/service-role.server";
 import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server";
@@ -414,6 +415,14 @@ export interface GuardianApprovalItem {
   job: JobDetails & { customerId: string };
 }
 
+/** Zugewiesener Auftrag des Kindes, für den noch keine Freigabe-Anfrage an die Eltern existiert. */
+export interface GuardianOpenRequest {
+  gigId: string;
+  job: JobDetails & { customerId: string };
+  /** Was noch fehlt, damit die Eltern informiert entscheiden können (z. B. "Termin", "Ort"). */
+  missing: string[];
+}
+
 export interface GuardianChildOverview {
   childId: string;
   childName: string;
@@ -426,6 +435,8 @@ export interface GuardianChildOverview {
   approvals: GuardianApprovalItem[];
   /** Angebote und Gebote des Kindes im Marktplatz, die die Eltern freigeben müssen */
   offers: GuardianOfferItem[];
+  /** Anfragen an das Kind, die noch auf fehlende Angaben warten (damit nichts unsichtbar bleibt). */
+  openRequests: GuardianOpenRequest[];
   blockedUserIds: string[];
 }
 
@@ -441,7 +452,7 @@ export async function getGuardianOverview(
 
   const children: GuardianChildOverview[] = [];
   for (const link of links ?? []) {
-    const [{ data: profile }, { data: requests }, { data: blocks }] = await Promise.all([
+    const [{ data: profile }, { data: requests }, { data: blocks }, { data: assigned }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("display_name, verified_at, suspended_at")
@@ -456,6 +467,14 @@ export async function getGuardianOverview(
         .order("created_at", { ascending: false })
         .limit(25),
       supabaseAdmin.from("user_blocks").select("blocked_id").eq("blocker_id", link.child_id),
+      // Aufträge, die dem Kind zugewiesen sind und auf seine Annahme warten
+      supabaseAdmin
+        .from("gigs")
+        .select("id")
+        .eq("assigned_helper_id", link.child_id)
+        .eq("status", "pending_helper")
+        .order("created_at", { ascending: false })
+        .limit(25),
     ]);
 
     const approvals: GuardianApprovalItem[] = [];
@@ -476,6 +495,16 @@ export async function getGuardianOverview(
       });
     }
 
+    // Für zugewiesene Aufträge ohne (nicht abgebrochene) Freigabe-Anfrage zeigen wir, was noch fehlt.
+    const requested = new Set((requests ?? []).map((r) => r.gig_id).filter(Boolean));
+    const openRequests: GuardianOpenRequest[] = [];
+    for (const g of assigned ?? []) {
+      if (requested.has(g.id)) continue;
+      const job = await loadJobDetails(g.id);
+      if (!job) continue;
+      openRequests.push({ gigId: g.id, job, missing: missingApprovalDetails(job) });
+    }
+
     children.push({
       childId: link.child_id,
       childName: profile?.display_name?.trim() || "Kind",
@@ -486,6 +515,7 @@ export async function getGuardianOverview(
       linkedSince: link.accepted_at,
       approvals,
       offers: await listOffersForChild(link.child_id),
+      openRequests,
       blockedUserIds: (blocks ?? []).map((b) => b.blocked_id),
     });
   }

@@ -266,9 +266,11 @@ async function finalizeAgreement(
     .in("status", ["open", "negotiating"])
     .select("id");
   if (gigError || !assigned || assigned.length === 0) {
-    // Auftrag ist nicht mehr offen (z. B. schon vergeben): Verhandlung wieder zurückstellen.
+    // Auftrag ist nicht mehr offen (z. B. schon vergeben) oder eine Regel in der Datenbank (Jugendschutz,
+    // Sperre, Verifizierung) lehnt die Zuweisung ab: Verhandlung wieder zurückstellen und den
+    // echten Grund melden (vorher kam immer "nicht mehr offen", auch bei Jugendschutz-Ablehnung).
     await supabaseAdmin.from("negotiations").update({ status: n.status }).eq("id", n.id);
-    throw new Error("Dieser Auftrag ist nicht mehr offen und wurde bereits vergeben oder beendet.");
+    throw new Error(gigError?.message || "Dieser Auftrag ist nicht mehr offen und wurde bereits vergeben oder beendet.");
   }
 
   const { data: existingEscrow } = await supabaseAdmin
@@ -385,7 +387,11 @@ export const acceptBid = createServerFn({ method: "POST" })
       "/gigs",
       "Auftrag ansehen",
     );
-    return { success: true };
+
+    // Ist der Helfer minderjährig, bitten wir die Eltern sofort um Freigabe (sobald Termin und Ort feststehen).
+    const { requestJobApprovalIfNeeded } = await import("@/lib/server/verification.server");
+    const guardian = await requestJobApprovalIfNeeded(n.gig_id);
+    return { success: true, guardian };
   });
 
 /**
@@ -410,6 +416,11 @@ export const acceptCounter = createServerFn({ method: "POST" })
       "/my-gigs",
       "Auftrag ansehen",
     );
+
+    // Für Jugendliche die Eltern-Anfrage anstoßen (sobald Termin und Ort feststehen). Die Rückmeldung
+    // an den Jugendlichen kommt über die normale Annahme, deshalb hier kein Hinweis zurück.
+    const { requestJobApprovalIfNeeded } = await import("@/lib/server/verification.server");
+    await requestJobApprovalIfNeeded(n.gig_id);
     return { success: true };
   });
 
@@ -504,6 +515,17 @@ export const declineBid = createServerFn({ method: "POST" })
       isCustomer ? "/marketplace" : "/my-gigs",
       isCustomer ? "Weitere Aufträge finden" : "Meine Aufträge",
     );
+
+    // Ist der Helfer ein Jugendlicher, erfahren auch die Eltern von Ablehnung bzw. Rückzug.
+    const { isYouthUser, notifyGuardiansAboutRefusal } = await import("@/lib/server/refusal.server");
+    if (await isYouthUser(n.helper_id)) {
+      await notifyGuardiansAboutRefusal({
+        childId: n.helper_id,
+        title: gig.title,
+        by: isCustomer ? "customer" : "helper",
+        kind: "bid",
+      });
+    }
 
     return { negotiation: updated };
   });

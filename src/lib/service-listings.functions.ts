@@ -284,6 +284,15 @@ async function assertCanPublish(supabase: SupabaseClient<Database>, userId: stri
  * Erstellt ein neues Leistungsangebot. Wird standardmäßig sofort
  * veröffentlicht (status "active"); publish=false speichert es als Entwurf.
  */
+/** Liefert das Ergebnis des RPC zurück und stößt bei minderjährigen Helfern die Eltern-Anfrage an. */
+async function withGuardianRequest<T>(gig: T): Promise<T & { guardian?: unknown }> {
+  const id = (gig as { id?: string } | null | undefined)?.id;
+  if (!id) return gig as T & { guardian?: unknown };
+  const { requestJobApprovalIfNeeded } = await import("@/lib/server/verification.server");
+  const guardian = await requestJobApprovalIfNeeded(id);
+  return { ...(gig as object), guardian } as T & { guardian?: unknown };
+}
+
 export const createServiceListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => parseInput(createServiceListingSchema, data))
@@ -939,7 +948,7 @@ export const acceptOffer = createServerFn({ method: "POST" })
     });
 
     if (error) throw error;
-    return data;
+    return withGuardianRequest(data);
   });
 
 // ---------------------------------------------------------------------------
@@ -990,7 +999,7 @@ export const purchaseServiceListing = createServerFn({ method: "POST" })
     });
 
     if (error) throw rpcError(error);
-    return data;
+    return withGuardianRequest(data);
   });
 
 export const purchaseWithSchedule = createServerFn({ method: "POST" })
@@ -1060,7 +1069,7 @@ export const purchaseWithSchedule = createServerFn({ method: "POST" })
       },
     });
 
-    return data;
+    return withGuardianRequest(data);
   });
 
 export const respondToBooking = createServerFn({ method: "POST" })
@@ -1114,6 +1123,14 @@ export const respondToBooking = createServerFn({ method: "POST" })
           link: "/my-gigs",
         },
       });
+    }
+
+    // Lehnt ein Jugendlicher eine Buchung ab, erfahren auch die Eltern davon.
+    if (gigBefore && !input.accept) {
+      const { isYouthUser, notifyGuardiansAboutRefusal } = await import("@/lib/server/refusal.server");
+      if (await isYouthUser(userId)) {
+        await notifyGuardiansAboutRefusal({ childId: userId, title: gigBefore.title, by: "helper", kind: "booking" });
+      }
     }
 
     return data;

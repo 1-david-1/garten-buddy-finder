@@ -20,6 +20,7 @@ import {
   JOB_CONSENT_VERSION,
 } from "@/lib/consent-texts";
 import { jobEnd, requiresNewApproval, type JobSnapshot } from "@/lib/job-snapshot";
+import { guardianHintForCustomer, type GuardianRequestCode, type GuardianRequestHint } from "@/lib/job-approval-gaps";
 
 export const CONSENT_VALID_DAYS = 7;
 const RESEND_COOLDOWN_MS = 10 * 60 * 1000;
@@ -210,7 +211,15 @@ async function notifyChild(userId: string, approved: boolean) {
 export const JOB_APPROVAL_VALID_DAYS = 3;
 
 /** Wird mit einer Nutzer-lesbaren deutschen Meldung geworfen (wird in der App als Hinweis angezeigt). */
-export class JobApprovalRequired extends Error {}
+export class JobApprovalRequired extends Error {
+  constructor(
+    message: string,
+    readonly code: GuardianRequestCode = "blocked",
+  ) {
+    super(message);
+    this.name = "JobApprovalRequired";
+  }
+}
 
 export function formatEuro(cents: number): string {
   return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -411,6 +420,7 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
   if (existing?.status === "pending" && existing.expires_at && new Date(existing.expires_at) > new Date()) {
     throw new JobApprovalRequired(
       "Deine Eltern wurden schon gefragt. Sobald sie diesen Auftrag in ihrem Eltern-Konto freigeben, kannst du ihn annehmen.",
+      "already_pending",
     );
   }
 
@@ -418,11 +428,13 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
   if (!details.scheduledAt) {
     throw new JobApprovalRequired(
       "Für die Freigabe deiner Eltern muss der Termin (Datum und Uhrzeit) feststehen. Bitte klärt ihn mit dem Auftraggeber.",
+      "details_missing",
     );
   }
   if (!details.hasLocation) {
     throw new JobApprovalRequired(
       "Für die Freigabe deiner Eltern muss der Ort (Adresse oder PLZ) feststehen. Bitte klärt ihn mit dem Auftraggeber.",
+      "details_missing",
     );
   }
 
@@ -496,6 +508,7 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
 
   throw new JobApprovalRequired(
     `Wir haben deine Eltern per E-Mail um Freigabe für diesen Auftrag gebeten (${recipients.map(maskEmail).join(", ")}). Sobald sie im Eltern-Konto zustimmen, kannst du ihn annehmen.`,
+    "requested",
   );
 }
 
@@ -556,6 +569,8 @@ export async function decideJobApprovalAsGuardian(
   guardianUserId: string,
   requestId: string,
   decision: "approve" | "decline" | "revoke",
+  /** Heckenschnitt: Eltern bestätigen ausdrücklich Heckenhöhe und Gerät (siehe HEDGE_YOUTH_CONDITIONS) */
+  activityChecked = false,
 ): Promise<{ state: "approved" | "declined" }> {
   const { data: request } = await supabaseAdmin
     .from("verification_requests")
@@ -593,10 +608,13 @@ export async function decideJobApprovalAsGuardian(
       .update({ status: "declined", decided_at: nowIso })
       .eq("id", request.id);
     await recordJobConsent(guardianUserId, request, "revoked");
-    if (gig?.status === "assigned") {
-      await supabaseAdmin.from("gigs").update({ status: "pending_helper" }).eq("id", gig.id);
-    }
+    // Der Auftrag bleibt nicht im Schwebezustand: Er wird wieder geöffnet bzw. abgebrochen, und der Kunde erfährt es.
+    const { releaseGigAfterRefusal, notifyCustomerGuardianRefused } = await import("@/lib/server/refusal.server");
+    const outcome = gig ? await releaseGigAfterRefusal(gig.id, request.user_id) : "none";
     await notifyHelperAboutJob(request.user_id, gig?.title ?? "Auftrag", false);
+    if (gig && outcome !== "none") {
+      await notifyCustomerGuardianRefused({ customerId: gig.customer_id, title: gig.title, outcome });
+    }
     return { state: "declined" };
   }
 
@@ -610,6 +628,15 @@ export async function decideJobApprovalAsGuardian(
   }
 
   const approved = decision === "approve";
+
+  // Heckenschnitt ist mit Zustimmung der Eltern möglich - aber nur, wenn die Hecke nicht zu hoch ist und
+  // kein sehr gefährliches Gerät genutzt wird. Das müssen die Eltern ausdrücklich bestätigen.
+  if (approved) {
+    const job = await loadJobDetails(request.gig_id);
+    if (job?.serviceType === "heckenschnitt" && !activityChecked) {
+      throw new VerificationError("activity_check_required");
+    }
+  }
 
   // Haben sich wesentliche Auftragsdaten seit der Anfrage geändert, gilt die Zustimmung nicht:
   // neue Anfrage nötig (die Eltern haben die geänderten Daten nicht gesehen).
@@ -631,6 +658,14 @@ export async function decideJobApprovalAsGuardian(
     .eq("id", request.id);
   await recordJobConsent(guardianUserId, request, approved ? "approved" : "declined");
   await notifyHelperAboutJob(request.user_id, gig?.title ?? "Auftrag", approved);
+  if (!approved && gig) {
+    // Nicht freigegeben: Auftrag wieder öffnen / abbrechen und den Kunden informieren (vorher erfuhr er nichts).
+    const { releaseGigAfterRefusal, notifyCustomerGuardianRefused } = await import("@/lib/server/refusal.server");
+    const outcome = await releaseGigAfterRefusal(gig.id, request.user_id);
+    if (outcome !== "none") {
+      await notifyCustomerGuardianRefused({ customerId: gig.customer_id, title: gig.title, outcome });
+    }
+  }
   return { state: approved ? "approved" : "declined" };
 }
 
@@ -676,4 +711,30 @@ async function notifyHelperAboutJob(userId: string, jobTitle: string, approved: 
       link: "/gigs",
     },
   });
+}
+
+/**
+ * Stößt die Eltern-Anfrage an, sobald ein Auftrag einem Jugendlichen zugewiesen ist: der
+ * Jugendliche muss dafür nicht erst selbst auf "Annehmen" klicken. Idempotent (eine bereits offene
+ * Anfrage wird nicht noch einmal verschickt). Wirft nie: Fehler beim Versand dürfen das Annehmen
+ * oder Planen des Auftrags nicht blockieren.
+ *
+ * Rückgabe: null, wenn der Helfer kein Jugendlicher ist oder die Freigabe schon vorliegt,
+ * sonst ein Hinweis für den Auftraggeber.
+ */
+export async function requestJobApprovalIfNeeded(gigId: string): Promise<GuardianRequestHint | null> {
+  try {
+    const { data: gig } = await supabaseAdmin
+      .from("gigs")
+      .select("assigned_helper_id, status")
+      .eq("id", gigId)
+      .maybeSingle();
+    if (!gig?.assigned_helper_id || gig.status !== "pending_helper") return null;
+    await ensureJobApproval(gig.assigned_helper_id, gigId);
+    return null;
+  } catch (e) {
+    if (e instanceof JobApprovalRequired) return guardianHintForCustomer(e.code);
+    console.error("requestJobApprovalIfNeeded failed", e);
+    return null;
+  }
 }

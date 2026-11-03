@@ -85,7 +85,13 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (ppErr) throw ppErr;
 
     // Insert role — user_roles has a unique(user_id, role) so use upsert semantics
-    const { error: rErr } = await supabase
+    // Rollen schreibt nur der Server, nach den Prüfungen oben. Clients dürfen user_roles nicht mehr
+    // direkt beschreiben (Migration 20261030000100_role_and_guardian_email_lock.sql). Vorher konnte
+    // sich jeder per API Rollen selbst geben und so die Altersprüfung umgehen.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { assertServiceRole } = await import("@/lib/server/service-role.server");
+    await assertServiceRole();
+    const { error: rErr } = await supabaseAdmin
       .from("user_roles")
       .insert({ user_id: userId, role: data.role });
     if (rErr && !String(rErr.message).includes("duplicate")) throw rErr;

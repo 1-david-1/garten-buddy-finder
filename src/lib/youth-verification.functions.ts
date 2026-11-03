@@ -189,6 +189,32 @@ export const submitYouthVerification = createServerFn({ method: "POST" })
       throw new Error("verification_schema_outdated");
     }
     if (error) throw error;
+
+    // Hinweis an die Prüfstelle: bewusst OHNE Anhänge und ohne Datei-Links (E-Mail ist unverschlüsselt).
+    // Geprüft wird ausschließlich im Admin-Dashboard (Tab "Jugend-Prüfung"). Optional über
+    // ADMIN_NOTIFY_EMAIL; ein Fehler beim Versand darf die Einreichung nicht scheitern lassen.
+    const notifyTo = process.env.ADMIN_NOTIFY_EMAIL?.trim();
+    if (notifyTo) {
+      try {
+        const { sendEmail, emailTemplate } = await import("@/lib/server/email.server");
+        await sendEmail({
+          to: notifyTo,
+          subject: "Neue Jugend-Verifizierung zur Prüfung",
+          html: emailTemplate({
+            heading: "Neue Unterlagen eingereicht",
+            bodyLines: [
+              "Ein Jugendlicher hat Unterlagen zur Verifizierung eingereicht. Bitte im Admin-Dashboard unter „Jugend-Prüfung“ prüfen.",
+            ],
+            ctaLabel: "Zum Dashboard",
+            ctaPath: "/dashboard",
+          }),
+        });
+      } catch (e) {
+        console.error("[youth-verification] Admin-Hinweis konnte nicht gesendet werden", e);
+      }
+    } else {
+      console.warn("[youth-verification] ADMIN_NOTIFY_EMAIL ist nicht gesetzt - keine Admin-Benachrichtigung gesendet.");
+    }
     return { ok: true as const };
   });
 

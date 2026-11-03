@@ -126,12 +126,13 @@ export const decideJobAsGuardian = createServerFn({ method: "POST" })
       .object({
         requestId: z.string().uuid(),
         decision: z.enum(["approve", "decline", "revoke"]),
+        activityChecked: z.boolean().optional(),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { decideJobApprovalAsGuardian } = await import("@/lib/server/verification.server");
-    return decideJobApprovalAsGuardian(context.userId, data.requestId, data.decision);
+    return decideJobApprovalAsGuardian(context.userId, data.requestId, data.decision, data.activityChecked === true);
   });
 
 /** Eltern entscheiden über ein Angebot oder Gebot ihres Kindes im Marktplatz. */
@@ -142,12 +143,13 @@ export const decideOfferAsGuardianFn = createServerFn({ method: "POST" })
       .object({
         approvalId: z.string().uuid(),
         decision: z.enum(["approve", "decline", "revoke"]),
+        activityChecked: z.boolean().optional(),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { decideOfferAsGuardian } = await import("@/lib/server/youth-offers.server");
-    return decideOfferAsGuardian(context.userId, data.approvalId, data.decision);
+    return decideOfferAsGuardian(context.userId, data.approvalId, data.decision, data.activityChecked === true);
   });
 
 export const setChildPausedFn = createServerFn({ method: "POST" })
