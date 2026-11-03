@@ -1,12 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { forwardRef, useRef, type ReactNode, type RefObject } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   BadgeCheck,
   CalendarClock,
-  Gift,
-  Users,
   FileEdit,
   Gavel,
+  Gift,
   Handshake,
   Lock,
   MessageSquare,
@@ -18,14 +17,22 @@ import {
 import { SiteNav } from "@/components/site-nav";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { useHeroAnimation } from "@/hooks/use-hero-animation";
+import {
+  ArrowCurve,
+  ArrowLoopLeft,
+  ArrowLoopRight,
+  FloatCard,
+  SpinBadge,
+  Sprout,
+  Squiggle,
+  Stamp,
+} from "@/components/landing/playful";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -45,16 +52,19 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
+/*
+ * Design (Startseite): hell, verspielt, mit dicker 3D-Schrift, Hartschatten und handgezeichneten
+ * Pfeilen. Palette und Schriften stehen in styles.css (.gm-playful). Die große Geste gehört dem
+ * Kopfbereich, alles darunter bleibt ruhiger: ein Farbwechsel pro Abschnitt, gleiche Kontur,
+ * leicht gekippte Karten. Bewegung: ein Einstieg im Kopf, schwebende Karten, drehendes Badge.
+ */
+
 function Landing() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="gm-playful min-h-screen overflow-x-clip">
       <SiteNav />
       <Hero />
-      <Paths />
-      <Check />
-      <Ways />
-      <FreeAndPay />
-      <Levels />
+      <Panel />
       <Safety />
       <Trust />
       <Faq />
@@ -65,241 +75,229 @@ function Landing() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Hero                                                                */
+/* Gemeinsame Bausteine                                                */
+/* ------------------------------------------------------------------ */
+
+type RotStyle = CSSProperties & { "--gm-rot"?: string };
+const rot = (deg: number, extra: CSSProperties = {}): RotStyle => ({ "--gm-rot": `${deg}deg`, ...extra });
+
+const BTN_SUN =
+  "gm-btn inline-flex items-center justify-center rounded-2xl bg-[#ffd21f] px-6 py-3.5 text-base font-bold text-[#04301e]";
+const BTN_WHITE =
+  "gm-btn inline-flex items-center justify-center rounded-2xl bg-white px-6 py-3.5 text-base font-bold text-[#04301e]";
+const BTN_DEEP =
+  "gm-btn inline-flex w-full items-center justify-center rounded-2xl bg-[#04301e] px-6 py-3.5 text-base font-bold text-white";
+
+function SectionTitle({
+  title,
+  sub,
+  accent = "#ff5a36",
+  light = false,
+}: {
+  title: ReactNode;
+  sub?: string;
+  accent?: string;
+  light?: boolean;
+}) {
+  return (
+    <div className="max-w-2xl">
+      <h2 className="font-brand text-4xl leading-[1.02] md:text-6xl">{title}</h2>
+      <Squiggle className="mt-3 h-3 w-40" style={{ color: accent }} />
+      {sub ? (
+        <p className={`mt-4 text-lg ${light ? "text-white/90" : "text-muted-foreground"}`}>{sub}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusTag({ status, label }: { status: "live" | "soon"; label: string }) {
+  return (
+    <span
+      className={`inline-block rounded-full border-2 border-[#04301e] px-2.5 py-0.5 text-xs font-bold ${
+        status === "live" ? "bg-[#04301e] text-white" : "bg-[#ffd21f] text-[#04301e]"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function IconBlob({ children, color = "#ffd21f" }: { children: ReactNode; color?: string }) {
+  return (
+    <div
+      className="mb-4 flex size-14 items-center justify-center rounded-[1.1rem] border-[3px] border-[#04301e] text-[#04301e]"
+      style={{ background: color }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Kopfbereich                                                         */
 /* ------------------------------------------------------------------ */
 
 function Hero() {
   const { t } = useI18n();
   const { user } = useAuth();
-  const sectionRef = useRef<HTMLElement>(null);
-  const perspectiveRef = useRef<HTMLDivElement>(null);
-  const phoneRef = useRef<HTMLDivElement>(null);
-  const sheenRef = useRef<HTMLDivElement>(null);
-  const negotiationRef = useRef<HTMLDivElement>(null);
-  const verifiedRef = useRef<HTMLDivElement>(null);
-  const floatJobsRef = useRef<HTMLDivElement>(null);
-  const floatPricesRef = useRef<HTMLDivElement>(null);
 
-  useHeroAnimation({
-    section: sectionRef,
-    perspective: perspectiveRef,
-    phone: phoneRef,
-    sheen: sheenRef,
-    negotiationCard: negotiationRef,
-    escrowCard: verifiedRef,
-    floatingCards: [floatJobsRef, floatPricesRef],
-  });
+  const cards = (
+    <>
+      <FloatCard
+        variant="leaf"
+        rot={-9}
+        name={t("lp.card.1.name")}
+        job={t("lp.card.1.job")}
+        status={t("lp.card.1.status")}
+        className="absolute left-0 top-[50%] hidden lg:block"
+      />
+      <FloatCard
+        variant="sun"
+        rot={8}
+        delay={1}
+        name={t("lp.card.2.name")}
+        job={t("lp.card.2.job")}
+        status={t("lp.card.2.status")}
+        className="absolute right-0 top-[4%] hidden lg:block"
+      />
+    </>
+  );
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,var(--emerald-soft),transparent_60%)]" />
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 md:grid-cols-2 md:py-24">
-        <div className="flex flex-col justify-center text-center md:text-left">
-          <span className="mx-auto mb-4 inline-block w-fit rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-primary md:mx-0">
+    <section className="relative isolate z-10 bg-[#087f43] text-white">
+      <div className="gm-grid-bg pointer-events-none absolute inset-0 -z-10" aria-hidden="true" />
+      <div className="relative mx-auto max-w-6xl px-5 pb-36 pt-14 md:pb-48 md:pt-20">
+        {cards}
+        <ArrowLoopLeft className="pointer-events-none absolute bottom-20 left-[17%] hidden size-28 text-[#ffd21f] lg:block" />
+        <ArrowLoopRight className="pointer-events-none absolute right-[11%] top-[40%] hidden size-28 text-[#ffd21f] lg:block" />
+
+        <div className="relative z-10 flex flex-col items-center text-center">
+          <span
+            className="gm-sticker gm-pop mb-8 inline-flex items-center gap-2 rounded-full border-[3px] border-[#04301e] bg-[#ff5a36] px-4 py-1.5 text-sm font-bold text-white shadow-[3px_3px_0_#04301e]"
+            style={rot(-3)}
+          >
+            <Sprout className="size-5" />
             {t("lp.badge")}
           </span>
-          <h1 className="font-brand text-5xl leading-[1.05] tracking-tight md:text-6xl">
-            {t("lp.hero.a")}
-            <br />
-            <span className="font-serif-italic text-primary">{t("lp.hero.b")}</span>
+
+          <h1 className="font-brand text-[clamp(2.9rem,9.5vw,7.75rem)] leading-[0.92] [text-wrap:balance]">
+            <span className="gm-extrude gm-pop block" style={rot(0)}>
+              {t("lp.hero.a")}
+            </span>
+            <span
+              className="gm-extrude gm-pop mt-3 inline-block text-[#ffd21f]"
+              style={rot(-2, { animationDelay: "0.15s" })}
+            >
+              {t("lp.hero.b")}
+            </span>
           </h1>
-          <p className="mx-auto mt-6 max-w-lg text-lg text-muted-foreground md:mx-0">
-            {t("lp.hero.sub")}
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-start">
+
+          <p className="mt-10 max-w-xl text-lg font-semibold md:text-xl">{t("lp.hero.sub")}</p>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
             {user ? (
-              <Button asChild size="lg">
-                <Link to="/dashboard">{t("lp.hero.cta.dashboard")}</Link>
-              </Button>
+              <Link to="/dashboard" className={BTN_SUN}>
+                {t("lp.hero.cta.dashboard")}
+              </Link>
             ) : (
               <>
-                <Button asChild size="lg">
-                  <Link to="/auth" search={{ mode: "signup", role: "customer" }}>
-                    {t("lp.hero.cta.customer")}
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="outline">
-                  <Link to="/auth" search={{ mode: "signup", role: "helper" }}>
-                    {t("lp.hero.cta.helper")}
-                  </Link>
-                </Button>
+                <Link to="/auth" search={{ mode: "signup", role: "customer" }} className={BTN_SUN}>
+                  {t("lp.hero.cta.customer")}
+                </Link>
+                <Link to="/auth" search={{ mode: "signup", role: "helper" }} className={BTN_WHITE}>
+                  {t("lp.hero.cta.helper")}
+                </Link>
               </>
             )}
           </div>
-          <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
+
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
             {[1, 2, 3].map((n) => (
               <span
                 key={n}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary"
+                className="inline-flex items-center gap-1.5 rounded-full border-2 border-white/70 px-3 py-1 text-sm font-semibold"
               >
-                <BadgeCheck className="size-3.5" />
+                <BadgeCheck className="size-4 text-[#ffd21f]" />
                 {t(`lp.hero.chip.${n}`)}
               </span>
             ))}
           </div>
-          <p className="mt-4 text-sm text-muted-foreground">
+          <p className="mt-5 text-sm font-semibold">
             {t("lp.hero.pilot")}{" "}
-            <Link to="/freiburg" className="text-primary underline">
+            <Link to="/freiburg" className="underline decoration-[#ffd21f] decoration-2 underline-offset-4">
               {t("lp.hero.pilot.link")}
             </Link>
           </p>
-        </div>
 
-        <PhoneMockup
-          t={t}
-          perspectiveRef={perspectiveRef}
-          phoneRef={phoneRef}
-          sheenRef={sheenRef}
-          negotiationRef={negotiationRef}
-          verifiedRef={verifiedRef}
-          floatJobsRef={floatJobsRef}
-          floatPricesRef={floatPricesRef}
-        />
+          <div className="mt-12 flex flex-wrap justify-center gap-6 lg:hidden">
+            <FloatCard
+              variant="leaf"
+              rot={-6}
+              name={t("lp.card.1.name")}
+              job={t("lp.card.1.job")}
+              status={t("lp.card.1.status")}
+            />
+            <FloatCard
+              variant="sun"
+              rot={5}
+              delay={1}
+              name={t("lp.card.2.name")}
+              job={t("lp.card.2.job")}
+              status={t("lp.card.2.status")}
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-type DivRef = RefObject<HTMLDivElement | null>;
+/* ------------------------------------------------------------------ */
+/* Heller Abschnitt, der über den Kopfbereich ragt                     */
+/* ------------------------------------------------------------------ */
 
-function PhoneMockup({
-  t,
-  perspectiveRef,
-  phoneRef,
-  sheenRef,
-  negotiationRef,
-  verifiedRef,
-  floatJobsRef,
-  floatPricesRef,
-}: {
-  t: (k: string) => string;
-  perspectiveRef: DivRef;
-  phoneRef: DivRef;
-  sheenRef: DivRef;
-  negotiationRef: DivRef;
-  verifiedRef: DivRef;
-  floatJobsRef: DivRef;
-  floatPricesRef: DivRef;
-}) {
+function Panel() {
+  const { t } = useI18n();
+  const { user } = useAuth();
   return (
-    <div
-      ref={perspectiveRef}
-      className="relative mx-auto w-full max-w-[340px]"
-      style={{ perspective: "1500px" }}
-    >
-      <FloatingCard
-        ref={floatJobsRef}
-        className="absolute -left-6 top-10 hidden w-44 md:block"
-        title={t("lp.float.jobs.title")}
-        body={t("lp.float.jobs.body")}
-      />
-      <FloatingCard
-        ref={floatPricesRef}
-        className="absolute -right-6 bottom-16 hidden w-44 md:block"
-        title={t("lp.float.prices.title")}
-        body={t("lp.float.prices.body")}
-      />
-
-      <div
-        ref={phoneRef}
-        className="relative rounded-[3rem] bg-[#52525B] p-[3px] shadow-2xl will-change-transform [transform-style:preserve-3d]"
-      >
-        <div className="relative overflow-hidden rounded-[2.85rem] bg-[#3a3a42] p-[10px]">
-          <div className="absolute -left-[3px] top-24 h-8 w-[3px] rounded-l bg-[#52525B]" />
-          <div className="absolute -left-[3px] top-36 h-12 w-[3px] rounded-l bg-[#52525B]" />
-          <div className="absolute -left-[3px] top-52 h-12 w-[3px] rounded-l bg-[#52525B]" />
-          <div className="absolute -right-[3px] top-32 h-16 w-[3px] rounded-r bg-[#52525B]" />
-
-          <div className="relative overflow-hidden rounded-[2.4rem] border border-white/5 bg-background">
-            <div className="absolute left-1/2 top-2.5 z-20 flex h-7 w-28 -translate-x-1/2 items-center justify-end gap-1.5 rounded-full bg-black px-3">
-              <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]" />
-            </div>
-            <div
-              className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-br from-white/10 via-transparent to-transparent"
-              style={{ clipPath: "polygon(0 0, 60% 0, 30% 100%, 0 100%)" }}
-            />
-            <div ref={sheenRef} className="card-sheen" />
-
-            <div className="aspect-[9/19.5] w-full bg-gradient-to-b from-emerald-soft to-transparent px-4 pb-5 pt-12">
-              <div className="mb-3 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-                <span>09:41</span>
-                <span>●●●●●</span>
-              </div>
-              <div className="mb-3 font-brand text-lg text-primary">GreenMatch</div>
-
-              <div
-                ref={negotiationRef}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] p-3"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">
-                      {t("lp.phone.bid.title")}
-                    </div>
-                    <div className="mt-1 inline-block rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
-                      {t("lp.phone.bid.badge")}
-                    </div>
-                  </div>
-                  <div className="text-sm font-semibold text-primary">
-                    {t("lp.phone.bid.rate")}
-                  </div>
-                </div>
-                <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-medium text-primary">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  {t("lp.phone.bid.status")}
-                </div>
-              </div>
-
-              <div
-                ref={verifiedRef}
-                className="mt-3 rounded-2xl border border-primary/40 bg-primary/10 p-3"
-              >
-                <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-primary">
-                  <BadgeCheck className="size-3.5" />
-                  {t("lp.phone.verified")}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-foreground">
-                  {t("lp.phone.verified.body")}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="relative z-20 -mt-14 rounded-t-[3rem] bg-[#eef8e8]">
+      <div className="absolute -top-16 right-5 z-30 md:right-[12%]">
+        <Link
+          to={user ? "/dashboard" : "/auth"}
+          search={user ? undefined : { mode: "signup" }}
+          aria-label={t("lp.hero.cta.customer")}
+          className="block rounded-full transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#04301e]"
+        >
+          <SpinBadge text={t("lp.badge.spin")}>
+            <ArrowCurve className="size-10 text-[#04301e]" />
+          </SpinBadge>
+        </Link>
       </div>
+      <Paths />
+      <Check />
+      <Ways />
+      <FreeAndPay />
+      <Levels />
     </div>
   );
 }
 
-const FloatingCard = forwardRef<
-  HTMLDivElement,
-  { className?: string; title: string; body: string }
->(function FloatingCard({ className, title, body }, ref) {
-  return (
-    <div
-      ref={ref}
-      className={`rounded-2xl border border-white/10 bg-white/[0.06] p-4 shadow-lg backdrop-blur-xl ${className ?? ""}`}
-    >
-      <div className="font-mono text-[10px] uppercase tracking-widest text-primary">{title}</div>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{body}</p>
-    </div>
-  );
-});
-
 /* ------------------------------------------------------------------ */
-/* Zwei Seiten: Wer bist du? Was passiert nach dem Klick?              */
+/* So läuft es: zwei Seiten, je drei Schritte                          */
 /* ------------------------------------------------------------------ */
 
 function Paths() {
   const { t } = useI18n();
   const { user } = useAuth();
   return (
-    <section id="how" className="border-y border-glass-border bg-card/40 py-20">
-      <div className="mx-auto max-w-6xl px-4">
-        <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.paths.title")}</h2>
-        <p className="mb-12 text-center text-muted-foreground">{t("lp.paths.sub")}</p>
-        <div className="grid gap-6 md:grid-cols-2">
+    <section id="how" className="px-5 pb-20 pt-28 md:pt-32">
+      <div className="mx-auto max-w-6xl">
+        <SectionTitle title={t("lp.paths.title")} sub={t("lp.paths.sub")} />
+        <div className="mt-14 grid gap-10 md:grid-cols-2">
           <PathCard
             role="customer"
+            tone="sun"
+            tilt={-1}
             hasUser={!!user}
             title={t("lp.paths.customer.title")}
             cta={t("lp.paths.customer.cta")}
@@ -310,6 +308,8 @@ function Paths() {
           />
           <PathCard
             role="helper"
+            tone="white"
+            tilt={1}
             hasUser={!!user}
             title={t("lp.paths.helper.title")}
             cta={t("lp.paths.helper.cta")}
@@ -326,42 +326,55 @@ function Paths() {
 
 function PathCard({
   role,
+  tone,
+  tilt,
   hasUser,
   title,
   cta,
   steps,
 }: {
   role: "customer" | "helper";
+  tone: "sun" | "white";
+  tilt: number;
   hasUser: boolean;
   title: string;
   cta: string;
   steps: { title: string; body: string }[];
 }) {
   return (
-    <div className="flex flex-col rounded-3xl border border-glass-border bg-glass p-8 backdrop-blur">
-      <h3 className="mb-6 font-brand text-2xl">{title}</h3>
+    <div
+      className={`gm-card flex flex-col rounded-[2rem] p-7 md:p-9 ${tone === "sun" ? "bg-[#ffd21f]" : "bg-white"}`}
+      style={{ transform: `rotate(${tilt}deg)` }}
+    >
+      <h3 className="mb-6 font-brand text-3xl">{title}</h3>
       <ol className="flex-1 space-y-5">
         {steps.map((s, i) => (
           <li key={s.title} className="flex gap-4">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-brand text-primary">
+            <span
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[#04301e] font-brand text-lg ${
+                tone === "sun" ? "bg-white" : "bg-[#ffd21f]"
+              }`}
+            >
               {i + 1}
             </span>
             <div>
-              <p className="font-semibold">{s.title}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">{s.body}</p>
+              <p className="font-bold">{s.title}</p>
+              <p className="mt-0.5 text-[15px] leading-snug text-[#04301e]/85">{s.body}</p>
             </div>
           </li>
         ))}
       </ol>
-      <Button asChild size="lg" className="mt-8 w-full" variant={role === "customer" ? "default" : "outline"}>
+      <div className="mt-8">
         {hasUser ? (
-          <Link to="/dashboard">{cta}</Link>
+          <Link to="/dashboard" className={BTN_DEEP}>
+            {cta}
+          </Link>
         ) : (
-          <Link to="/auth" search={{ mode: "signup", role }}>
+          <Link to="/auth" search={{ mode: "signup", role }} className={BTN_DEEP}>
             {cta}
           </Link>
         )}
-      </Button>
+      </div>
     </div>
   );
 }
@@ -373,28 +386,41 @@ function PathCard({
 function Check() {
   const { t } = useI18n();
   const cards = [
-    { icon: BadgeCheck, n: 1 },
-    { icon: Lock, n: 2 },
-    { icon: ShieldCheck, n: 3 },
+    { icon: BadgeCheck, n: 1, bg: "#ffffff", color: "#ffd21f", tilt: -1.5 },
+    { icon: Lock, n: 2, bg: "#d6f1dc", color: "#ffffff", tilt: 1 },
+    { icon: ShieldCheck, n: 3, bg: "#ffe36b", color: "#ffffff", tilt: -0.5 },
   ] as const;
   return (
-    <section id="pruefung" className="mx-auto max-w-6xl px-4 py-20">
-      <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.check.title")}</h2>
-      <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">{t("lp.check.sub")}</p>
-      <div className="grid gap-6 md:grid-cols-3">
-        {cards.map(({ icon: Icon, n }) => (
-          <div key={n} className="rounded-3xl border border-glass-border bg-glass p-6 backdrop-blur">
-            <Icon className="mb-4 size-6 text-primary" />
-            <h3 className="mb-2 font-semibold">{t(`lp.check.${n}.title`)}</h3>
-            <p className="text-sm text-muted-foreground">{t(`lp.check.${n}.body`)}</p>
-          </div>
-        ))}
+    <section id="pruefung" className="px-5 py-20">
+      <div className="mx-auto max-w-6xl">
+        <div className="relative">
+          <SectionTitle title={t("lp.check.title")} sub={t("lp.check.sub")} accent="#087f43" />
+          <Stamp className="absolute right-2 top-0 hidden size-28 -rotate-12 text-[#087f43] md:block" />
+        </div>
+        <div className="mt-12 grid gap-8 md:grid-cols-3">
+          {cards.map(({ icon: Icon, n, bg, color, tilt }) => (
+            <div
+              key={n}
+              className="gm-card gm-sticker rounded-[1.75rem] p-7"
+              style={{ ...rot(tilt), background: bg }}
+            >
+              <IconBlob color={color}>
+                <Icon className="size-7" />
+              </IconBlob>
+              <h3 className="mb-2 font-brand text-xl leading-tight">{t(`lp.check.${n}.title`)}</h3>
+              <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.check.${n}.body`)}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-10">
+          <Link
+            to="/vermittler"
+            className="font-bold underline decoration-[#ff5a36] decoration-[3px] underline-offset-4"
+          >
+            {t("lp.check.link")}
+          </Link>
+        </p>
       </div>
-      <p className="mt-8 text-center text-sm">
-        <Link to="/vermittler" className="text-primary underline">
-          {t("lp.check.link")}
-        </Link>
-      </p>
     </section>
   );
 }
@@ -411,45 +437,41 @@ function Ways() {
     { icon: Handshake, key: "negotiable" },
   ] as const;
   return (
-    <section id="ways" className="mx-auto max-w-6xl px-4 py-20">
-      <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.ways.title")}</h2>
-      <p className="mb-12 text-center text-muted-foreground">{t("lp.ways.sub")}</p>
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-3xl border border-glass-border bg-glass p-8 backdrop-blur">
-          <IconBubble>
-            <FileEdit className="size-6" />
-          </IconBubble>
-          <h3 className="mb-2 text-xl font-semibold">{t("lp.ways.post.title")}</h3>
-          <p className="text-sm text-muted-foreground">{t("lp.ways.post.body")}</p>
-        </div>
-        <div className="rounded-3xl border border-glass-border bg-glass p-8 backdrop-blur">
-          <IconBubble>
-            <ShoppingBag className="size-6" />
-          </IconBubble>
-          <h3 className="mb-2 text-xl font-semibold">{t("lp.ways.book.title")}</h3>
-          <p className="mb-4 text-sm text-muted-foreground">{t("lp.ways.book.body")}</p>
-          <div className="flex flex-wrap gap-2 text-[11px]">
-            {badges.map(({ icon: Icon, key }) => (
-              <span
-                key={key}
-                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-primary"
-              >
-                <Icon className="size-3" />
-                {t(`lp.ways.badge.${key}`)}
-              </span>
-            ))}
+    <section id="ways" className="px-5 py-20">
+      <div className="mx-auto max-w-6xl">
+        <SectionTitle title={t("lp.ways.title")} sub={t("lp.ways.sub")} accent="#ffd21f" />
+        <div className="mt-12 grid gap-10 md:grid-cols-2">
+          <div className="gm-card rounded-[2rem] bg-white p-8" style={{ transform: "rotate(-1deg)" }}>
+            <IconBlob color="#ffd21f">
+              <FileEdit className="size-7" />
+            </IconBlob>
+            <h3 className="mb-2 font-brand text-2xl">{t("lp.ways.post.title")}</h3>
+            <p className="text-[15px] leading-snug text-[#04301e]/85">{t("lp.ways.post.body")}</p>
+          </div>
+          <div
+            className="gm-card rounded-[2rem] bg-[#087f43] p-8 text-white"
+            style={{ transform: "rotate(1deg)" }}
+          >
+            <IconBlob color="#ffffff">
+              <ShoppingBag className="size-7" />
+            </IconBlob>
+            <h3 className="mb-2 font-brand text-2xl">{t("lp.ways.book.title")}</h3>
+            <p className="mb-5 text-[15px] leading-snug text-white/95">{t("lp.ways.book.body")}</p>
+            <div className="flex flex-wrap gap-2">
+              {badges.map(({ icon: Icon, key }) => (
+                <span
+                  key={key}
+                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#04301e] bg-[#ffd21f] px-3 py-1 text-xs font-bold text-[#04301e]"
+                >
+                  <Icon className="size-3.5" />
+                  {t(`lp.ways.badge.${key}`)}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function IconBubble({ children }: { children: ReactNode }) {
-  return (
-    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-      {children}
-    </div>
   );
 }
 
@@ -464,88 +486,31 @@ function FreeAndPay() {
     { key: "pay", icon: Lock, status: "soon" },
   ] as const;
   return (
-    <section id="free" className="border-y border-glass-border bg-card/40 py-20">
-      <div className="mx-auto max-w-4xl px-4">
-        <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.free.title")}</h2>
-        <p className="mb-12 text-center text-muted-foreground">{t("lp.free.sub")}</p>
-        <div className="grid gap-6 md:grid-cols-2">
+    <section id="free" className="bg-[#fff3b5] px-5 py-20">
+      <div className="mx-auto max-w-4xl">
+        <SectionTitle title={t("lp.free.title")} sub={t("lp.free.sub")} accent="#ff5a36" />
+        <div className="mt-12 grid gap-8 md:grid-cols-2">
           {cards.map(({ key, icon: Icon, status }) => (
             <div
               key={key}
-              className={`rounded-3xl border p-8 backdrop-blur ${
+              className={`rounded-[2rem] p-8 ${
                 status === "live"
-                  ? "border-primary/40 bg-glass"
-                  : "border-dashed border-glass-border bg-transparent"
+                  ? "gm-card bg-white"
+                  : "border-[3px] border-dashed border-[#04301e] bg-transparent"
               }`}
             >
-              <div className="mb-4 flex items-center justify-between">
-                <IconBubble>
-                  <Icon className="size-6" />
-                </IconBubble>
-                <StatusChip status={status} label={t(`lp.status.${status}`)} />
+              <div className="mb-4 flex items-start justify-between">
+                <IconBlob color={status === "live" ? "#ffd21f" : "#ffffff"}>
+                  <Icon className="size-7" />
+                </IconBlob>
+                <StatusTag status={status} label={t(`lp.status.${status}`)} />
               </div>
-              <h3 className="mb-2 text-xl font-semibold">{t(`lp.free.${key}.title`)}</h3>
-              <p className="text-sm text-muted-foreground">{t(`lp.free.${key}.body`)}</p>
+              <h3 className="mb-2 font-brand text-2xl">{t(`lp.free.${key}.title`)}</h3>
+              <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.free.${key}.body`)}</p>
             </div>
           ))}
         </div>
       </div>
-    </section>
-  );
-}
-
-function StatusChip({ status, label }: { status: "live" | "soon"; label: string }) {
-  return (
-    <span
-      className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
-        status === "live"
-          ? "bg-primary/15 text-primary"
-          : "border border-amber-400/40 text-amber-400"
-      }`}
-    >
-      {label}
-    </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Kindersicherheit: so läuft ein Auftrag für Jugendliche              */
-/* ------------------------------------------------------------------ */
-
-function Safety() {
-  const { t } = useI18n();
-  return (
-    <section id="safety" className="mx-auto max-w-4xl px-4 py-20">
-      <div className="mb-3 flex justify-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-primary">
-          <Users className="size-3.5" />
-          {t("lp.levels.youth.title")}
-        </span>
-      </div>
-      <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.safety.title")}</h2>
-      <p className="mb-12 text-center text-muted-foreground">{t("lp.safety.sub")}</p>
-      <ol className="space-y-4">
-        {[1, 2, 3, 4, 5, 6].map((n) => (
-          <li
-            key={n}
-            className="flex gap-4 rounded-2xl border border-glass-border bg-glass p-5 backdrop-blur"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-brand text-primary">
-              {n}
-            </span>
-            <div>
-              <h3 className="font-semibold">{t(`lp.safety.${n}.title`)}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{t(`lp.safety.${n}.body`)}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-6 text-center text-sm text-muted-foreground">{t("lp.safety.note")}</p>
-      <p className="mt-3 text-center text-sm">
-        <Link to="/eltern-info" className="text-primary underline">
-          {t("lp.footer.parents")}
-        </Link>
-      </p>
     </section>
   );
 }
@@ -557,33 +522,81 @@ function Safety() {
 function Levels() {
   const { t } = useI18n();
   const items = [
-    { key: "youth", accent: "🌱" },
-    { key: "adult", accent: "🤝" },
-    { key: "pro", accent: "🌳" },
+    { key: "youth", icon: "🌱", bg: "#ffd21f", fg: "#04301e", tilt: -1.5 },
+    { key: "adult", icon: "🤝", bg: "#ffffff", fg: "#04301e", tilt: 1 },
+    { key: "pro", icon: "🌳", bg: "#04301e", fg: "#ffffff", tilt: -0.5 },
   ] as const;
   return (
-    <section id="helpers" className="border-y border-glass-border bg-card/40 py-20">
-      <div className="mx-auto max-w-6xl px-4">
-        <h2 className="mb-3 text-center font-brand text-4xl">
-          {t("lp.levels.title.a")}{" "}
-          <span className="font-serif-italic text-primary">{t("lp.levels.title.b")}</span>
-        </h2>
-        <p className="mb-12 text-center text-muted-foreground">{t("lp.levels.sub")}</p>
-        <div className="grid gap-6 md:grid-cols-3">
+    <section id="helpers" className="px-5 pb-28 pt-20">
+      <div className="mx-auto max-w-6xl">
+        <SectionTitle
+          title={
+            <>
+              {t("lp.levels.title.a")}
+              <br />
+              {t("lp.levels.title.b")}
+            </>
+          }
+          sub={t("lp.levels.sub")}
+          accent="#087f43"
+        />
+        <div className="mt-12 grid gap-8 md:grid-cols-3">
           {items.map((i) => (
             <div
               key={i.key}
-              className="flex flex-col rounded-3xl border border-glass-border bg-glass p-6 backdrop-blur"
+              className="gm-card flex flex-col rounded-[1.75rem] p-7"
+              style={{ background: i.bg, color: i.fg, transform: `rotate(${i.tilt}deg)` }}
             >
-              <div className="mb-4 text-3xl">{i.accent}</div>
-              <h3 className="mb-2 text-xl font-semibold">{t(`lp.levels.${i.key}.title`)}</h3>
-              <p className="flex-1 text-sm text-muted-foreground">{t(`lp.levels.${i.key}.body`)}</p>
-              <div className="mt-5 inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary">
-                <BadgeCheck className="size-3.5" />
+              <div className="mb-4 flex size-14 items-center justify-center rounded-full border-[3px] border-[#04301e] bg-white text-3xl">
+                {i.icon}
+              </div>
+              <h3 className="mb-2 font-brand text-2xl">{t(`lp.levels.${i.key}.title`)}</h3>
+              <p className="flex-1 text-[15px] leading-snug opacity-90">{t(`lp.levels.${i.key}.body`)}</p>
+              <div className="mt-5 inline-flex w-fit items-center gap-1.5 rounded-full border-2 border-[#04301e] bg-white px-3 py-1 text-xs font-bold text-[#04301e]">
+                <BadgeCheck className="size-4 text-[#087f43]" />
                 {t(`lp.levels.${i.key}.check`)}
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Jugendschutz: so läuft ein Auftrag für Jugendliche                  */
+/* ------------------------------------------------------------------ */
+
+function Safety() {
+  const { t } = useI18n();
+  return (
+    <section id="safety" className="relative z-10 bg-[#087f43] px-5 py-24 text-white">
+      <div className="gm-grid-bg pointer-events-none absolute inset-0" aria-hidden="true" />
+      <div className="relative mx-auto max-w-3xl">
+        <h2 className="font-brand text-4xl leading-[1.02] md:text-6xl">{t("lp.safety.title")}</h2>
+        <Squiggle className="mt-3 h-3 w-40 text-[#ffd21f]" />
+        <p className="mt-4 text-lg text-white/95">{t("lp.safety.sub")}</p>
+
+        <ol className="relative mt-12 space-y-5 before:absolute before:bottom-6 before:left-[1.4rem] before:top-6 before:w-1 before:rounded-full before:bg-white/45">
+          {[1, 2, 3, 4, 5, 6].map((n) => (
+            <li key={n} className="relative flex gap-4">
+              <span className="relative z-10 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#04301e] bg-[#ffd21f] font-brand text-xl text-[#04301e]">
+                {n}
+              </span>
+              <div className="gm-card-sm flex-1 rounded-2xl bg-white p-5 text-[#04301e]">
+                <h3 className="font-bold">{t(`lp.safety.${n}.title`)}</h3>
+                <p className="mt-1 text-[15px] leading-snug text-[#04301e]/85">{t(`lp.safety.${n}.body`)}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <p className="mt-10 text-[15px] leading-snug text-white/95">{t("lp.safety.note")}</p>
+        <div className="mt-6">
+          <Link to="/eltern-info" className={BTN_SUN}>
+            {t("lp.footer.parents")}
+          </Link>
         </div>
       </div>
     </section>
@@ -607,44 +620,37 @@ const TRUST_ITEMS = [
 
 function Trust() {
   const { t } = useI18n();
+  const tilts = [-1, 0.8, -0.6, 1, -0.8, 0.6, -1];
   return (
-    <section id="trust" className="mx-auto max-w-6xl px-4 py-20">
-      <h2 className="mb-3 text-center font-brand text-4xl">{t("lp.trust.title")}</h2>
-      <p className="mb-12 text-center text-muted-foreground">{t("lp.trust.sub")}</p>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {TRUST_ITEMS.map(({ key, icon: Icon, status }) => (
-          <div
-            key={key}
-            className={`rounded-3xl border p-6 backdrop-blur ${
-              status === "live"
-                ? "border-glass-border bg-glass"
-                : "border-dashed border-glass-border bg-transparent"
-            }`}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div
-                className={`flex h-11 w-11 items-center justify-center rounded-full border ${
-                  status === "live"
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-glass-border text-muted-foreground"
-                }`}
-              >
-                <Icon className="size-5" />
+    <section id="trust" className="bg-[#eef8e8] px-5 py-24">
+      <div className="mx-auto max-w-6xl">
+        <SectionTitle title={t("lp.trust.title")} sub={t("lp.trust.sub")} accent="#ff5a36" />
+        <div className="mt-12 grid gap-7 sm:grid-cols-2 lg:grid-cols-4">
+          {TRUST_ITEMS.map(({ key, icon: Icon, status }, idx) => (
+            <div
+              key={key}
+              className={`rounded-[1.5rem] p-6 ${
+                status === "live"
+                  ? "gm-card-sm bg-white"
+                  : "border-[2.5px] border-dashed border-[#04301e] bg-transparent"
+              }`}
+              style={{ transform: `rotate(${tilts[idx]}deg)` }}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <div
+                  className={`flex size-11 items-center justify-center rounded-full border-[2.5px] border-[#04301e] ${
+                    status === "live" ? "bg-[#ffd21f]" : "bg-white"
+                  }`}
+                >
+                  <Icon className="size-5 text-[#04301e]" />
+                </div>
+                <StatusTag status={status} label={t(`lp.status.${status}`)} />
               </div>
-              <span
-                className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
-                  status === "live"
-                    ? "bg-primary/15 text-primary"
-                    : "border border-amber-400/40 text-amber-400"
-                }`}
-              >
-                {t(`lp.status.${status}`)}
-              </span>
+              <h3 className="mb-1 font-brand text-lg leading-tight">{t(`lp.trust.${key}.title`)}</h3>
+              <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.trust.${key}.body`)}</p>
             </div>
-            <h3 className="mb-1 text-base font-semibold">{t(`lp.trust.${key}.title`)}</h3>
-            <p className="text-sm text-muted-foreground">{t(`lp.trust.${key}.body`)}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -657,31 +663,40 @@ function Trust() {
 function Faq() {
   const { t } = useI18n();
   return (
-    <section id="faq" className="border-y border-glass-border bg-card/40 py-20">
-      <div className="mx-auto max-w-3xl px-4">
-        <h2 className="mb-10 text-center font-brand text-4xl">{t("lp.faq.title")}</h2>
-        <Accordion type="single" collapsible className="w-full">
+    <section id="faq" className="bg-white px-5 py-24">
+      <div className="mx-auto max-w-3xl">
+        <h2 className="font-brand text-4xl leading-[1.02] md:text-6xl">{t("lp.faq.title")}</h2>
+        <Squiggle className="mt-3 h-3 w-40 text-[#ffd21f]" />
+        <Accordion type="single" collapsible className="mt-10 w-full">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => (
-            <AccordionItem key={n} value={`q${n}`}>
-              <AccordionTrigger className="text-left">{t(`lp.faq.${n}.q`)}</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
+            <AccordionItem
+              key={n}
+              value={`q${n}`}
+              className="mb-4 rounded-2xl border-[2.5px] border-[#04301e] bg-white px-5 shadow-[4px_4px_0_#04301e] last:border-b-[2.5px] data-[state=open]:bg-[#fff3b5]"
+            >
+              <AccordionTrigger className="text-left text-base font-bold hover:no-underline">
+                {t(`lp.faq.${n}.q`)}
+              </AccordionTrigger>
+              <AccordionContent className="text-[15px] leading-relaxed text-[#04301e]/90">
                 {t(`lp.faq.${n}.a`)}
               </AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>
-        <p className="mt-8 text-center text-sm text-muted-foreground">
-          <Link to="/vermittler" className="text-primary underline">
-            {t("lp.footer.verm")}
-          </Link>
-          {" · "}
-          <Link to="/datenschutz" className="text-primary underline">
-            {t("lp.footer.privacy")}
-          </Link>
-          {" · "}
-          <Link to="/eltern-info" className="text-primary underline">
-            {t("lp.footer.parents")}
-          </Link>
+        <p className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold">
+          {[
+            { to: "/vermittler", label: t("lp.footer.verm") },
+            { to: "/datenschutz", label: t("lp.footer.privacy") },
+            { to: "/eltern-info", label: t("lp.footer.parents") },
+          ].map((l) => (
+            <Link
+              key={l.to}
+              to={l.to}
+              className="underline decoration-[#ff5a36] decoration-[3px] underline-offset-4"
+            >
+              {l.label}
+            </Link>
+          ))}
         </p>
       </div>
     </section>
@@ -695,33 +710,31 @@ function Faq() {
 function FinalCta() {
   const { t } = useI18n();
   const { user } = useAuth();
-  const [head, ...rest] = t("lp.cta.title").split("?");
   return (
-    <section className="mx-auto max-w-3xl px-4 py-24 text-center">
-      <h2 className="font-brand text-4xl md:text-5xl">
-        {head}
-        {rest.length > 0 && <span className="font-serif-italic text-primary">?</span>}
-      </h2>
-      <p className="mt-4 text-muted-foreground">{t("lp.cta.sub")}</p>
-      <div className="mt-8 flex flex-wrap justify-center gap-3">
-        {user ? (
-          <Button asChild size="lg">
-            <Link to="/dashboard">{t("lp.hero.cta.dashboard")}</Link>
-          </Button>
-        ) : (
-          <>
-            <Button asChild size="lg">
-              <Link to="/auth" search={{ mode: "signup", role: "customer" }}>
+    <section className="bg-white px-5 pb-24">
+      <div className="gm-grid-bg relative mx-auto max-w-5xl overflow-hidden rounded-[3rem] border-[3px] border-[#04301e] bg-[#087f43] px-6 py-16 text-center text-white shadow-[8px_8px_0_#04301e] md:py-20">
+        <Sprout className="pointer-events-none absolute left-6 top-6 size-14 text-[#ffd21f]" />
+        <Sprout className="pointer-events-none absolute bottom-6 right-6 size-14 -scale-x-100 text-[#ffd21f]" />
+        <h2 className="gm-extrude-sm mx-auto max-w-3xl font-brand text-4xl leading-[1.02] [text-wrap:balance] md:text-6xl">
+          {t("lp.cta.title")}
+        </h2>
+        <p className="mx-auto mt-5 max-w-xl text-lg font-semibold">{t("lp.cta.sub")}</p>
+        <div className="mt-9 flex flex-wrap justify-center gap-4">
+          {user ? (
+            <Link to="/dashboard" className={BTN_SUN}>
+              {t("lp.hero.cta.dashboard")}
+            </Link>
+          ) : (
+            <>
+              <Link to="/auth" search={{ mode: "signup", role: "customer" }} className={BTN_SUN}>
                 {t("lp.hero.cta.customer")}
               </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link to="/auth" search={{ mode: "signup", role: "helper" }}>
+              <Link to="/auth" search={{ mode: "signup", role: "helper" }} className={BTN_WHITE}>
                 {t("lp.hero.cta.helper")}
               </Link>
-            </Button>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -735,36 +748,37 @@ function Footer() {
     { href: "/#safety", label: t("nav.trust") },
     { href: "/#faq", label: t("nav.faq") },
   ];
+  const linkClass = "underline-offset-4 hover:underline hover:decoration-[#ffd21f] hover:decoration-2";
   return (
-    <footer className="border-t border-glass-border">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between">
+    <footer className="bg-[#04301e] text-white">
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-12 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="font-brand text-xl text-primary">
-            GreenMatch<span className="text-foreground">.</span>
+          <div className="font-brand text-3xl text-[#ffd21f]">
+            GreenMatch<span className="text-white">.</span>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">{t("lp.footer.tag")}</p>
+          <p className="mt-2 text-sm text-white/85">{t("lp.footer.tag")}</p>
         </div>
-        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+        <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold md:max-w-xl md:justify-end">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="hover:text-foreground">
+            <a key={l.href} href={l.href} className={linkClass}>
               {l.label}
             </a>
           ))}
-          <Link to="/vermittler" className="hover:text-foreground">
+          <Link to="/vermittler" className={linkClass}>
             {t("lp.footer.verm")}
           </Link>
-          <Link to="/eltern-info" className="hover:text-foreground">
+          <Link to="/eltern-info" className={linkClass}>
             {t("lp.footer.parents")}
           </Link>
-          <Link to="/freiburg" className="hover:text-foreground">
+          <Link to="/freiburg" className={linkClass}>
             {t("lp.footer.freiburg")}
           </Link>
-          <Link to="/datenschutz" className="hover:text-foreground">
+          <Link to="/datenschutz" className={linkClass}>
             {t("lp.footer.privacy")}
           </Link>
         </nav>
       </div>
-      <div className="border-t border-glass-border px-4 py-4 text-center text-xs text-muted-foreground">
+      <div className="border-t border-white/20 px-5 py-5 text-center text-xs text-white/80">
         <p>© {new Date().getFullYear()} GreenMatch</p>
         <p className="mx-auto mt-1 max-w-3xl">
           {t("lp.footer.purpose")}{" "}

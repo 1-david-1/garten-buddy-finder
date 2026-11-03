@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { PublicPage } from "@/components/public-page";
 
 /**
  * Haftungs- und Vermittlerhinweis (öffentlich, ohne Login).
@@ -22,17 +23,7 @@ export const Route = createFileRoute("/vermittler")({
 
 function IntermediaryPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-glass-border">
-        <div className="mx-auto flex h-16 max-w-3xl items-center px-4">
-          <Link to="/" className="font-brand text-2xl text-primary">
-            GreenMatch<span className="text-foreground">.</span>
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl space-y-5 px-4 py-12 leading-relaxed">
-        <h1 className="font-brand text-3xl">Unsere Rolle als Vermittlungsplattform</h1>
+    <PublicPage title="Unsere Rolle als Vermittlungsplattform">
 
         <p>GreenMatch ist eine kostenlose technische Vermittlungsplattform.</p>
         <p>
@@ -54,10 +45,12 @@ function IntermediaryPage() {
         <p>
           Auftraggeber dürfen Minderjährigen nur geeignete und ungefährliche Tätigkeiten anbieten. Verboten sind
           insbesondere Arbeiten mit gefährlichen Maschinen, Chemikalien, Pflanzenschutzmitteln, schweren Lasten,
-          großer Höhe, Baustellen, Gewässern und sonstigen erheblichen Risiken. Rasenmäher und Heckenscheren sind
-          besonders unfallträchtig: Sie sind grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder
+          großer Höhe, Baustellen, Gewässern und sonstigen erheblichen Risiken. Rasenmäher sind besonders
+          unfallträchtig: Sie sind grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder
           vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Solche
           Tätigkeiten dürfen deshalb nur in Absprache mit den Erziehungsberechtigten vereinbart werden.
+          Heckenschnitt ist für Jugendliche nur mit Zustimmung der Eltern möglich, bei niedriger Hecke (ohne
+          Leiter erreichbar, ca. bis 1,5 m) und ohne sehr gefährliches Gerät wie Motor-, Ketten- oder Stangensäge.
         </p>
         <p>
           Wir prüfen Nutzer und Inhalte im Rahmen unserer technischen und organisatorischen Möglichkeiten.
@@ -95,25 +88,6 @@ function IntermediaryPage() {
           Größe Transparenz-, Kontaktstellen-, Moderations- und Beschwerdepflichten nach dem Digital Services
           Act.
         </p>
-        <p className="border-t border-glass-border pt-5 text-sm text-muted-foreground">
-          Weitere Informationen:{" "}
-          <Link to="/eltern-info" className="text-primary underline">
-            Für Eltern
-          </Link>
-          {" · "}
-          <Link to="/datenschutz" className="text-primary underline">
-            Datenschutz
-          </Link>
-          {" · "}
-          <Link to="/freiburg" className="text-primary underline">
-            Gartenhilfe Freiburg
-          </Link>
-          {" · "}
-          <Link to="/" className="text-primary underline">
-            Startseite
-          </Link>
-        </p>
-      </main>
-    </div>
+    </PublicPage>
   );
 }

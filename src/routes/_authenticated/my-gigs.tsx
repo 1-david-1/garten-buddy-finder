@@ -134,8 +134,9 @@ function MyGigsPage() {
   const proposeDateMutation = useMutation({
     mutationFn: (input: { gigId: string; scheduledAt: string }) =>
       proposeDateFn({ data: input }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success("Terminvorschlag gesendet!");
+      if (res?.guardian) toast.info(res.guardian.message);
       queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
       setDateProposal("");
     },
@@ -159,8 +160,9 @@ function MyGigsPage() {
   const acceptMutation = useMutation({
     mutationFn: (negId: string) =>
       acceptBidFn({ data: { negotiationId: negId } }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success("Gebot angenommen! Der Helfer wurde zugewiesen.");
+      if (res?.guardian) toast.info(res.guardian.message);
       queryClient.invalidateQueries({
         queryKey: ["negotiations", selectedGig],
       });

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { IdentityDocumentForm } from "@/components/identity-document-form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GUARDIAN_CONSENT_TEXT } from "@/lib/consent-texts";
+import { GUARDIAN_CONSENT_TEXT, HEDGE_YOUTH_CONDITIONS } from "@/lib/consent-texts";
 import {
   confirmGuardianConsentFn,
   decideJobAsGuardian,
@@ -59,6 +59,8 @@ function decisionError(e: unknown): string {
   if (m.includes("job_already_started")) return "Der Auftrag läuft bereits und kann nicht mehr zurückgezogen werden.";
   if (m.includes("expired")) return "Die Anfrage ist abgelaufen. Ihr Kind kann den Auftrag in der App erneut anfragen.";
   if (m.includes("already_decided")) return "Über diese Anfrage wurde bereits entschieden.";
+  if (m.includes("activity_check_required"))
+    return "Bitte bestätigen Sie die Bedingungen für den Heckenschnitt (niedrige Hecke, kein sehr gefährliches Gerät).";
   if (m.includes("offer_changed"))
     return "Das Angebot wurde seit der Anfrage geändert. Ihr Kind muss es erneut zur Freigabe senden, damit Sie die aktuellen Angaben sehen.";
   if (m.includes("offer_gone")) return "Das Angebot bzw. der Auftrag ist nicht mehr verfügbar.";
@@ -360,6 +362,30 @@ function ChildSection({ child, guardianVerified }: { child: GuardianChildOvervie
           </div>
         )}
       </div>
+      {child.openRequests.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Anfragen, bei denen noch Angaben fehlen
+          </h3>
+          {child.openRequests.map((r) => (
+            <Card key={r.gigId} className="border-amber-400/30 bg-glass backdrop-blur">
+              <CardContent className="space-y-1.5 pt-5 text-sm">
+                <p className="font-medium">
+                  {r.job.activity}: {r.job.title}
+                </p>
+                <p className="text-muted-foreground">
+                  Auftraggeber: {r.job.customerName} · {r.job.when}
+                </p>
+                <p className="text-muted-foreground">
+                  {r.missing.length > 0
+                    ? `Sobald ${r.missing.join(" und ")} feststehen, bitten wir Sie hier um Ihre Freigabe.`
+                    : "Wir senden Ihnen die Freigabe-Anfrage in Kürze zu."}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="flex justify-end">
         <Button variant="ghost" size="sm" className="text-destructive" disabled={endLink.isPending} onClick={endLinkConfirm}>
@@ -399,9 +425,10 @@ function ApprovalCard({
   const { request: focusId, aktion } = Route.useSearch();
   const focused = focusId === item.requestId;
   const [confirmed, setConfirmed] = useState(false);
+  const [hedgeChecked, setHedgeChecked] = useState(false);
   const decide = useMutation({
     mutationFn: (decision: "approve" | "decline" | "revoke") =>
-      decideFn({ data: { requestId: item.requestId, decision } }),
+      decideFn({ data: { requestId: item.requestId, decision, activityChecked: hedgeChecked } }),
     onSuccess: (_r, decision) => {
       toast.success(
         decision === "approve" ? "Auftrag freigegeben." : decision === "decline" ? "Nicht freigegeben." : "Freigabe zurückgezogen.",
@@ -475,8 +502,24 @@ function ApprovalCard({
               Ich habe Ort, Zeit, Auftraggeber und Tätigkeit geprüft und gebe diesen Auftrag für{" "}
               {child.childName} frei.
             </label>
+            {job.serviceType === "heckenschnitt" && (
+              <label className="flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={hedgeChecked}
+                  onChange={(e) => setHedgeChecked(e.target.checked)}
+                />
+                <span>
+                  <strong>Heckenschnitt:</strong> {HEDGE_YOUTH_CONDITIONS}
+                </span>
+              </label>
+            )}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
+              <Button
+                disabled={!confirmed || (job.serviceType === "heckenschnitt" && !hedgeChecked) || decide.isPending}
+                onClick={() => decide.mutate("approve")}
+              >
                 {decide.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Auftrag freigeben
               </Button>
@@ -521,9 +564,11 @@ function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => vo
   const { angebot } = Route.useSearch();
   const focused = angebot === item.approvalId;
   const [confirmed, setConfirmed] = useState(false);
+  const [hedgeChecked, setHedgeChecked] = useState(false);
+  const isHedge = item.serviceType === "heckenschnitt";
   const decide = useMutation({
     mutationFn: (decision: "approve" | "decline" | "revoke") =>
-      decideFn({ data: { approvalId: item.approvalId, decision } }),
+      decideFn({ data: { approvalId: item.approvalId, decision, activityChecked: hedgeChecked } }),
     onSuccess: (_r, decision) => {
       toast.success(
         decision === "approve"
@@ -583,8 +628,16 @@ function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => vo
                 {item.kind === "bid" ? " dem Gebot " : " dem Angebot "}zu.
               </span>
             </label>
+            {isHedge && (
+              <label className="flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm">
+                <Checkbox checked={hedgeChecked} onCheckedChange={(v) => setHedgeChecked(v === true)} className="mt-0.5" />
+                <span>
+                  <strong>Heckenschnitt:</strong> {HEDGE_YOUTH_CONDITIONS}
+                </span>
+              </label>
+            )}
             <div className="flex flex-wrap gap-2">
-              <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
+              <Button disabled={!confirmed || (isHedge && !hedgeChecked) || decide.isPending} onClick={() => decide.mutate("approve")}>
                 {decide.isPending ? <Loader2 className="size-4 animate-spin" /> : item.kind === "bid" ? "Gebot freigeben" : "Angebot freigeben"}
               </Button>
               <Button variant="outline" disabled={decide.isPending} onClick={() => decide.mutate("decline")}>

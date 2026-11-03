@@ -37,8 +37,11 @@ function ParentsInfoPage() {
         <li>
           <strong>Rasenmäher und Heckenscheren:</strong> Sie sind grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere
           oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Solche
-          Aufträge sind deshalb nur in Absprache mit Ihnen als Erziehungsberechtigten möglich. Andere gefährliche
-          Maschinen, Chemikalien, schwere Lasten, große Höhe und Gewässer sind ausgeschlossen.
+          Aufträge sind deshalb nur in Absprache mit Ihnen als Erziehungsberechtigten möglich. Heckenschnitt ist nur
+          möglich, wenn die Hecke niedrig ist (ohne Leiter erreichbar) und kein sehr gefährliches Gerät genutzt wird
+          (keine Motor-/Kettensäge, keine Benzin- oder Stangenheckenschere); das bestätigen Sie bei der Freigabe
+          ausdrücklich. Andere gefährliche Maschinen, Chemikalien, schwere Lasten, große Höhe und Gewässer sind
+          ausgeschlossen.
         </li>
         <li>
           <strong>Was Sie entscheiden:</strong> Ihr Kind wird erst nach Ihrer Einverständniserklärung und der Prüfung der

@@ -73,8 +73,9 @@ function ConversationDetail() {
   const proposeDateMutation = useMutation({
     mutationFn: (input: { gigId: string; scheduledAt: string }) =>
       proposeDateFn({ data: input }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success("Terminvorschlag gesendet!");
+      if (res?.guardian) toast.info(res.guardian.message);
       queryClient.invalidateQueries({ queryKey: ["gig", conversation.gigId] });
       setDateProposal("");
     },

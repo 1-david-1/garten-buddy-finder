@@ -175,6 +175,19 @@ function CreateGigPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {serviceType === "heckenschnitt" && (
+                  <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed">
+                    <strong>Hinweis für Jugendliche als Helfer:</strong> Heckenschnitt ist mit Zustimmung der Eltern
+                    möglich, aber nur bei niedriger Hecke (ohne Leiter, ca. bis 1,5 m) und ohne sehr gefährliches Gerät
+                    (keine Motor-/Kettensäge, keine Benzin- oder Stangenheckenschere). Nennst du in Titel oder
+                    Beschreibung ein solches Gerät oder eine Leiter, wird der Auftrag Jugendlichen nicht angezeigt.
+                  </p>
+                )}
+                {["baumpflege", "gartendesign", "bewässerung"].includes(serviceType) && (
+                  <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed">
+                    Diese Tätigkeit wird Jugendlichen nicht vermittelt.
+                  </p>
+                )}
               </div>
 
               <div>
