@@ -36,12 +36,28 @@ export function ArrowCurve({ className }: CN) {
   );
 }
 
-/** Wellige Unterstreichung, wie mit dem Filzstift gezogen. */
+/**
+ * Wellige Unterstreichung, wie mit dem Filzstift gezogen. Sie füllt immer die volle Breite ihres
+ * Containers; die Strichstärke bleibt beim Strecken gleich (non-scaling-stroke).
+ */
 export function Squiggle({ className, style }: CN) {
   return (
-    <svg viewBox="0 0 200 16" preserveAspectRatio="none" className={className} style={style} fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" aria-hidden="true">
-      <path d="M3,9 Q 17,1 31,9 T 59,9 T 87,9 T 115,9 T 143,9 T 171,9 T 197,9" />
+    <svg viewBox="0 0 200 16" preserveAspectRatio="none" className={className} style={style} fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" aria-hidden="true">
+      <path vectorEffect="non-scaling-stroke" d="M2,9 Q 16,1 30,9 T 58,9 T 86,9 T 114,9 T 142,9 T 170,9 T 198,9" />
     </svg>
+  );
+}
+
+/**
+ * Unterstreicht genau ein Wort über seine ganze Breite. Wird bewusst sparsam eingesetzt
+ * (pro Seite nur an wenigen Stellen), damit die Geste etwas Besonderes bleibt.
+ */
+export function Underlined({ children, color = "currentColor" }: { children: ReactNode; color?: string }) {
+  return (
+    <span className="relative inline-block whitespace-nowrap">
+      {children}
+      <Squiggle className="pointer-events-none absolute -bottom-[0.14em] left-0 h-[0.26em] w-full overflow-visible" style={{ color }} />
+    </span>
   );
 }
 

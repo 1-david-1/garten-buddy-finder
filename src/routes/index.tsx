@@ -1,18 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import {
   BadgeCheck,
   CalendarClock,
-  FileEdit,
+  Camera,
   Gavel,
-  Gift,
   Handshake,
+  Heart,
   Lock,
   MessageSquare,
   Receipt,
   ShieldCheck,
   ShoppingBag,
   Star,
+  type LucideIcon,
 } from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
@@ -31,21 +32,24 @@ import {
   FloatCard,
   SpinBadge,
   Sprout,
-  Squiggle,
   Stamp,
+  Underlined,
 } from "@/components/landing/playful";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Gartenhilfe Freiburg – geprüfte Helfer | GreenMatch" },
+      { title: "Gartenhilfe Freiburg – der Marktplatz | GreenMatch" },
       {
         name: "description",
         content:
-          "Gartenhilfe in Freiburg: Rasen, Hecke, Beet. Helfer von nebenan, alle per Ausweis geprüft, Jugendliche mit Eltern-Freigabe. Kostenlos.",
+          "Der Marktplatz für Gartenhilfe in Freiburg: Leistungen zum Festpreis buchen, bei Auktionen bieten, Preise verhandeln oder Aufträge ausschreiben. Alle per Ausweis geprüft, Jugendliche mit Eltern-Freigabe. Kostenlos.",
       },
-      { property: "og:title", content: "Gartenhilfe Freiburg – geprüfte Helfer | GreenMatch" },
-      { property: "og:description", content: "Fair. Lokal. Verifiziert." },
+      { property: "og:title", content: "Gartenhilfe Freiburg – der Marktplatz | GreenMatch" },
+      {
+        property: "og:description",
+        content: "Buchen, bieten, verhandeln: der Marktplatz für Gartenhilfe in Freiburg.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -56,8 +60,12 @@ export const Route = createFileRoute("/")({
 /*
  * Design (Startseite): hell, verspielt, mit dicker 3D-Schrift, Hartschatten und handgezeichneten
  * Pfeilen. Palette und Schriften stehen in styles.css (.gm-playful). Die große Geste gehört dem
- * Kopfbereich, alles darunter bleibt ruhiger: ein Farbwechsel pro Abschnitt, gleiche Kontur,
- * leicht gekippte Karten. Bewegung: ein Einstieg im Kopf, schwebende Karten, drehendes Badge.
+ * Kopfbereich, alles darunter bleibt ruhiger.
+ *
+ * Abwechslung statt Kartenwand: jeder Abschnitt hat eine eigene Form (Reiter mit großen Ziffern,
+ * Angebots-Zettel, gestufte Zeilen, eine geteilte Tafel, Zeitleiste ohne Kästen, Stempel mit
+ * Ausblick). Die wellige Unterstreichung gibt es nur an zwei Wörtern und sie füllt dann das
+ * ganze Wort (siehe <Underlined>).
  */
 
 function Landing() {
@@ -67,7 +75,7 @@ function Landing() {
       <Hero />
       <Panel />
       <Safety />
-      <Trust />
+      <Money />
       <Faq />
       <FinalCta />
       <SiteFooter />
@@ -87,50 +95,45 @@ const BTN_SUN =
 const BTN_WHITE =
   "gm-btn inline-flex items-center justify-center rounded-2xl bg-white px-6 py-3.5 text-base font-bold text-[#04301e]";
 const BTN_DEEP =
-  "gm-btn inline-flex w-full items-center justify-center rounded-2xl bg-[#04301e] px-6 py-3.5 text-base font-bold text-white";
+  "gm-btn inline-flex w-full items-center justify-center rounded-2xl bg-[#04301e] px-6 py-3.5 text-base font-bold text-white md:w-auto";
 
 function SectionTitle({
   title,
   sub,
-  accent = "#ff5a36",
   light = false,
 }: {
   title: ReactNode;
   sub?: string;
-  accent?: string;
   light?: boolean;
 }) {
   return (
     <div className="max-w-2xl">
-      <h2 className="font-brand text-4xl leading-[1.02] md:text-6xl">{title}</h2>
-      <Squiggle className="mt-3 h-3 w-40" style={{ color: accent }} />
+      <h2 className="font-brand text-4xl leading-[1.05] md:text-6xl">{title}</h2>
       {sub ? (
-        <p className={`mt-4 text-lg ${light ? "text-white/90" : "text-muted-foreground"}`}>{sub}</p>
+        <p className={`mt-5 text-lg ${light ? "text-white/90" : "text-muted-foreground"}`}>{sub}</p>
       ) : null}
     </div>
   );
 }
 
-function StatusTag({ status, label }: { status: "live" | "soon"; label: string }) {
+/** Setzt die wellige Unterstreichung unter genau das Wort `mark` innerhalb von `text`. */
+function Marked({ text, mark, color }: { text: string; mark: string; color?: string }) {
+  const i = text.indexOf(mark);
+  if (i < 0) return <>{text}</>;
   return (
-    <span
-      className={`inline-block rounded-full border-2 border-[#04301e] px-2.5 py-0.5 text-xs font-bold ${
-        status === "live" ? "bg-[#04301e] text-white" : "bg-[#ffd21f] text-[#04301e]"
-      }`}
-    >
-      {label}
-    </span>
+    <>
+      {text.slice(0, i)}
+      <Underlined color={color}>{mark}</Underlined>
+      {text.slice(i + mark.length)}
+    </>
   );
 }
 
-function IconBlob({ children, color = "#ffd21f" }: { children: ReactNode; color?: string }) {
+function SoonTag({ label }: { label: string }) {
   return (
-    <div
-      className="mb-4 flex size-14 items-center justify-center rounded-[1.1rem] border-[3px] border-[#04301e] text-[#04301e]"
-      style={{ background: color }}
-    >
-      {children}
-    </div>
+    <span className="inline-block shrink-0 rounded-full border-2 border-[#04301e] bg-[#ffd21f] px-2.5 py-0.5 text-xs font-bold text-[#04301e]">
+      {label}
+    </span>
   );
 }
 
@@ -275,139 +278,262 @@ function Panel() {
         </Link>
       </div>
       <Paths />
-      <Check />
-      <Ways />
-      <FreeAndPay />
+      <Market />
       <Levels />
+      <Verify />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* So läuft es: zwei Seiten, je drei Schritte                          */
+/* So läuft es: Reiter für beide Seiten, je drei Schritte              */
 /* ------------------------------------------------------------------ */
 
 function Paths() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const [side, setSide] = useState<"customer" | "helper">("customer");
+  const isCustomer = side === "customer";
+
   return (
     <section id="how" className="px-5 pb-20 pt-28 md:pt-32">
       <div className="mx-auto max-w-6xl">
-        <SectionTitle title={t("lp.paths.title")} sub={t("lp.paths.sub")} />
-        <div className="mt-14 grid gap-10 md:grid-cols-2">
-          <PathCard
-            role="customer"
-            tone="sun"
-            tilt={-1}
-            hasUser={!!user}
-            title={t("lp.paths.customer.title")}
-            cta={t("lp.paths.customer.cta")}
-            steps={[1, 2, 3].map((n) => ({
-              title: t(`lp.paths.customer.${n}`),
-              body: t(`lp.paths.customer.${n}.body`),
-            }))}
-          />
-          <PathCard
-            role="helper"
-            tone="white"
-            tilt={1}
-            hasUser={!!user}
-            title={t("lp.paths.helper.title")}
-            cta={t("lp.paths.helper.cta")}
-            steps={[1, 2, 3].map((n) => ({
-              title: t(`lp.paths.helper.${n}`),
-              body: t(`lp.paths.helper.${n}.body`),
-            }))}
-          />
+        <SectionTitle
+          title={<Marked text={t("lp.paths.title")} mark={t("lp.paths.title.mark")} color="#ff5a36" />}
+          sub={t("lp.paths.sub")}
+        />
+
+        <div role="tablist" aria-label={t("lp.paths.title")} className="mt-10 flex flex-wrap gap-3">
+          {(["customer", "helper"] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              role="tab"
+              id={`path-tab-${r}`}
+              aria-selected={side === r}
+              aria-controls="path-panel"
+              onClick={() => setSide(r)}
+              className={`gm-btn rounded-2xl px-5 py-3 text-base font-bold text-[#04301e] ${
+                side === r ? "bg-[#ffd21f]" : "bg-white"
+              }`}
+            >
+              {t(`lp.paths.${r}.title`)}
+            </button>
+          ))}
+        </div>
+
+        <div
+          id="path-panel"
+          role="tabpanel"
+          aria-labelledby={`path-tab-${side}`}
+          className={`gm-card mt-8 rounded-[2rem] p-7 md:p-10 ${isCustomer ? "bg-[#ffd21f]" : "bg-white"}`}
+        >
+          <ol className="grid gap-9 md:grid-cols-3 md:gap-12">
+            {[1, 2, 3].map((n) => (
+              <li key={`${side}-${n}`}>
+                <span
+                  className={`block font-brand text-7xl leading-none [text-shadow:3px_3px_0_#04301e] ${
+                    isCustomer ? "text-white" : "text-[#ffd21f]"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {n}
+                </span>
+                <p className="mt-4 text-lg font-bold leading-snug">{t(`lp.paths.${side}.${n}`)}</p>
+                <p className="mt-1.5 text-[15px] leading-snug text-[#04301e]/85">
+                  {t(`lp.paths.${side}.${n}.body`)}
+                </p>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-10">
+            {user ? (
+              <Link to="/dashboard" className={BTN_DEEP}>
+                {t(`lp.paths.${side}.cta`)}
+              </Link>
+            ) : (
+              <Link to="/auth" search={{ mode: "signup", role: side }} className={BTN_DEEP}>
+                {t(`lp.paths.${side}.cta`)}
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function PathCard({
-  role,
-  tone,
+/* ------------------------------------------------------------------ */
+/* Marktplatz: drei Angebotsarten als Zettel, Ausschreiben, Extras     */
+/* ------------------------------------------------------------------ */
+
+function ListingTag({
+  icon: Icon,
+  type,
+  bg,
   tilt,
-  hasUser,
-  title,
-  cta,
-  steps,
 }: {
-  role: "customer" | "helper";
-  tone: "sun" | "white";
+  icon: LucideIcon;
+  type: "fixed" | "auction" | "negotiable";
+  bg: string;
   tilt: number;
-  hasUser: boolean;
-  title: string;
-  cta: string;
-  steps: { title: string; body: string }[];
 }) {
+  const { t } = useI18n();
   return (
     <div
-      className={`gm-card flex flex-col rounded-[2rem] p-7 md:p-9 ${tone === "sun" ? "bg-[#ffd21f]" : "bg-white"}`}
-      style={{ transform: `rotate(${tilt}deg)` }}
+      className="gm-card flex flex-col rounded-[1.75rem]"
+      style={{ background: bg, transform: `rotate(${tilt}deg)` }}
     >
-      <h3 className="mb-6 font-brand text-3xl">{title}</h3>
-      <ol className="flex-1 space-y-5">
-        {steps.map((s, i) => (
-          <li key={s.title} className="flex gap-4">
-            <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[#04301e] font-brand text-lg ${
-                tone === "sun" ? "bg-white" : "bg-[#ffd21f]"
-              }`}
-            >
-              {i + 1}
-            </span>
-            <div>
-              <p className="font-bold">{s.title}</p>
-              <p className="mt-0.5 text-[15px] leading-snug text-[#04301e]/85">{s.body}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-8">
-        {hasUser ? (
-          <Link to="/dashboard" className={BTN_DEEP}>
-            {cta}
-          </Link>
-        ) : (
-          <Link to="/auth" search={{ mode: "signup", role }} className={BTN_DEEP}>
-            {cta}
-          </Link>
-        )}
+      <div className="flex-1 p-6">
+        <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#04301e] bg-white px-3 py-1 text-xs font-bold">
+          <Icon className="size-3.5" />
+          {t(`lp.market.${type}.label`)}
+        </span>
+        <h3 className="mt-4 font-brand text-2xl leading-tight">{t(`lp.market.${type}.title`)}</h3>
+        <p className="mt-2 text-[15px] leading-snug text-[#04301e]/85">{t(`lp.market.${type}.how`)}</p>
+      </div>
+      <div className="flex items-end justify-between gap-3 border-t-[3px] border-dashed border-[#04301e] px-6 py-4">
+        <span className="font-brand text-3xl leading-none">{t(`lp.market.${type}.price`)}</span>
+        <span className="text-right text-sm font-semibold">{t(`lp.market.${type}.note`)}</span>
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Alle werden geprüft                                                 */
-/* ------------------------------------------------------------------ */
-
-function Check() {
+function Market() {
   const { t } = useI18n();
-  const cards = [
-    { icon: BadgeCheck, n: 1, bg: "#ffffff", color: "#ffd21f", tilt: -1.5 },
-    { icon: Lock, n: 2, bg: "#d6f1dc", color: "#ffffff", tilt: 1 },
-    { icon: ShieldCheck, n: 3, bg: "#ffe36b", color: "#ffffff", tilt: -0.5 },
+  const extras = [
+    { key: "photos", icon: Camera },
+    { key: "favorites", icon: Heart },
+    { key: "chat", icon: MessageSquare },
+    { key: "date", icon: CalendarClock },
+    { key: "reviews", icon: Star },
   ] as const;
   return (
-    <section id="pruefung" className="px-5 py-20">
+    <section id="ways" className="px-5 py-20">
+      <div className="mx-auto max-w-6xl">
+        <SectionTitle title={t("lp.market.title")} sub={t("lp.market.sub")} />
+
+        <div className="mt-12 grid gap-9 md:grid-cols-3">
+          <ListingTag icon={ShoppingBag} type="fixed" bg="#ffffff" tilt={-1.5} />
+          <ListingTag icon={Gavel} type="auction" bg="#ffd21f" tilt={1} />
+          <ListingTag icon={Handshake} type="negotiable" bg="#d6f1dc" tilt={-0.8} />
+        </div>
+        <p className="mt-6 text-sm font-semibold text-[#04301e]/70">{t("lp.market.example")}</p>
+
+        <div className="mt-14 flex flex-col items-start gap-8 rounded-[2rem] border-[3px] border-dashed border-[#04301e] p-7 md:flex-row md:items-center md:justify-between md:p-10">
+          <div className="max-w-xl">
+            <h3 className="font-brand text-2xl leading-tight md:text-3xl">{t("lp.market.post.title")}</h3>
+            <p className="mt-3 text-[17px] leading-snug">{t("lp.market.post.body")}</p>
+          </div>
+          <div className="flex items-center gap-3" aria-hidden="true">
+            {[
+              { price: "35 €", bg: "#ffffff", deg: -6 },
+              { price: "42 €", bg: "#ffd21f", deg: 4 },
+              { price: "48 €", bg: "#d6f1dc", deg: -3 },
+            ].map((b) => (
+              <span
+                key={b.price}
+                className="flex size-20 items-center justify-center rounded-full border-[3px] border-[#04301e] font-brand text-lg shadow-[3px_3px_0_#04301e]"
+                style={{ background: b.bg, transform: `rotate(${b.deg}deg)` }}
+              >
+                {b.price}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-14">
+          <h3 className="font-brand text-xl">{t("lp.market.more.title")}</h3>
+          <ul className="mt-5 grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+            {extras.map(({ key, icon: Icon }) => (
+              <li key={key} className="flex gap-3">
+                <Icon className="mt-0.5 size-6 shrink-0 text-[#087f43]" />
+                <div>
+                  <p className="font-bold">{t(`lp.market.more.${key}.title`)}</p>
+                  <p className="mt-0.5 text-[15px] leading-snug text-[#04301e]/85">
+                    {t(`lp.market.more.${key}.body`)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Drei Helfer-Stufen als gestufte Zeilen                              */
+/* ------------------------------------------------------------------ */
+
+function Levels() {
+  const { t } = useI18n();
+  const items = [
+    { key: "youth", icon: "🌱", bg: "#fff3b5", fg: "#04301e" },
+    { key: "adult", icon: "🤝", bg: "#ffffff", fg: "#04301e" },
+    { key: "pro", icon: "🌳", bg: "#04301e", fg: "#ffffff" },
+  ] as const;
+  return (
+    <section id="helpers" className="px-5 py-20">
+      <div className="mx-auto max-w-6xl">
+        <SectionTitle title={t("lp.levels.title")} sub={t("lp.levels.sub")} />
+        <div className="gm-card mt-12 overflow-hidden rounded-[2rem]">
+          {items.map((i, idx) => (
+            <div
+              key={i.key}
+              className={`grid items-start gap-5 p-7 md:grid-cols-[auto_1fr_15rem] md:gap-8 md:p-9 ${
+                idx > 0 ? "border-t-[3px] border-[#04301e]" : ""
+              }`}
+              style={{ background: i.bg, color: i.fg }}
+            >
+              <div className="flex size-14 items-center justify-center rounded-full border-[3px] border-[#04301e] bg-white text-3xl">
+                {i.icon}
+              </div>
+              <div>
+                <h3 className="font-brand text-2xl">{t(`lp.levels.${i.key}.title`)}</h3>
+                <p className="mt-2 max-w-2xl text-[15px] leading-snug opacity-90">
+                  {t(`lp.levels.${i.key}.body`)}
+                </p>
+              </div>
+              <div className="flex w-fit items-start gap-1.5 rounded-2xl border-2 border-[#04301e] bg-white px-3 py-1.5 text-xs font-bold text-[#04301e] md:justify-self-end">
+                <BadgeCheck className="mt-px size-4 shrink-0 text-[#087f43]" />
+                {t(`lp.levels.${i.key}.check`)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Alle werden geprüft: eine geteilte Tafel statt drei Karten          */
+/* ------------------------------------------------------------------ */
+
+function Verify() {
+  const { t } = useI18n();
+  const cols = [
+    { icon: BadgeCheck, n: 1 },
+    { icon: Lock, n: 2 },
+    { icon: ShieldCheck, n: 3 },
+  ] as const;
+  return (
+    <section id="pruefung" className="px-5 pb-28 pt-20">
       <div className="mx-auto max-w-6xl">
         <div className="relative">
-          <SectionTitle title={t("lp.check.title")} sub={t("lp.check.sub")} accent="#087f43" />
+          <SectionTitle title={t("lp.check.title")} sub={t("lp.check.sub")} />
           <Stamp className="absolute right-2 top-0 hidden size-28 -rotate-12 text-[#087f43] md:block" />
         </div>
-        <div className="mt-12 grid gap-8 md:grid-cols-3">
-          {cards.map(({ icon: Icon, n, bg, color, tilt }) => (
+        <div className="gm-card mt-12 grid overflow-hidden rounded-[2rem] bg-white md:grid-cols-3">
+          {cols.map(({ icon: Icon, n }) => (
             <div
               key={n}
-              className="gm-card gm-sticker rounded-[1.75rem] p-7"
-              style={{ ...rot(tilt), background: bg }}
+              className="border-t-[3px] border-dashed border-[#04301e] p-7 first:border-t-0 md:border-l-[3px] md:border-t-0 md:p-8 md:first:border-l-0"
             >
-              <IconBlob color={color}>
-                <Icon className="size-7" />
-              </IconBlob>
+              <Icon className="mb-4 size-9 text-[#087f43]" />
               <h3 className="mb-2 font-brand text-xl leading-tight">{t(`lp.check.${n}.title`)}</h3>
               <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.check.${n}.body`)}</p>
             </div>
@@ -427,146 +553,7 @@ function Check() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Zwei Wege                                                           */
-/* ------------------------------------------------------------------ */
-
-function Ways() {
-  const { t } = useI18n();
-  const badges = [
-    { icon: ShoppingBag, key: "fixed" },
-    { icon: Gavel, key: "auction" },
-    { icon: Handshake, key: "negotiable" },
-  ] as const;
-  return (
-    <section id="ways" className="px-5 py-20">
-      <div className="mx-auto max-w-6xl">
-        <SectionTitle title={t("lp.ways.title")} sub={t("lp.ways.sub")} accent="#ffd21f" />
-        <div className="mt-12 grid gap-10 md:grid-cols-2">
-          <div className="gm-card rounded-[2rem] bg-white p-8" style={{ transform: "rotate(-1deg)" }}>
-            <IconBlob color="#ffd21f">
-              <FileEdit className="size-7" />
-            </IconBlob>
-            <h3 className="mb-2 font-brand text-2xl">{t("lp.ways.post.title")}</h3>
-            <p className="text-[15px] leading-snug text-[#04301e]/85">{t("lp.ways.post.body")}</p>
-          </div>
-          <div
-            className="gm-card rounded-[2rem] bg-[#087f43] p-8 text-white"
-            style={{ transform: "rotate(1deg)" }}
-          >
-            <IconBlob color="#ffffff">
-              <ShoppingBag className="size-7" />
-            </IconBlob>
-            <h3 className="mb-2 font-brand text-2xl">{t("lp.ways.book.title")}</h3>
-            <p className="mb-5 text-[15px] leading-snug text-white/95">{t("lp.ways.book.body")}</p>
-            <div className="flex flex-wrap gap-2">
-              {badges.map(({ icon: Icon, key }) => (
-                <span
-                  key={key}
-                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#04301e] bg-[#ffd21f] px-3 py-1 text-xs font-bold text-[#04301e]"
-                >
-                  <Icon className="size-3.5" />
-                  {t(`lp.ways.badge.${key}`)}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Kostenlos + Bezahlung                                               */
-/* ------------------------------------------------------------------ */
-
-function FreeAndPay() {
-  const { t } = useI18n();
-  const cards = [
-    { key: "cost", icon: Gift, status: "live" },
-    { key: "pay", icon: Lock, status: "soon" },
-  ] as const;
-  return (
-    <section id="free" className="bg-[#fff3b5] px-5 py-20">
-      <div className="mx-auto max-w-4xl">
-        <SectionTitle title={t("lp.free.title")} sub={t("lp.free.sub")} accent="#ff5a36" />
-        <div className="mt-12 grid gap-8 md:grid-cols-2">
-          {cards.map(({ key, icon: Icon, status }) => (
-            <div
-              key={key}
-              className={`rounded-[2rem] p-8 ${
-                status === "live"
-                  ? "gm-card bg-white"
-                  : "border-[3px] border-dashed border-[#04301e] bg-transparent"
-              }`}
-            >
-              <div className="mb-4 flex items-start justify-between">
-                <IconBlob color={status === "live" ? "#ffd21f" : "#ffffff"}>
-                  <Icon className="size-7" />
-                </IconBlob>
-                <StatusTag status={status} label={t(`lp.status.${status}`)} />
-              </div>
-              <h3 className="mb-2 font-brand text-2xl">{t(`lp.free.${key}.title`)}</h3>
-              <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.free.${key}.body`)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Drei Helfer-Stufen                                                  */
-/* ------------------------------------------------------------------ */
-
-function Levels() {
-  const { t } = useI18n();
-  const items = [
-    { key: "youth", icon: "🌱", bg: "#ffd21f", fg: "#04301e", tilt: -1.5 },
-    { key: "adult", icon: "🤝", bg: "#ffffff", fg: "#04301e", tilt: 1 },
-    { key: "pro", icon: "🌳", bg: "#04301e", fg: "#ffffff", tilt: -0.5 },
-  ] as const;
-  return (
-    <section id="helpers" className="px-5 pb-28 pt-20">
-      <div className="mx-auto max-w-6xl">
-        <SectionTitle
-          title={
-            <>
-              {t("lp.levels.title.a")}
-              <br />
-              {t("lp.levels.title.b")}
-            </>
-          }
-          sub={t("lp.levels.sub")}
-          accent="#087f43"
-        />
-        <div className="mt-12 grid gap-8 md:grid-cols-3">
-          {items.map((i) => (
-            <div
-              key={i.key}
-              className="gm-card flex flex-col rounded-[1.75rem] p-7"
-              style={{ background: i.bg, color: i.fg, transform: `rotate(${i.tilt}deg)` }}
-            >
-              <div className="mb-4 flex size-14 items-center justify-center rounded-full border-[3px] border-[#04301e] bg-white text-3xl">
-                {i.icon}
-              </div>
-              <h3 className="mb-2 font-brand text-2xl">{t(`lp.levels.${i.key}.title`)}</h3>
-              <p className="flex-1 text-[15px] leading-snug opacity-90">{t(`lp.levels.${i.key}.body`)}</p>
-              <div className="mt-5 inline-flex w-fit items-center gap-1.5 rounded-full border-2 border-[#04301e] bg-white px-3 py-1 text-xs font-bold text-[#04301e]">
-                <BadgeCheck className="size-4 text-[#087f43]" />
-                {t(`lp.levels.${i.key}.check`)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Jugendschutz: so läuft ein Auftrag für Jugendliche                  */
+/* Jugendschutz: Zeitleiste ohne Kästen                                */
 /* ------------------------------------------------------------------ */
 
 function Safety() {
@@ -575,25 +562,27 @@ function Safety() {
     <section id="safety" className="relative z-10 bg-[#087f43] px-5 py-24 text-white">
       <div className="gm-grid-bg pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative mx-auto max-w-3xl">
-        <h2 className="font-brand text-4xl leading-[1.02] md:text-6xl">{t("lp.safety.title")}</h2>
-        <Squiggle className="mt-3 h-3 w-40 text-[#ffd21f]" />
-        <p className="mt-4 text-lg text-white/95">{t("lp.safety.sub")}</p>
+        <SectionTitle
+          light
+          title={<Marked text={t("lp.safety.title")} mark={t("lp.safety.title.mark")} color="#ffd21f" />}
+          sub={t("lp.safety.sub")}
+        />
 
-        <ol className="relative mt-12 space-y-5 before:absolute before:bottom-6 before:left-[1.4rem] before:top-6 before:w-1 before:rounded-full before:bg-white/45">
+        <ol className="relative mt-12 space-y-9 before:absolute before:bottom-6 before:left-[1.4rem] before:top-6 before:w-1 before:rounded-full before:bg-white/45">
           {[1, 2, 3, 4, 5, 6].map((n) => (
-            <li key={n} className="relative flex gap-4">
+            <li key={n} className="relative flex gap-5">
               <span className="relative z-10 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#04301e] bg-[#ffd21f] font-brand text-xl text-[#04301e]">
                 {n}
               </span>
-              <div className="gm-card-sm flex-1 rounded-2xl bg-white p-5 text-[#04301e]">
-                <h3 className="font-bold">{t(`lp.safety.${n}.title`)}</h3>
-                <p className="mt-1 text-[15px] leading-snug text-[#04301e]/85">{t(`lp.safety.${n}.body`)}</p>
+              <div className="pt-1">
+                <h3 className="text-lg font-bold">{t(`lp.safety.${n}.title`)}</h3>
+                <p className="mt-1 text-[15px] leading-snug text-white/90">{t(`lp.safety.${n}.body`)}</p>
               </div>
             </li>
           ))}
         </ol>
 
-        <p className="mt-10 text-[15px] leading-snug text-white/95">{t("lp.safety.note")}</p>
+        <p className="mt-12 text-[15px] leading-snug text-white/95">{t("lp.safety.note")}</p>
         <div className="mt-6">
           <Link to="/eltern-info" className={BTN_SUN}>
             {t("lp.footer.parents")}
@@ -605,52 +594,48 @@ function Safety() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Vertrauen: ehrlich getrennt in "Live" und "Bald"                    */
+/* Geld: Stempel "0 €" und ehrlicher Ausblick auf das, was kommt        */
 /* ------------------------------------------------------------------ */
 
-// Hier umschalten, sobald ein Feature wirklich fertig ist (live <-> soon).
-const TRUST_ITEMS = [
-  { key: "verify", icon: BadgeCheck, status: "live" },
-  { key: "youth", icon: ShieldCheck, status: "live" },
-  { key: "chat", icon: MessageSquare, status: "live" },
-  { key: "reviews", icon: Star, status: "live" },
-  { key: "calendar", icon: CalendarClock, status: "live" },
-  { key: "escrow", icon: Lock, status: "soon" },
-  { key: "invoice", icon: Receipt, status: "soon" },
+// Hier umschalten bzw. entfernen, sobald ein Punkt wirklich fertig ist.
+const NEXT_ITEMS = [
+  { key: "escrow", icon: Lock },
+  { key: "invoice", icon: Receipt },
 ] as const;
 
-function Trust() {
+function Money() {
   const { t } = useI18n();
-  const tilts = [-1, 0.8, -0.6, 1, -0.8, 0.6, -1];
   return (
-    <section id="trust" className="bg-[#eef8e8] px-5 py-24">
-      <div className="mx-auto max-w-6xl">
-        <SectionTitle title={t("lp.trust.title")} sub={t("lp.trust.sub")} accent="#ff5a36" />
-        <div className="mt-12 grid gap-7 sm:grid-cols-2 lg:grid-cols-4">
-          {TRUST_ITEMS.map(({ key, icon: Icon, status }, idx) => (
-            <div
-              key={key}
-              className={`rounded-[1.5rem] p-6 ${
-                status === "live"
-                  ? "gm-card-sm bg-white"
-                  : "border-[2.5px] border-dashed border-[#04301e] bg-transparent"
-              }`}
-              style={{ transform: `rotate(${tilts[idx]}deg)` }}
-            >
-              <div className="mb-4 flex items-start justify-between">
-                <div
-                  className={`flex size-11 items-center justify-center rounded-full border-[2.5px] border-[#04301e] ${
-                    status === "live" ? "bg-[#ffd21f]" : "bg-white"
-                  }`}
+    <section id="free" className="bg-[#fff3b5] px-5 py-24">
+      <div className="mx-auto grid max-w-5xl items-center gap-12 md:grid-cols-[auto_1fr]">
+        <div
+          className="gm-sticker mx-auto flex size-48 flex-col items-center justify-center rounded-full border-[3px] border-[#04301e] bg-[#ff5a36] text-center text-white shadow-[6px_6px_0_#04301e] md:size-56"
+          style={rot(-6)}
+          aria-hidden="true"
+        >
+          <span className="gm-extrude-sm font-brand text-6xl leading-none md:text-7xl">0&nbsp;€</span>
+          <span className="mt-3 max-w-[8rem] text-sm font-bold leading-tight">{t("lp.free.sticker")}</span>
+        </div>
+        <div>
+          <SectionTitle title={t("lp.free.title")} sub={t("lp.free.sub")} />
+          <div className="mt-10">
+            <p className="mb-3 font-brand text-lg">{t("lp.free.next")}</p>
+            <ul className="space-y-3">
+              {NEXT_ITEMS.map(({ key, icon: Icon }) => (
+                <li
+                  key={key}
+                  className="flex items-start gap-4 rounded-2xl border-[2.5px] border-dashed border-[#04301e] p-4"
                 >
-                  <Icon className="size-5 text-[#04301e]" />
-                </div>
-                <StatusTag status={status} label={t(`lp.status.${status}`)} />
-              </div>
-              <h3 className="mb-1 font-brand text-lg leading-tight">{t(`lp.trust.${key}.title`)}</h3>
-              <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.trust.${key}.body`)}</p>
-            </div>
-          ))}
+                  <Icon className="mt-0.5 size-6 shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-bold">{t(`lp.next.${key}.title`)}</p>
+                    <p className="text-[15px] leading-snug text-[#04301e]/85">{t(`lp.next.${key}.body`)}</p>
+                  </div>
+                  <SoonTag label={t("lp.status.soon")} />
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>
@@ -661,15 +646,17 @@ function Trust() {
 /* FAQ                                                                 */
 /* ------------------------------------------------------------------ */
 
+// Reihenfolge der Fragen (Nummern aus i18n). 12 = Wie funktionieren Festpreis, Auktion, Verhandlung?
+const FAQ_ORDER = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+
 function Faq() {
   const { t } = useI18n();
   return (
     <section id="faq" className="bg-white px-5 py-24">
       <div className="mx-auto max-w-3xl">
-        <h2 className="font-brand text-4xl leading-[1.02] md:text-6xl">{t("lp.faq.title")}</h2>
-        <Squiggle className="mt-3 h-3 w-40 text-[#ffd21f]" />
+        <SectionTitle title={t("lp.faq.title")} />
         <Accordion type="single" collapsible className="mt-10 w-full">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => (
+          {FAQ_ORDER.map((n) => (
             <AccordionItem
               key={n}
               value={`q${n}`}
