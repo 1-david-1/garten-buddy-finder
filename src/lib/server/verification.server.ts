@@ -656,7 +656,10 @@ export async function decideJobApprovalAsGuardian(
     .from("verification_requests")
     .update({ status: approved ? "approved" : "declined", decided_at: nowIso })
     .eq("id", request.id);
-  await recordJobConsent(guardianUserId, request, approved ? "approved" : "declined");
+  await recordJobConsent(guardianUserId, request, approved ? "approved" : "declined", {
+    // Heckenschnitt: Die ausdrückliche Bestätigung ("Trotzdem erlauben") wird im Protokoll festgehalten.
+    hedgeConditionsConfirmed: approved && activityChecked,
+  });
   await notifyHelperAboutJob(request.user_id, gig?.title ?? "Auftrag", approved);
   if (!approved && gig) {
     // Nicht freigegeben: Auftrag wieder öffnen / abbrechen und den Kunden informieren (vorher erfuhr er nichts).
@@ -674,6 +677,7 @@ async function recordJobConsent(
   guardianUserId: string,
   request: { id: string; user_id: string; gig_id: string | null },
   result: "approved" | "declined" | "revoked",
+  extra: { hedgeConditionsConfirmed?: boolean } = {},
 ) {
   if (!request.gig_id) return;
   const job = await loadJobDetails(request.gig_id);
@@ -684,7 +688,11 @@ async function recordJobConsent(
     request_id: request.id,
     result,
     consent_text_version: JOB_CONSENT_VERSION,
-    job_snapshot: (job ?? {}) as never,
+    job_snapshot: (
+      job?.serviceType === "heckenschnitt" && extra.hedgeConditionsConfirmed
+        ? { ...job, hedgeConditionsConfirmed: true }
+        : (job ?? {})
+    ) as never,
   });
 }
 

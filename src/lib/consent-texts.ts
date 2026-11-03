@@ -11,7 +11,8 @@ export const GUARDIAN_CONSENT_TEXT =
   "Ich bin gesetzliche Vertretung der minderjährigen Person und willige in die Nutzung von GreenMatch für leichte, geeignete und ungefährliche Gartenarbeiten ein. Ich weiß, dass ich jeden einzelnen Auftrag gesondert freigeben muss und dass eine allgemeine Zustimmung für künftige Aufträge nicht ausreicht. Ich kann die Einwilligung und einzelne Freigaben jederzeit widerrufen, soweit der Auftrag noch nicht begonnen hat.";
 
 /** Zustimmung zu einem einzelnen Auftrag (Eltern) */
-export const JOB_CONSENT_VERSION = "auftrags-freigabe-2026-10-v1";
+// v2 (2026-11): Heckenschnitt-Banner mit "Trotzdem erlauben" im Eltern-Konto (siehe HEDGE_BANNER)
+export const JOB_CONSENT_VERSION = "auftrags-freigabe-2026-11-v1";
 
 /** Bestätigung des Auftraggebers vor JEDER Veröffentlichung eines Auftrags */
 export const GIG_SAFETY_VERSION = "auftrag-geeignet-2026-10-v1";
@@ -66,6 +67,26 @@ export const ACTIVITY_RISK_NOTES: Record<string, string> = {
 /** Bedingungen für Heckenschnitt durch Jugendliche - die Eltern bestätigen sie bei der Freigabe ausdrücklich */
 export const HEDGE_YOUTH_CONDITIONS =
   "Die Hecke ist niedrig (ohne Leiter erreichbar, ca. bis 1,5 m), und es wird kein sehr gefährliches Gerät genutzt (keine Motor-/Kettensäge, keine Benzin- oder Stangenheckenschere, kein Häcksler). Handschere oder leichte Akku-/Elektro-Heckenschere sind in Ordnung.";
+
+/**
+ * Kurzer Info-Banner im Eltern-Konto, wenn ein Jugendlicher Heckenschnitt machen möchte.
+ * Der Klick auf "Trotzdem erlauben" gilt als ausdrückliche Bestätigung der Bedingungen und wird im
+ * Einwilligungsprotokoll mitgespeichert. Bei Textänderung JOB_CONSENT_VERSION erhöhen.
+ */
+export const HEDGE_BANNER = {
+  title: "Heckenschnitt: Verletzungsgefahr – bitte kurz prüfen",
+  intro: "Heckenscheren haben scharfe, schnell bewegte Schneiden. Für Jugendliche gilt deshalb:",
+  rules: [
+    "Nur niedrige Hecken (ohne Leiter erreichbar, ca. bis 1,5 m)",
+    "Nur Handschere oder leichte Akku-/Elektro-Heckenschere",
+    "Nie Motor-/Kettensäge, Benzin- oder Stangenheckenschere, Häcksler",
+  ],
+  note: "Unter 15 Jahren kann Heckenschnitt unzulässig sein, Ihre Zustimmung ersetzt keine gesetzliche Vorgabe. Höhe und Gerät können wir vor Ort nicht prüfen – bitte klären Sie beides vorab mit dem Auftraggeber.",
+  confirm: "Mit „Trotzdem erlauben“ bestätigen Sie, dass diese Bedingungen für genau diesen Auftrag gelten.",
+  needsCheckHint: "Setzen Sie zuerst oben den Haken zur Prüfung, dann ist „Trotzdem erlauben“ aktiv.",
+  allowButton: "Trotzdem erlauben",
+  declineButton: "Nicht erlauben",
+} as const;
 
 export const GENERAL_RISK_NOTE =
   "Allgemein: Sonne und Hitze (ausreichend trinken), Verletzungen durch Werkzeug, unbekannte Personen und Orte.";
