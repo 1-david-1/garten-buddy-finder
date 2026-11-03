@@ -1,14 +1,24 @@
 import React, { useRef, useState, useEffect, useLayoutEffect } from "react"
 import gsap from "gsap"
 
+const DEFAULT_HOVER_COLORS = ["#eab308", "#ef4444", "#3b82f6", "#06b6d4", "#8b5cf6"]
+
 export const TextHoverEffect = ({
   text,
   duration,
   fontSize = 32, // Set smaller than 56
+  colors = DEFAULT_HOVER_COLORS,
+  strokeClassName = "stroke-neutral-200 dark:stroke-neutral-800",
+  strokeWidth = 0.3,
 }: {
   text: string
   duration?: number
   fontSize?: number
+  /** Farben des Hover-Verlaufs (gleichmäßig verteilt) */
+  colors?: string[]
+  /** Tailwind-Klassen für die Grundkontur der Schrift */
+  strokeClassName?: string
+  strokeWidth?: number
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   const maskGradientRef = useRef(null)
@@ -66,7 +76,6 @@ export const TextHoverEffect = ({
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault() 
     setHovered(true)
     if (e.touches.length > 0) {
       const touch = e.touches[0]
@@ -75,15 +84,13 @@ export const TextHoverEffect = ({
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault()
     if (e.touches.length > 0) {
       const touch = e.touches[0]
       setCursor({ x: touch.clientX, y: touch.clientY })
     }
   }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    e.preventDefault()
+  const handleTouchEnd = () => {
     setHovered(false)
   }
 
@@ -111,15 +118,14 @@ export const TextHoverEffect = ({
           cy="50%"
           r="20%"
         >
-          {hovered && (
-            <>
-              <stop offset="0%" stopColor="#eab308" />
-              <stop offset="25%" stopColor="#ef4444" />
-              <stop offset="50%" stopColor="#3b82f6" />
-              <stop offset="75%" stopColor="#06b6d4" />
-              <stop offset="100%" stopColor="#8b5cf6" />
-            </>
-          )}
+          {hovered &&
+            colors.map((color, i) => (
+              <stop
+                key={`${color}-${i}`}
+                offset={`${colors.length === 1 ? 0 : Math.round((i / (colors.length - 1)) * 100)}%`}
+                stopColor={color}
+              />
+            ))}
         </linearGradient>
         <radialGradient
           id="revealMask"
@@ -151,14 +157,8 @@ export const TextHoverEffect = ({
           y="50%"
           textAnchor="middle"
           dominantBaseline="middle"
-          strokeWidth="0.3"
-          className={`fill-transparent font-[helvetica] font-bold ${
-            idx === 0
-              ? "stroke-neutral-200 dark:stroke-neutral-800"
-              : idx === 1
-                ? "stroke-neutral-200 dark:stroke-neutral-800"
-                : ""
-          }`}
+          strokeWidth={strokeWidth}
+          className={`fill-transparent font-[helvetica] font-bold ${idx === 2 ? "" : strokeClassName}`}
           stroke={idx === 2 ? "url(#textGradient)" : undefined}
           mask={idx === 2 ? "url(#textMask)" : undefined}
           style={{

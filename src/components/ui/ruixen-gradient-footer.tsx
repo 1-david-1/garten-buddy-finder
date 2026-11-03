@@ -130,7 +130,8 @@ export function RuixenGradientFooter({
       className={className}
       style={{ paddingBottom: gradientHeight, ...style }}
     >
-      {children}
+      {/* Inhalt liegt über dem Glow (z-index 1), der Glow über dem Seitenhintergrund (z-index 0). */}
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
 
       {/* ponytail: fixed to the viewport — a transformed/filtered ancestor
           would capture it. Give the footer a plain containing block. */}
@@ -147,7 +148,7 @@ export function RuixenGradientFooter({
           transformOrigin: "bottom",
           transform: `scaleY(${progress})`,
           willChange: "transform",
-          zIndex: -1,
+          zIndex: 0,
         }}
       >
         <svg

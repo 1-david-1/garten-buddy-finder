@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { SiteFooter } from "@/components/site-footer";
 
 /**
  * Gemeinsamer Rahmen für öffentliche Informationsseiten (ohne Login):
@@ -25,25 +26,7 @@ export function PublicPage({ title, children }: { title: string; children: React
         {children}
       </main>
 
-      <footer className="bg-[#04301e] text-white">
-        <nav className="mx-auto flex max-w-3xl flex-wrap gap-x-6 gap-y-2 px-4 py-6 text-sm font-semibold">
-          <Link to="/" className="underline-offset-4 hover:underline">
-            Startseite
-          </Link>
-          <Link to="/vermittler" className="underline-offset-4 hover:underline">
-            Unsere Rolle als Vermittler
-          </Link>
-          <Link to="/eltern-info" className="underline-offset-4 hover:underline">
-            Für Eltern
-          </Link>
-          <Link to="/freiburg" className="underline-offset-4 hover:underline">
-            Gartenhilfe Freiburg
-          </Link>
-          <Link to="/datenschutz" className="underline-offset-4 hover:underline">
-            Datenschutz
-          </Link>
-        </nav>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
