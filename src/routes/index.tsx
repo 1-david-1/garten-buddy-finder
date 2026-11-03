@@ -15,6 +15,7 @@ import {
   Star,
 } from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
+import { SiteFooter } from "@/components/site-footer";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import {
@@ -69,7 +70,7 @@ function Landing() {
       <Trust />
       <Faq />
       <FinalCta />
-      <Footer />
+      <SiteFooter />
     </div>
   );
 }
@@ -737,56 +738,5 @@ function FinalCta() {
         </div>
       </div>
     </section>
-  );
-}
-
-function Footer() {
-  const { t } = useI18n();
-  const links = [
-    { href: "/#how", label: t("nav.how") },
-    { href: "/#helpers", label: t("nav.helpers") },
-    { href: "/#safety", label: t("nav.trust") },
-    { href: "/#faq", label: t("nav.faq") },
-  ];
-  const linkClass = "underline-offset-4 hover:underline hover:decoration-[#ffd21f] hover:decoration-2";
-  return (
-    <footer className="bg-[#04301e] text-white">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-12 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="font-brand text-3xl text-[#ffd21f]">
-            GreenMatch<span className="text-white">.</span>
-          </div>
-          <p className="mt-2 text-sm text-white/85">{t("lp.footer.tag")}</p>
-        </div>
-        <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold md:max-w-xl md:justify-end">
-          {links.map((l) => (
-            <a key={l.href} href={l.href} className={linkClass}>
-              {l.label}
-            </a>
-          ))}
-          <Link to="/vermittler" className={linkClass}>
-            {t("lp.footer.verm")}
-          </Link>
-          <Link to="/eltern-info" className={linkClass}>
-            {t("lp.footer.parents")}
-          </Link>
-          <Link to="/freiburg" className={linkClass}>
-            {t("lp.footer.freiburg")}
-          </Link>
-          <Link to="/datenschutz" className={linkClass}>
-            {t("lp.footer.privacy")}
-          </Link>
-        </nav>
-      </div>
-      <div className="border-t border-white/20 px-5 py-5 text-center text-xs text-white/80">
-        <p>© {new Date().getFullYear()} GreenMatch</p>
-        <p className="mx-auto mt-1 max-w-3xl">
-          {t("lp.footer.purpose")}{" "}
-          <Link to="/vermittler" className="underline">
-            {t("lp.footer.verm")}
-          </Link>
-        </p>
-      </div>
-    </footer>
   );
 }
