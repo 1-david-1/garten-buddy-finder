@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { ExternalLink, FileUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import GlassFolder, { GLASS_FOLDER_DE, type FolderFile } from "@/components/ui/glass-folder";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,12 +32,21 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const LABELS: Record<YouthDocKey, { label: string; hint?: string }> = {
   consent: {
     label: "Einverständniserklärung der Eltern (unterschrieben)",
-    hint: "Foto, Scan oder PDF",
+    hint: "Foto oder Scan als Bild",
   },
   parent_id_front: { label: "Ausweis Elternteil – Vorderseite" },
   parent_id_back: { label: "Ausweis Elternteil – Rückseite" },
   child_id_front: { label: "Ausweis Kind – Vorderseite" },
   child_id_back: { label: "Ausweis Kind – Rückseite" },
+};
+
+/** Kurznamen für die Dateien im Ordner. */
+const SHORT: Record<YouthDocKey, string> = {
+  consent: "Einverständnis Eltern",
+  parent_id_front: "Ausweis Eltern vorn",
+  parent_id_back: "Ausweis Eltern hinten",
+  child_id_front: "Ausweis Kind vorn",
+  child_id_back: "Ausweis Kind hinten",
 };
 
 /** Unterlagen für die Verifizierung Jugendlicher: Einverständnis + Ausweise (Eltern und Kind). */
@@ -54,7 +64,43 @@ export function YouthDocumentsForm({
   const [accepted, setAccepted] = useState(false);
 
   // Nur die Unterlagen, die noch fehlen: Den Ausweis der Eltern liefert dann das Eltern-Konto.
-  const keys = YOUTH_DOC_KEYS.filter((k) => !(parentIdCovered && PARENT_ID_KEYS.includes(k)));
+  const keys = useMemo(
+    () => YOUTH_DOC_KEYS.filter((k) => !(parentIdCovered && PARENT_ID_KEYS.includes(k))),
+    [parentIdCovered],
+  );
+
+  // Vorschau-URLs und stabile Ordner-Dateien je gewähltem Foto (nur im Browser)
+  const previews = useRef(new Map<File, string>());
+  const folderCache = useRef(new WeakMap<File, FolderFile>());
+  const inputRefs = useRef<Partial<Record<YouthDocKey, HTMLInputElement | null>>>({});
+  useEffect(() => {
+    const map = previews.current;
+    return () => {
+      map.forEach((url) => URL.revokeObjectURL(url));
+      map.clear();
+    };
+  }, []);
+
+  const folderFiles = useMemo<FolderFile[]>(
+    () =>
+      keys
+        .filter((k) => files[k])
+        .map((k) => {
+          const f = files[k]!;
+          let entry = folderCache.current.get(f);
+          if (!entry) {
+            entry = {
+              name: SHORT[k],
+              meta: (f.size / 1024 / 1024).toFixed(1).replace(".", ",") + " MB",
+              image: previews.current.get(f),
+            };
+            folderCache.current.set(f, entry);
+          }
+          return entry;
+        }),
+    [files, keys],
+  );
+
   const complete = keys.every((k) => files[k]) && guardianName.trim().length >= 2;
 
   const submit = useMutation({
@@ -113,7 +159,16 @@ export function YouthDocumentsForm({
     if (!file) return;
     try {
       await assertImageFile(file, MAX_BYTES);
-      setFiles((prev) => ({ ...prev, [key]: file }));
+      previews.current.set(file, URL.createObjectURL(file));
+      setFiles((prev) => {
+        const old = prev[key];
+        if (old) {
+          const url = previews.current.get(old);
+          if (url) URL.revokeObjectURL(url);
+          previews.current.delete(old);
+        }
+        return { ...prev, [key]: file };
+      });
     } catch (e) {
       setFiles((prev) => {
         const next = { ...prev };
@@ -146,6 +201,27 @@ export function YouthDocumentsForm({
 
       <YouthProtectionRules />
       <IdCheckNotice />
+
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-glass-border p-4">
+        <GlassFolder
+          width={250}
+          label="Unterlagen"
+          meta={folderFiles.length + " von " + keys.length + " Unterlagen"}
+          tone="light"
+          art="verdant"
+          seed={11}
+          strings={GLASS_FOLDER_DE}
+          controlledFiles={folderFiles}
+          action="add"
+          onAddRequest={() => {
+            const next = keys.find((k) => !files[k]) ?? keys[0];
+            inputRefs.current[next]?.click();
+          }}
+        />
+        <p className="text-center text-[11px] text-muted-foreground">
+          Jedes Foto, das du unten auswählst, landet in der Mappe. Mit dem Plus öffnest du die nächste fehlende Unterlage.
+        </p>
+      </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="guardian-name" className="text-xs">
@@ -191,6 +267,9 @@ export function YouthDocumentsForm({
             </p>
           )}
           <Input
+            ref={(el) => {
+              inputRefs.current[key] = el;
+            }}
             id={`doc-${key}`}
             type="file"
             accept={IMAGE_ACCEPT}

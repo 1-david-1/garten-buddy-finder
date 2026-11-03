@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { FileUp, Loader2 } from "lucide-react";
@@ -14,6 +14,7 @@ import {
   prepareImageForUpload,
 } from "@/lib/image-upload";
 import { Button } from "@/components/ui/button";
+import GlassFolder, { GLASS_FOLDER_DE, type FolderFile } from "@/components/ui/glass-folder";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +34,11 @@ const MAX_BYTES = 10 * 1024 * 1024;
  */
 export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void }) {
   const requestFn = useServerFn(requestIdentityVerification);
-  const [file, setFile] = useState<File | null>(null);
+  // Gewähltes Foto samt Vorschau-URL (nur im Browser, wird nach dem Wechsel wieder freigegeben)
+  const [picked, setPicked] = useState<{ file: File; url: string } | null>(null);
+  const file = picked?.file ?? null;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pickedUrlRef = useRef<string | null>(null);
   const [note, setNote] = useState("");
   const [redacted, setRedacted] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -85,39 +90,90 @@ export function IdentityDocumentForm({ onSubmitted }: { onSubmitted: () => void 
     },
   });
 
+  function replacePicked(next: { file: File; url: string } | null) {
+    if (pickedUrlRef.current) URL.revokeObjectURL(pickedUrlRef.current);
+    pickedUrlRef.current = next?.url ?? null;
+    setPicked(next);
+  }
+
+  // Beim Verlassen der Seite die Vorschau-URL freigeben
+  useEffect(
+    () => () => {
+      if (pickedUrlRef.current) URL.revokeObjectURL(pickedUrlRef.current);
+    },
+    [],
+  );
+
   async function pick(input: HTMLInputElement) {
     const f = input.files?.[0];
     if (!f) return;
     try {
       await assertImageFile(f, MAX_BYTES);
-      setFile(f);
+      replacePicked({ file: f, url: URL.createObjectURL(f) });
     } catch (e) {
-      setFile(null);
+      replacePicked(null);
       input.value = "";
       toast.error(e instanceof ImageValidationError ? e.message : "Die Datei konnte nicht geprüft werden.");
     }
   }
 
+  // Der Ordner zeigt das gewählte Foto als Datei. Das Objekt bleibt gleich, solange das Foto gleich bleibt.
+  const folderFiles = useMemo<FolderFile[]>(
+    () =>
+      picked
+        ? [
+            {
+              name: "Ausweis (geschwärzt)",
+              meta: (picked.file.size / 1024 / 1024).toFixed(1).replace(".", ",") + " MB",
+              image: picked.url,
+            },
+          ]
+        : [],
+    [picked],
+  );
+
   return (
     <div className="space-y-4">
       <IdCheckNotice />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="identity-file" className="flex items-center gap-1.5 text-xs">
-          <FileUp className="size-3.5" />
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-glass-border p-4">
+        <GlassFolder
+          width={250}
+          label="Ausweis"
+          meta={picked ? "Foto bereit" : "Noch leer"}
+          tone="light"
+          art="verdant"
+          seed={7}
+          strings={GLASS_FOLDER_DE}
+          controlledFiles={folderFiles}
+          action="add"
+          onAddRequest={() => inputRef.current?.click()}
+        />
+        <p className="text-center text-[11px] text-muted-foreground">
+          {picked
+            ? "Dein Foto liegt im Ordner. Klicke auf den Ordner, um es dir anzusehen."
+            : "Tippe auf das Plus, um das Foto deines Ausweises in den Ordner zu legen."}
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+          <FileUp className="mr-1.5 size-3.5" />
+          {picked ? "Anderes Foto wählen" : "Foto auswählen"}
+        </Button>
+        <Label htmlFor="identity-file" className="sr-only">
           Foto deines Ausweises (geschwärzt, nur JPG, PNG oder WebP)
         </Label>
         <Input
+          ref={inputRef}
           id="identity-file"
           type="file"
           accept={IMAGE_ACCEPT}
+          className="sr-only"
+          tabIndex={-1}
           onChange={(e) => void pick(e.target)}
         />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-center text-[11px] text-muted-foreground">
           Nur Bilder (JPG, PNG, WebP), höchstens 10 MB. PDFs und andere Dateien werden abgelehnt. Das Bild wird vor dem
           Hochladen neu erzeugt, dabei fallen versteckte Zusatzdaten und Standortdaten (EXIF) weg.
         </p>
-        {file && <p className="truncate text-[11px] text-muted-foreground">{file.name}</p>}
       </div>
 
       <Textarea
