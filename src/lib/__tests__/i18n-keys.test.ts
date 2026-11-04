@@ -21,16 +21,16 @@ const combos = (prefix: string, mids: (string | number)[], sufs: string[]) =>
 
 const DYNAMIC = [
   ...combos("lp.hero.chip.", range(3), [""]),
+  ...combos("lp.paths.", ["customer", "helper"], [".title", ".cta"]),
   ...combos("lp.paths.customer.", range(3), ["", ".body"]),
   ...combos("lp.paths.helper.", range(3), ["", ".body"]),
-  ...combos("lp.check.", range(3), [".title", ".body"]),
-  ...combos("lp.ways.badge.", ["fixed", "auction", "negotiable"], [""]),
-  ...combos("lp.status.", ["live", "soon"], [""]),
-  ...combos("lp.free.", ["cost", "pay"], [".title", ".body"]),
+  ...combos("lp.market.", ["fixed", "auction", "negotiable"], [".label", ".title", ".how", ".price", ".note"]),
+  ...combos("lp.market.more.", ["photos", "favorites", "chat", "date", "reviews"], [".title", ".body"]),
   ...combos("lp.levels.", ["youth", "adult", "pro"], [".title", ".body", ".check"]),
+  ...combos("lp.check.", range(3), [".title", ".body"]),
   ...combos("lp.safety.", range(6), [".title", ".body"]),
-  ...combos("lp.trust.", ["verify", "youth", "chat", "reviews", "calendar", "escrow", "invoice"], [".title", ".body"]),
-  ...combos("lp.faq.", range(11), [".q", ".a"]),
+  ...combos("lp.next.", ["escrow", "invoice"], [".title", ".body"]),
+  ...combos("lp.faq.", range(12), [".q", ".a"]),
   ...combos("onboarding.role.", ["customer", "helper_youth", "helper_adult", "helper_pro"], ["", ".desc"]),
   // alle Auftrags-Status (gig_status)
   ...combos("status.", ["draft", "open", "negotiating", "assigned", "in_progress", "completed", "cancelled", "pending_helper"], [""]),
@@ -61,10 +61,17 @@ describe("Texte (i18n)", () => {
     expect(wanted.filter((k) => !dicts.en[k])).toEqual([]);
   });
 
-  it("Zwei-Wege- und Kostenlos-Bereich der Startseite sind vollständig", () => {
-    for (const k of ["lp.ways.title", "lp.ways.sub", "lp.ways.post.title", "lp.ways.post.body", "lp.ways.book.title", "lp.ways.book.body", "lp.free.cost.title", "lp.free.cost.body", "lp.free.pay.title", "lp.free.pay.body"]) {
+  it("Marktplatz- und Geld-Bereich der Startseite sind vollständig", () => {
+    for (const k of ["lp.market.title", "lp.market.sub", "lp.market.example", "lp.market.post.title", "lp.market.post.body", "lp.market.more.title", "lp.free.title", "lp.free.sub", "lp.free.sticker", "lp.free.next", "lp.levels.title", "lp.paths.title.mark", "lp.safety.title.mark", "lp.safety.note"]) {
       expect(dicts.de[k], k).toBeTruthy();
       expect(dicts.en[k], k).toBeTruthy();
+    }
+  });
+
+  it("hervorgehobene Wörter kommen im jeweiligen Titel vor (sonst fehlt die Unterstreichung)", () => {
+    for (const lang of ["de", "en"] as const) {
+      expect(dicts[lang]["lp.paths.title"]).toContain(dicts[lang]["lp.paths.title.mark"]);
+      expect(dicts[lang]["lp.safety.title"]).toContain(dicts[lang]["lp.safety.title.mark"]);
     }
   });
 });
