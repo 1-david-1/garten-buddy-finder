@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SERVICE_TYPES } from "@/lib/service-types";
+import { addressExample, checkFreiburgAddress } from "@/lib/address-rules";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -191,8 +192,13 @@ export function BookingScheduler({
     setSelectedTimeSlot(null);
   };
 
+  // Adresse: nur Freiburg, Straße + Hausnummer. Fehlt die PLZ, nimmt der Server sie aus dem Profil.
+  const addressIssues = address.trim()
+    ? checkFreiburgAddress(address, null).issues.filter((i) => i.code !== "plz_missing")
+    : [];
+
   const handleConfirmBooking = () => {
-    if (!selectedTimeSlot || !serviceType || !address || !budget) return;
+    if (!selectedTimeSlot || !serviceType || !address || !budget || addressIssues.length > 0) return;
     if (!(parseFloat(budget.replace(",", ".")) > 0)) return;
 
     const scheduledAt = new Date(
@@ -357,14 +363,27 @@ export function BookingScheduler({
 
         {/* Address Input */}
         <motion.div variants={shouldAnimate ? itemVariants : {}} className="px-6 pb-4">
-          <label className="block text-sm text-muted-foreground mb-2">Adresse</label>
+          <label className="block text-sm text-muted-foreground mb-2">Adresse in Freiburg (Straße und Hausnummer)</label>
           <input
             type="text"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="Ihre Adresse"
+            placeholder={`z. B. ${addressExample(0)}, 79102 Freiburg`}
+            autoComplete="street-address"
             className="w-full p-3 bg-muted rounded-lg border border-border/50 hover:border-border transition-colors text-foreground placeholder:text-muted-foreground"
           />
+          {addressIssues.length > 0 ? (
+            <ul className="mt-1 space-y-0.5 text-xs text-destructive" role="alert">
+              {addressIssues.map((i) => (
+                <li key={i.message}>
+                  {i.message}
+                  {i.example ? ` Beispiel: „${i.example}“.` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">Buchungen sind aktuell nur innerhalb von Freiburg im Breisgau möglich.</p>
+          )}
         </motion.div>
 
         {/* Budget Input */}
@@ -542,7 +561,7 @@ export function BookingScheduler({
             whileHover={shouldAnimate ? { scale: 1.02 } : {}}
             whileTap={shouldAnimate ? { scale: 0.98 } : {}}
             onClick={handleConfirmBooking}
-            disabled={!selectedTimeSlot || !serviceType || !address || !budget}
+            disabled={!selectedTimeSlot || !serviceType || !address || !budget || addressIssues.length > 0}
             className="w-full py-3 rounded-lg font-semibold transition-all bg-primary hover:bg-primary/90 text-primary-foreground border disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Buchungsanfrage senden

@@ -8,19 +8,23 @@ import { SiteNav } from "@/components/site-nav";
 import { QueryErrorCard } from "@/components/query-error-card";
 import { SafetyActions } from "@/components/safety-actions";
 import { YouthProtectionRules } from "@/components/youth-protection-rules";
-import { HedgeInfoBanner } from "@/components/hedge-info-banner";
+import { ActivityInfoBanner } from "@/components/hedge-info-banner";
+import { RememberChoice, type RememberValue } from "@/components/remember-choice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { IdentityDocumentForm } from "@/components/identity-document-form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GUARDIAN_CONSENT_TEXT, HEDGE_BANNER } from "@/lib/consent-texts";
+import { ACTIVITY_BANNERS, GUARDIAN_CONSENT_TEXT } from "@/lib/consent-texts";
+import { requiresParentAcknowledgement } from "@/lib/hedge-rules";
 import {
   confirmGuardianConsentFn,
   decideJobAsGuardian,
   endGuardianLinkFn,
   getMyGuardianOverview,
+  revokeStandingApprovalFn,
   setChildPausedFn,
+  setStandingApprovalFn,
 } from "@/lib/guardian.functions";
 import { VERIFICATION_STATUS_LABEL } from "@/lib/verification-status";
 import { useAuth } from "@/lib/auth";
@@ -61,7 +65,7 @@ function decisionError(e: unknown): string {
   if (m.includes("expired")) return "Die Anfrage ist abgelaufen. Ihr Kind kann den Auftrag in der App erneut anfragen.";
   if (m.includes("already_decided")) return "Über diese Anfrage wurde bereits entschieden.";
   if (m.includes("activity_check_required"))
-    return "Heckenschnitt braucht Ihre ausdrückliche Bestätigung: Bitte klicken Sie auf „Trotzdem erlauben“.";
+    return "Diese Tätigkeit braucht Ihre ausdrückliche Bestätigung: Bitte klicken Sie auf „Trotzdem erlauben“.";
   if (m.includes("offer_changed"))
     return "Das Angebot wurde seit der Anfrage geändert. Ihr Kind muss es erneut zur Freigabe senden, damit Sie die aktuellen Angaben sehen.";
   if (m.includes("offer_gone")) return "Das Angebot bzw. der Auftrag ist nicht mehr verfügbar.";
@@ -363,6 +367,7 @@ function ChildSection({ child, guardianVerified }: { child: GuardianChildOvervie
           </div>
         )}
       </div>
+      <StandingApprovals child={child} onDone={refresh} />
       {child.openRequests.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -425,12 +430,31 @@ function ApprovalCard({
   const decideFn = useServerFn(decideJobAsGuardian);
   const { request: focusId, aktion } = Route.useSearch();
   const focused = focusId === item.requestId;
+  const standingFn = useServerFn(setStandingApprovalFn);
   const [confirmed, setConfirmed] = useState(false);
-  const isHedge = item.job.serviceType === "heckenschnitt";
+  const [remember, setRemember] = useState<RememberValue>("none");
+  const needsAck = requiresParentAcknowledgement(item.job.serviceType);
+  const hasCustomerStanding = child.standing.some((st) => st.scope === "customer" && st.customerId === item.job.customerId);
+  const alwaysAllow = useMutation({
+    mutationFn: () =>
+      standingFn({ data: { childId: child.childId, customerId: item.job.customerId, acknowledgesRisky: needsAck } }),
+    onSuccess: () => {
+      toast.success(`Für ${item.job.customerName} gilt jetzt: immer erlauben.`);
+      onDone();
+    },
+    onError: (e) => toast.error(decisionError(e)),
+  });
   const decide = useMutation({
-    // Heckenschnitt: Der Klick auf "Trotzdem erlauben" ist die ausdrückliche Bestätigung der Bedingungen.
+    // Tätigkeiten mit erhöhtem Risiko: Der Klick auf "Trotzdem erlauben" ist die ausdrückliche Bestätigung der Bedingungen.
     mutationFn: (decision: "approve" | "decline" | "revoke") =>
-      decideFn({ data: { requestId: item.requestId, decision, activityChecked: decision === "approve" && isHedge } }),
+      decideFn({
+        data: {
+          requestId: item.requestId,
+          decision,
+          activityChecked: decision === "approve" && needsAck,
+          remember: decision === "approve" ? remember : undefined,
+        },
+      }),
     onSuccess: (_r, decision) => {
       toast.success(
         decision === "approve" ? "Auftrag freigegeben." : decision === "decline" ? "Nicht freigegeben." : "Freigabe zurückgezogen.",
@@ -504,19 +528,26 @@ function ApprovalCard({
               Ich habe Ort, Zeit, Auftraggeber und Tätigkeit geprüft und gebe diesen Auftrag für{" "}
               {child.childName} frei.
             </label>
-            {isHedge ? (
-              <HedgeInfoBanner>
+            <RememberChoice
+              name={`remember-${item.requestId}`}
+              value={remember}
+              onChange={setRemember}
+              customerName={job.customerName}
+              risky={needsAck}
+            />
+            {needsAck ? (
+              <ActivityInfoBanner serviceType={job.serviceType}>
                 <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                   <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
                     {decide.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                    {HEDGE_BANNER.allowButton}
+                    {ACTIVITY_BANNERS.heckenschnitt.allowButton}
                   </Button>
                   <Button variant="outline" disabled={decide.isPending} onClick={() => decide.mutate("decline")}>
-                    {HEDGE_BANNER.declineButton}
+                    {ACTIVITY_BANNERS.heckenschnitt.declineButton}
                   </Button>
                 </div>
-                {!confirmed && <p className="text-xs text-muted-foreground">{HEDGE_BANNER.needsCheckHint}</p>}
-              </HedgeInfoBanner>
+                {!confirmed && <p className="text-xs text-muted-foreground">{ACTIVITY_BANNERS.heckenschnitt.needsCheckHint}</p>}
+              </ActivityInfoBanner>
             ) : (
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
@@ -535,6 +566,20 @@ function ApprovalCard({
           <Button variant="outline" size="sm" disabled={decide.isPending} onClick={() => decide.mutate("revoke")}>
             Freigabe zurückziehen
           </Button>
+        )}
+        {item.status === "approved" && !hasCustomerStanding && (
+          <div className="rounded-lg border border-glass-border p-3 text-sm">
+            <p className="font-medium">Müssen Sie bei {job.customerName} jedes Mal neu freigeben?</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Sie können {job.customerName} dauerhaft erlauben, Aufträge für {child.childName} zu vergeben. Sie werden dann nur noch
+              per E-Mail informiert und können es jederzeit widerrufen.
+              {needsAck ? " Gilt auch für Tätigkeiten mit erhöhtem Risiko wie diese, unter denselben Bedingungen." : ""}
+            </p>
+            <Button size="sm" variant="outline" disabled={alwaysAllow.isPending} onClick={() => alwaysAllow.mutate()}>
+              {alwaysAllow.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Für diesen Auftraggeber immer erlauben
+            </Button>
+          </div>
         )}
 
         <div className="border-t border-glass-border pt-3">
@@ -565,11 +610,19 @@ function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => vo
   const { angebot } = Route.useSearch();
   const focused = angebot === item.approvalId;
   const [confirmed, setConfirmed] = useState(false);
-  const isHedge = item.serviceType === "heckenschnitt";
+  const [remember, setRemember] = useState<RememberValue>("none");
+  const needsAck = requiresParentAcknowledgement(item.serviceType);
   const decide = useMutation({
-    // Heckenschnitt: Der Klick auf "Trotzdem erlauben" ist die ausdrückliche Bestätigung der Bedingungen.
+    // Tätigkeiten mit erhöhtem Risiko: Der Klick auf "Trotzdem erlauben" ist die ausdrückliche Bestätigung der Bedingungen.
     mutationFn: (decision: "approve" | "decline" | "revoke") =>
-      decideFn({ data: { approvalId: item.approvalId, decision, activityChecked: decision === "approve" && isHedge } }),
+      decideFn({
+        data: {
+          approvalId: item.approvalId,
+          decision,
+          activityChecked: decision === "approve" && needsAck,
+          remember: decision === "approve" && item.kind === "bid" ? remember : undefined,
+        },
+      }),
     onSuccess: (_r, decision) => {
       toast.success(
         decision === "approve"
@@ -629,18 +682,27 @@ function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => vo
                 {item.kind === "bid" ? " dem Gebot " : " dem Angebot "}zu.
               </span>
             </label>
-            {isHedge ? (
-              <HedgeInfoBanner>
+            {item.kind === "bid" && (
+              <RememberChoice
+                name={`remember-${item.approvalId}`}
+                value={remember}
+                onChange={setRemember}
+                customerName={item.customerName}
+                risky={needsAck}
+              />
+            )}
+            {needsAck ? (
+              <ActivityInfoBanner serviceType={item.serviceType}>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
-                    {decide.isPending ? <Loader2 className="size-4 animate-spin" /> : HEDGE_BANNER.allowButton}
+                    {decide.isPending ? <Loader2 className="size-4 animate-spin" /> : ACTIVITY_BANNERS.heckenschnitt.allowButton}
                   </Button>
                   <Button variant="outline" disabled={decide.isPending} onClick={() => decide.mutate("decline")}>
-                    {HEDGE_BANNER.declineButton}
+                    {ACTIVITY_BANNERS.heckenschnitt.declineButton}
                   </Button>
                 </div>
-                {!confirmed && <p className="text-xs text-muted-foreground">{HEDGE_BANNER.needsCheckHint}</p>}
-              </HedgeInfoBanner>
+                {!confirmed && <p className="text-xs text-muted-foreground">{ACTIVITY_BANNERS.heckenschnitt.needsCheckHint}</p>}
+              </ActivityInfoBanner>
             ) : (
               <div className="flex flex-wrap gap-2">
                 <Button disabled={!confirmed || decide.isPending} onClick={() => decide.mutate("approve")}>
@@ -653,6 +715,11 @@ function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => vo
             )}
           </div>
         )}
+        {item.autoReason && (
+          <p className="rounded-lg bg-primary/10 p-2 text-xs">
+            <span className="font-medium">Automatisch freigegeben.</span> {item.autoReason}
+          </p>
+        )}
         {item.status === "approved" && item.kind === "listing" && (
           <Button variant="outline" size="sm" disabled={decide.isPending} onClick={() => decide.mutate("revoke")}>
             Freigabe zurückziehen (Angebot wird offline genommen)
@@ -660,6 +727,73 @@ function OfferCard({ item, onDone }: { item: GuardianOfferItem; onDone: () => vo
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Dauerfreigaben: bei diesen Aufträgen/Auftraggebern wird nicht mehr nachgefragt. Jederzeit widerrufbar. */
+function StandingApprovals({ child, onDone }: { child: GuardianChildOverview; onDone: () => void }) {
+  const revokeFn = useServerFn(revokeStandingApprovalFn);
+  const setFn = useServerFn(setStandingApprovalFn);
+  const revoke = useMutation({
+    mutationFn: (id: string) => revokeFn({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Dauerfreigabe widerrufen. Sie werden wieder wie gewohnt gefragt.");
+      onDone();
+    },
+    onError: (e) => toast.error(decisionError(e)),
+  });
+  const toggleRisky = useMutation({
+    mutationFn: (v: { customerId: string; acknowledgesRisky: boolean }) => setFn({ data: { childId: child.childId, ...v } }),
+    onSuccess: onDone,
+    onError: (e) => toast.error(decisionError(e)),
+  });
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Dauerfreigaben</h3>
+      <p className="text-xs text-muted-foreground">
+        Hier legen Sie fest, wo Sie nicht mehr gefragt werden möchten. Sie bekommen dann nur eine Info-Mail. Uhrzeit-
+        und Dauer-Regeln (08:00–18:00 Uhr, höchstens 2 Stunden) sowie gesperrte Tätigkeiten gelten immer weiter.
+      </p>
+      {child.standing.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Keine Dauerfreigaben. Sie können sie bei einer Freigabe wählen („Wie soll es weitergehen?“) oder bei einem
+          freigegebenen Auftrag („Für diesen Auftraggeber immer erlauben“).
+        </p>
+      ) : (
+        child.standing.map((st) => (
+          <Card key={st.id} className="border-glass-border bg-glass backdrop-blur">
+            <CardContent className="flex flex-col gap-3 pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {st.scope === "customer"
+                    ? `${st.customerName ?? "Auftraggeber"}: immer erlauben`
+                    : `Auftrag „${st.gigTitle ?? "Auftrag"}“: nicht mehr fragen`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Seit {new Date(st.createdAt).toLocaleDateString("de-DE")}
+                  {st.acknowledgesRisky ? " · inkl. Tätigkeiten mit erhöhtem Risiko (z. B. Heckenschnitt)" : ""}
+                </p>
+                {st.scope === "customer" && st.customerId && (
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={st.acknowledgesRisky}
+                      disabled={toggleRisky.isPending}
+                      onChange={(e) => toggleRisky.mutate({ customerId: st.customerId!, acknowledgesRisky: e.target.checked })}
+                    />
+                    Auch Tätigkeiten mit erhöhtem Risiko einschließen (Heckenschnitt, Gartenumgestaltung, Bewässerung)
+                  </label>
+                )}
+              </div>
+              <Button variant="outline" size="sm" disabled={revoke.isPending} onClick={() => revoke.mutate(st.id)}>
+                Widerrufen
+              </Button>
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
   );
 }
 

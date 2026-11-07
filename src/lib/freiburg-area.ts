@@ -104,3 +104,30 @@ export function listAllowedCustomerPostalCodes(): string[] {
     })
     .sort();
 }
+
+/**
+ * Aufträge dürfen nur innerhalb der Stadt Freiburg im Breisgau selbst veröffentlicht werden (strenger als das
+ * Registrierungsgebiet oben, das auch das nahe Umland erlaubt). Postleitzahlen der Stadt: 79098 bis 79117.
+ */
+export const FREIBURG_CITY_POSTAL_CODES = [
+  "79098",
+  "79100",
+  "79102",
+  "79104",
+  "79106",
+  "79108",
+  "79110",
+  "79111",
+  "79112",
+  "79114",
+  "79115",
+  "79117",
+] as const;
+
+export function isFreiburgCityPostalCode(raw: string | null | undefined): boolean {
+  const plz = normalizePostalCode(raw);
+  return !!plz && (FREIBURG_CITY_POSTAL_CODES as readonly string[]).includes(plz);
+}
+
+export const FREIBURG_ONLY_ERROR =
+  "Aufträge können aktuell nur innerhalb von Freiburg im Breisgau veröffentlicht werden (Postleitzahlen 79098 bis 79117).";

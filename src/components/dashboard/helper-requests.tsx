@@ -100,7 +100,7 @@ export function HelperRequests({ intlLocale }: { intlLocale: string }) {
       if (res.awaitingGuardian) {
         toast.info("Deine Eltern müssen zustimmen", { description: res.awaitingGuardian, duration: 10000 });
       } else {
-        toast.success("Neues Gebot gesendet.");
+        toast.success("Neues Gebot gesendet.", res.autoApproved ? { description: res.autoApproved } : undefined);
       }
       setRebidId(null);
       setRebidAmount("");

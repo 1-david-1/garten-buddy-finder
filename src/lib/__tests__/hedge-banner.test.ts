@@ -19,6 +19,7 @@ describe("Heckenschnitt-Banner im Eltern-Konto", () => {
 
   it("Version der Auftrags-Freigabe wurde mit dem neuen Text erhöht", () => {
     expect(JOB_CONSENT_VERSION).not.toBe("auftrags-freigabe-2026-10-v1");
+    expect(JOB_CONSENT_VERSION).toBe("auftrags-freigabe-2026-11-v2");
   });
 
   it("normaler Heckenschnitt ist für Jugendliche möglich (Freigabe der Eltern folgt)", () => {
@@ -32,14 +33,19 @@ describe("Datenbank-Trigger für Jugend-Tätigkeiten (Reparatur-Migration)", () 
     "utf-8",
   );
 
-  it("sperrt nur Baumpflege, Gartendesign und Bewässerung - nicht mehr Heckenschnitt", () => {
-    expect(sql).toContain("IN ('baumpflege', 'gartendesign', 'bewässerung')");
-    expect(sql).not.toMatch(/IN \([^)]*'heckenschnitt'[^)]*\)/);
+  it("sperrt Baumpflege immer, Heckenschnitt/Gartendesign/Bewässerung nur bei gefährlichen Geräten", () => {
+    expect(sql).toContain("NEW.service_type = 'baumpflege'");
+    expect(sql).toContain("NEW.service_type IN ('heckenschnitt', 'gartendesign', 'bewässerung')");
+    expect(sql).not.toMatch(/NEW\.service_type IN \('baumpflege'[^)]*'(heckenschnitt|gartendesign)'/);
   });
 
-  it("lehnt gefährliches Gerät bei Heckenschnitt weiterhin ab", () => {
-    expect(sql).toContain("NEW.service_type = 'heckenschnitt'");
+  it("lehnt gefährliches Gerät weiterhin ab", () => {
     expect(sql).toContain("kettens");
     expect(sql).toContain("stangenheckenschere");
+    expect(sql).toContain("bagger");
+  });
+
+  it("prüft vorher, ob die Basis-Tabellen vorhanden sind (klare Fehlermeldung statt 'relation does not exist')", () => {
+    expect(sql).toContain("to_regclass('public.gigs') IS NULL");
   });
 });

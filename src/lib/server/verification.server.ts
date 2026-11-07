@@ -15,10 +15,14 @@ import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import {
   ACTIVITY_RISK_NOTES,
+  activityConditionsText,
   FORBIDDEN_ACTIVITIES_NOTE,
   GENERAL_RISK_NOTE,
   JOB_CONSENT_VERSION,
 } from "@/lib/consent-texts";
+import { requiresParentAcknowledgement } from "@/lib/hedge-rules";
+import { COVERAGE_TEXT, coverageReason } from "@/lib/approval-coverage";
+import type { RememberChoice } from "@/lib/server/standing-approvals.server";
 import { jobEnd, requiresNewApproval, type JobSnapshot } from "@/lib/job-snapshot";
 import { guardianHintForCustomer, type GuardianRequestCode, type GuardianRequestHint } from "@/lib/job-approval-gaps";
 
@@ -443,6 +447,21 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
     throw new JobApprovalRequired("Es ist keine E-Mail-Adresse deiner Eltern hinterlegt.");
   }
 
+  // Vereinfachung: Nicht bei jedem Schritt fragen. Gefragt wurde schon bei der ersten Annahme (dem Gebot); am Ende nur
+  // dann noch einmal, wenn verhandelt wurde. Mit Dauerfreigabe der Eltern gar nicht.
+  const childDisplayName = profile.display_name?.trim() || "Ihr Kind";
+  if (
+    await coverJobApprovalIfPossible({
+      userId,
+      guardianUserId: link.guardian_user_id,
+      details,
+      recipients,
+      childName: childDisplayName,
+    })
+  ) {
+    return;
+  }
+
   await supabaseAdmin
     .from("verification_requests")
     .update({ status: "cancelled", decided_at: new Date().toISOString() })
@@ -484,6 +503,7 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
     previewText: `Auftragsfreigabe für ${childName}: ${details.activity} (${details.dateLabel})`,
     bodyLines: [
       `Für <strong>${child}</strong> liegt folgende Auftragsanfrage vor. Als Erziehungsberechtigte/r bitten wir Sie, die Angaben gemeinsam mit ${child} zu prüfen:`,
+      "Wenn Sie dem Auftraggeber vertrauen, können Sie im Eltern-Konto festlegen, bei diesem Auftrag oder bei allen Aufträgen dieses Auftraggebers nicht mehr gefragt zu werden.",
     ],
     infoTable: [
       { label: "Tätigkeit", value: `${e(details.activity)} – ${e(details.title)}${details.description ? ` (${e(details.description)})` : ""}` },
@@ -492,6 +512,9 @@ export async function ensureJobApproval(userId: string, gigId: string): Promise<
       { label: "Termin & Zeit", value: `${e(details.dateLabel)}, ${e(details.startLabel)} – ${e(details.endLabel)} (ca. ${e(details.durationLabel)})` },
       { label: "Vergütung", value: details.priceCents > 0 ? formatEuro(details.priceCents) : "nicht angegeben" },
       { label: "Besondere Risiken", value: e(details.risks) },
+      ...(requiresParentAcknowledgement(details.serviceType)
+        ? [{ label: "Bedingungen für diese Tätigkeit", value: e(activityConditionsText(details.serviceType)) }]
+        : []),
       { label: "Verbotene Tätigkeiten", value: e(FORBIDDEN_ACTIVITIES_NOTE) },
     ],
     ctaLabel: "Auftrag im Eltern-Konto freigeben",
@@ -569,8 +592,10 @@ export async function decideJobApprovalAsGuardian(
   guardianUserId: string,
   requestId: string,
   decision: "approve" | "decline" | "revoke",
-  /** Heckenschnitt: Eltern bestätigen ausdrücklich Heckenhöhe und Gerät (siehe HEDGE_YOUTH_CONDITIONS) */
+  /** Tätigkeiten mit erhöhtem Risiko (Heckenschnitt u. a.): Eltern bestätigen die Bedingungen ausdrücklich ("Trotzdem erlauben") */
   activityChecked = false,
+  /** Dauerfreigabe: nur dieses Mal fragen / für diesen Auftrag nicht mehr fragen / für diesen Auftraggeber immer erlauben */
+  remember: RememberChoice = "none",
 ): Promise<{ state: "approved" | "declined" }> {
   const { data: request } = await supabaseAdmin
     .from("verification_requests")
@@ -629,11 +654,14 @@ export async function decideJobApprovalAsGuardian(
 
   const approved = decision === "approve";
 
-  // Heckenschnitt ist mit Zustimmung der Eltern möglich - aber nur, wenn die Hecke nicht zu hoch ist und
-  // kein sehr gefährliches Gerät genutzt wird. Das müssen die Eltern ausdrücklich bestätigen.
+  // Tätigkeiten mit erhöhtem Risiko (Heckenschnitt, Gartenumgestaltung, Bewässerung) sind mit Zustimmung der Eltern
+  // möglich - die Bedingungen müssen sie ausdrücklich bestätigen. Baumpflege und gefährliche Geräte sperrt die Datenbank
+  // immer, auch mit Zustimmung.
+  let approvedServiceType: string | null = null;
   if (approved) {
     const job = await loadJobDetails(request.gig_id);
-    if (job?.serviceType === "heckenschnitt" && !activityChecked) {
+    approvedServiceType = job?.serviceType ?? null;
+    if (requiresParentAcknowledgement(job?.serviceType) && !activityChecked) {
       throw new VerificationError("activity_check_required");
     }
   }
@@ -657,9 +685,20 @@ export async function decideJobApprovalAsGuardian(
     .update({ status: approved ? "approved" : "declined", decided_at: nowIso })
     .eq("id", request.id);
   await recordJobConsent(guardianUserId, request, approved ? "approved" : "declined", {
-    // Heckenschnitt: Die ausdrückliche Bestätigung ("Trotzdem erlauben") wird im Protokoll festgehalten.
+    // Die ausdrückliche Bestätigung ("Trotzdem erlauben") wird im Protokoll festgehalten.
     hedgeConditionsConfirmed: approved && activityChecked,
   });
+  if (approved && remember !== "none" && gig && approvedServiceType) {
+    const { rememberDecision } = await import("@/lib/server/standing-approvals.server");
+    await rememberDecision({
+      guardianUserId,
+      childId: request.user_id,
+      gigId: request.gig_id,
+      customerId: gig.customer_id,
+      serviceType: approvedServiceType,
+      remember,
+    });
+  }
   await notifyHelperAboutJob(request.user_id, gig?.title ?? "Auftrag", approved);
   if (!approved && gig) {
     // Nicht freigegeben: Auftrag wieder öffnen / abbrechen und den Kunden informieren (vorher erfuhr er nichts).
@@ -677,10 +716,17 @@ async function recordJobConsent(
   guardianUserId: string,
   request: { id: string; user_id: string; gig_id: string | null },
   result: "approved" | "declined" | "revoked",
-  extra: { hedgeConditionsConfirmed?: boolean } = {},
+  extra: { hedgeConditionsConfirmed?: boolean; autoReason?: string } = {},
 ) {
   if (!request.gig_id) return;
   const job = await loadJobDetails(request.gig_id);
+  const snapshot = {
+    ...(job ?? {}),
+    ...(requiresParentAcknowledgement(job?.serviceType) && extra.hedgeConditionsConfirmed
+      ? { hedgeConditionsConfirmed: true, activityConditionsConfirmed: true }
+      : {}),
+    ...(extra.autoReason ? { autoApproved: extra.autoReason } : {}),
+  };
   await supabaseAdmin.from("job_consents").insert({
     guardian_user_id: guardianUserId,
     child_id: request.user_id,
@@ -688,12 +734,100 @@ async function recordJobConsent(
     request_id: request.id,
     result,
     consent_text_version: JOB_CONSENT_VERSION,
-    job_snapshot: (
-      job?.serviceType === "heckenschnitt" && extra.hedgeConditionsConfirmed
-        ? { ...job, hedgeConditionsConfirmed: true }
-        : (job ?? {})
-    ) as never,
+    job_snapshot: snapshot as never,
   });
+}
+
+/**
+ * Nicht bei jedem Schritt fragen: Ist die Freigabe schon durch eine frühere Entscheidung der Eltern gedeckt
+ * (Dauerfreigabe, oder gleicher Stand wie bei der ersten Freigabe ohne Verhandlung), wird sie automatisch erteilt,
+ * im Einwilligungsprotokoll festgehalten und die Eltern per E-Mail informiert. Gibt true zurück, wenn gedeckt.
+ * Die Datenbank erzwingt unabhängig davon weiter: Uhrzeit 08:00-18:00, höchstens 2 Stunden, gesperrte Tätigkeiten.
+ */
+async function coverJobApprovalIfPossible(input: {
+  userId: string;
+  guardianUserId: string;
+  details: NonNullable<Awaited<ReturnType<typeof loadJobDetails>>>;
+  recipients: string[];
+  childName: string;
+}): Promise<boolean> {
+  const { userId, details } = input;
+  const gigId = details.gigId;
+  const [{ findStandingApproval }, { loadFirstApprovedBid }] = await Promise.all([
+    import("@/lib/server/standing-approvals.server"),
+    import("@/lib/server/youth-offers.server"),
+  ]);
+  const [standing, first] = await Promise.all([
+    findStandingApproval(userId, details.customerId, gigId),
+    loadFirstApprovedBid(userId, gigId),
+  ]);
+  const reason = coverageReason({
+    standing,
+    first,
+    final: {
+      gigId,
+      customerId: details.customerId,
+      priceCents: details.priceCents,
+      serviceType: details.serviceType,
+      location: details.location,
+      description: details.description,
+      when: details.when,
+    },
+  });
+  if (!reason) return false;
+
+  const nowIso = new Date().toISOString();
+  await supabaseAdmin
+    .from("verification_requests")
+    .update({ status: "cancelled", decided_at: nowIso })
+    .eq("kind", "job_approval")
+    .eq("gig_id", gigId)
+    .eq("user_id", userId)
+    .eq("status", "pending");
+
+  const { data: created, error } = await supabaseAdmin
+    .from("verification_requests")
+    .insert({
+      user_id: userId,
+      gig_id: gigId,
+      kind: "job_approval",
+      status: "approved",
+      decided_at: nowIso,
+      guardian_email: input.recipients[0],
+      expires_at: new Date(Date.now() + JOB_APPROVAL_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+      documents: { snapshot: toSnapshot(details), consentVersion: JOB_CONSENT_VERSION, auto: reason },
+    })
+    .select("id, user_id, gig_id")
+    .single();
+  if (error || !created) throw error ?? new Error("insert_failed");
+
+  await recordJobConsent(input.guardianUserId, created, "approved", { autoReason: reason });
+
+  const e = escapeHtml;
+  const child = e(input.childName);
+  const heading = `Auftrag für ${input.childName} automatisch freigegeben`;
+  const html = emailTemplate({
+    badge: "Jugendschutz & Information",
+    heading,
+    greeting: "Liebe Erziehungsberechtigte,",
+    previewText: heading,
+    bodyLines: [
+      `Der Auftrag von <strong>${child}</strong> ist vereinbart und wurde automatisch freigegeben. ${e(COVERAGE_TEXT[reason])}`,
+      "Sie müssen nichts tun. Wenn Sie das nicht möchten, können Sie die Dauerfreigabe im Eltern-Konto jederzeit widerrufen.",
+    ],
+    infoTable: [
+      { label: "Tätigkeit", value: `${e(details.activity)} – ${e(details.title)}` },
+      { label: "Auftraggeber", value: `${e(details.customerName)} (${details.customerVerified ? "Identität geprüft" : "nicht verifiziert"})` },
+      { label: "Ort", value: e(details.location) },
+      { label: "Termin & Zeit", value: `${e(details.dateLabel)}, ${e(details.startLabel)} – ${e(details.endLabel)} (ca. ${e(details.durationLabel)})` },
+      { label: "Vergütung", value: details.priceCents > 0 ? formatEuro(details.priceCents) : "nicht angegeben" },
+    ],
+    ctaLabel: "Eltern-Konto öffnen",
+    ctaUrl: `${getSiteUrl()}/eltern`,
+    footer: "Diese Nachricht dient nur Ihrer Information.",
+  });
+  await Promise.all(input.recipients.map((to) => sendEmail({ to, subject: heading, html }).catch(() => undefined)));
+  return true;
 }
 
 async function notifyHelperAboutJob(userId: string, jobTitle: string, approved: boolean) {

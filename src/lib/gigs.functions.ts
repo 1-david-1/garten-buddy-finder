@@ -53,8 +53,24 @@ export const createGig = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => parseInput(gigInputSchema, data))
   .handler(async ({ context, data }) => {
     const { enforceUserRateLimit } = await import("@/lib/server/rate-limit.server");
-    await enforceUserRateLimit(context.userId, "create_gig", 20, 3600);
+    const { GIG_LIMITS, checkGigPosting, describeGigIssues, duplicateKey } = await import("@/lib/gig-quality");
+    await enforceUserRateLimit(context.userId, "create_gig", GIG_LIMITS.perHour, 3600);
+    await enforceUserRateLimit(context.userId, "create_gig_day", GIG_LIMITS.perDay, 86400);
     const { supabase, userId } = context;
+
+    // Qualität und Spam: nur Freiburg, echte Adressstruktur (mit Beispielen), sinnvoller Inhalt, keine Kontaktdaten.
+    const check = checkGigPosting({
+      title: data.title,
+      description: data.description,
+      address: data.address,
+      postalCode: data.postalCode,
+      budgetCents: data.budgetCents,
+      durationMinutes: data.durationMinutes,
+      scheduledAt: data.scheduledAt,
+    });
+    if (!check.ok) throw new Error(describeGigIssues(check));
+    const cleanAddress = check.address.normalizedAddress as string;
+    const cleanPostalCode = check.address.postalCode as string;
 
     // Kinderschutz: Regeln akzeptiert + Eignung der Tätigkeit bestätigt (mit Auftrags-ID und Zeitpunkt gespeichert).
     if (data.safetyConfirmed !== true) {
@@ -80,6 +96,27 @@ export const createGig = createServerFn({ method: "POST" })
       ? data.allowedAgeGroups
       : data.allowedAgeGroups.filter((g) => g !== "helper_youth");
 
+    // Begrenzung gleichzeitig offener Aufträge und Schutz vor doppelten Einträgen
+    const since = new Date(Date.now() - GIG_LIMITS.duplicateDays * 24 * 3600 * 1000).toISOString();
+    const [{ count: openCount }, { data: recent }] = await Promise.all([
+      supabase.from("gigs").select("id", { count: "exact", head: true }).eq("customer_id", userId).eq("status", "open"),
+      supabase
+        .from("gigs")
+        .select("title, address, postal_code")
+        .eq("customer_id", userId)
+        .neq("status", "cancelled")
+        .gte("created_at", since),
+    ]);
+    if ((openCount ?? 0) >= GIG_LIMITS.maxOpen) {
+      throw new Error(
+        `Du hast schon ${GIG_LIMITS.maxOpen} offene Aufträge. Bitte schließe oder storniere einen, bevor du einen neuen veröffentlichst.`,
+      );
+    }
+    const newKey = duplicateKey(data.title, cleanAddress, cleanPostalCode);
+    if ((recent ?? []).some((g) => duplicateKey(g.title, g.address, g.postal_code) === newKey)) {
+      throw new Error("Diesen Auftrag hast du an dieser Adresse schon veröffentlicht. Bitte nutze den vorhandenen Auftrag.");
+    }
+
     const { data: gig, error } = await supabase
       .from("gigs")
       .insert({
@@ -88,8 +125,8 @@ export const createGig = createServerFn({ method: "POST" })
         description: data.description,
         service_type: data.serviceType,
         budget_cents: data.budgetCents,
-        address: data.address,
-        postal_code: data.postalCode,
+        address: cleanAddress,
+        postal_code: cleanPostalCode,
         scheduled_at: data.scheduledAt,
         duration_minutes: data.durationMinutes,
         allowed_age_groups: allowedAgeGroups,
@@ -98,7 +135,7 @@ export const createGig = createServerFn({ method: "POST" })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || "Der Auftrag konnte nicht veröffentlicht werden.");
 
     const { error: confirmError } = await supabase.from("gig_safety_confirmations").insert({
       gig_id: gig.id,
@@ -166,6 +203,19 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
       listingId = service.listingId;
     }
 
+    // Adresse: nur Freiburg, Straße + Hausnummer + PLZ (PLZ aus dem Feld, der Adresse oder dem Profil)
+    const { checkFreiburgAddress, describeAddressIssues, splitAddress } = await import("@/lib/address-rules");
+    const { checkBookingContent } = await import("@/lib/gig-quality");
+    let bookingPlz: string | null = data.postalCode ?? splitAddress(data.address).postalCode;
+    if (!bookingPlz) {
+      const { data: me } = await supabase.from("profiles").select("postal_code").eq("id", userId).maybeSingle();
+      bookingPlz = me?.postal_code ?? null;
+    }
+    const addressCheck = checkFreiburgAddress(data.address, bookingPlz);
+    if (!addressCheck.ok) throw new Error(describeAddressIssues(addressCheck));
+    const noteIssues = checkBookingContent({ description: data.description, scheduledAt: data.scheduledAt });
+    if (noteIssues.length > 0) throw new Error(noteIssues.map((i) => i.message).join(" "));
+
     const { data: gig, error } = await supabase
       .from("gigs")
       .insert({
@@ -174,7 +224,8 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
         description: data.description || null,
         service_type: serviceType,
         budget_cents: budgetCents,
-        address: data.address,
+        address: addressCheck.normalizedAddress,
+        postal_code: addressCheck.postalCode,
         scheduled_at: data.scheduledAt,
         duration_minutes: 60,
         assigned_helper_id: data.helperId,
@@ -184,7 +235,7 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || "Die Buchungsanfrage konnte nicht gesendet werden.");
 
     // Zahlungsvorgang wie bei Geboten und Angebots-Buchungen (vorher fehlte er bei Direktbuchungen).
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

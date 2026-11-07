@@ -20,6 +20,7 @@ import { emailTemplate, getSiteUrl, sendEmail } from "@/lib/server/email.server"
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import { GUARDIAN_CONSENT_VERSION } from "@/lib/consent-texts";
 import { listOffersForChild, type GuardianOfferItem } from "@/lib/server/youth-offers.server";
+import { listStandingApprovals, type StandingApprovalItem } from "@/lib/server/standing-approvals.server";
 import { deriveVerificationStatus, type VerificationStatus } from "@/lib/verification-status";
 import {
   escapeHtml,
@@ -438,6 +439,8 @@ export interface GuardianChildOverview {
   /** Anfragen an das Kind, die noch auf fehlende Angaben warten (damit nichts unsichtbar bleibt). */
   openRequests: GuardianOpenRequest[];
   blockedUserIds: string[];
+  /** Dauerfreigaben ("für diesen Auftrag/Auftraggeber nicht mehr fragen"), jederzeit widerrufbar */
+  standing: StandingApprovalItem[];
 }
 
 export async function getGuardianOverview(
@@ -517,6 +520,7 @@ export async function getGuardianOverview(
       offers: await listOffersForChild(link.child_id),
       openRequests,
       blockedUserIds: (blocks ?? []).map((b) => b.blocked_id),
+      standing: await listStandingApprovals(guardianUserId, link.child_id),
     });
   }
   return { children, verification };

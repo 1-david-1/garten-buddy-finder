@@ -65,6 +65,8 @@ export const directBookingSchema = z.object({
   serviceType: serviceTypeSchema,
   description: z.string().trim().max(5000),
   address: z.string().trim().min(1).max(250),
+  /** Freiburger PLZ; fehlt sie, wird sie aus der Adresse oder dem Profil abgeleitet */
+  postalCode: z.string().trim().regex(/^\d{5}$/).optional(),
   scheduledAt: isoDateTimeSchema,
   budgetCents: centsSchema,
   /** Angebot des Helfers, das gebucht wird: Preis und Leistung kommen dann vom Angebot, nicht vom Browser */

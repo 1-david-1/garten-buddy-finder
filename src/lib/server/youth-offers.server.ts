@@ -8,8 +8,10 @@
 // Die Datenbank erzwingt dasselbe (Trigger/Policy in 20261024000100_youth_offer_approvals.sql).
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { emailTemplate, escapeHtml, getSiteUrl, sendEmail } from "@/lib/server/email.server";
-import { HEDGE_YOUTH_CONDITIONS } from "@/lib/consent-texts";
-import { mentionsDangerousHedgeEquipment, YOUTH_BLOCKED_SERVICE_TYPES } from "@/lib/hedge-rules";
+import { activityConditionsText } from "@/lib/consent-texts";
+import { mentionsDangerousEquipment, requiresParentAcknowledgement, YOUTH_BLOCKED_SERVICE_TYPES } from "@/lib/hedge-rules";
+import { bidCoverageReason, COVERAGE_TEXT, type BidCoverageReason, type FirstApproval } from "@/lib/approval-coverage";
+import { findStandingApproval, rememberDecision, type RememberChoice } from "@/lib/server/standing-approvals.server";
 import { notifyUserByEmail } from "@/lib/server/notifications.server";
 import {
   formatEuro,
@@ -48,6 +50,8 @@ export interface GuardianOfferItem {
   photoCount: number;
   /** technischer Wert der Tätigkeit (z. B. "heckenschnitt") */
   serviceType: string;
+  /** Nur Gebot: Wurde automatisch freigegeben (Dauerfreigabe oder bereits freigegebener Auftrag)? Begründung als Text. */
+  autoReason: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,9 +206,9 @@ export async function ensureListingApproval(userId: string, listingId: string): 
   if ((YOUTH_BLOCKED_SERVICE_TYPES as readonly string[]).includes(l.service_type)) {
     throw new OfferApprovalRequired("Diese Tätigkeit wird Jugendlichen nicht vermittelt und kann nicht angeboten werden.");
   }
-  if (l.service_type === "heckenschnitt" && mentionsDangerousHedgeEquipment(l.title, l.description)) {
+  if (requiresParentAcknowledgement(l.service_type) && mentionsDangerousEquipment(l.title, l.description)) {
     throw new OfferApprovalRequired(
-      "Heckenschnitt ist für Jugendliche nur ohne sehr gefährliche Geräte (z. B. Motor-/Kettensäge, Benzin- oder Stangenheckenschere) und ohne Leiter möglich. Bitte ändere Titel und Beschreibung entsprechend.",
+      "Diese Tätigkeit ist für Jugendliche nur ohne sehr gefährliche Geräte (z. B. Motor-/Kettensäge, Benzin- oder Stangenheckenschere, Bagger) und ohne Leiter oder Gerüst möglich. Bitte ändere Titel und Beschreibung entsprechend.",
     );
   }
 
@@ -260,7 +264,9 @@ export async function ensureListingApproval(userId: string, listingId: string): 
       ...(l.description ? [{ label: "Beschreibung", value: e(l.description) }] : []),
       { label: "Preis", value: e(listingPriceLabel(l)) },
       { label: "Ort", value: e([l.postal_code, l.location].filter(Boolean).join(" ") || "—") },
-      ...(l.service_type === "heckenschnitt" ? [{ label: "Heckenschnitt", value: e(HEDGE_YOUTH_CONDITIONS) }] : []),
+      ...(requiresParentAcknowledgement(l.service_type)
+        ? [{ label: "Bedingungen für diese Tätigkeit", value: e(activityConditionsText(l.service_type)) }]
+        : []),
     ],
     cta: "Angebot im Eltern-Konto prüfen",
   });
@@ -273,6 +279,153 @@ export async function ensureListingApproval(userId: string, listingId: string): 
 // ---------------------------------------------------------------------------
 // Gebot auf einen Auftrag
 // ---------------------------------------------------------------------------
+
+/** Auftrag ist für das Gebot eines Jugendlichen nicht zulässig (nie vermittelte Tätigkeit oder gefährliches Gerät). */
+function assertBidAllowed(job: { serviceType: string; title: string; description: string | null }) {
+  if ((YOUTH_BLOCKED_SERVICE_TYPES as readonly string[]).includes(job.serviceType)) {
+    throw new OfferApprovalRequired("Diese Tätigkeit wird Jugendlichen nicht vermittelt.");
+  }
+  if (requiresParentAcknowledgement(job.serviceType) && mentionsDangerousEquipment(job.title, job.description)) {
+    throw new OfferApprovalRequired(
+      "Dieser Auftrag ist für Jugendliche nicht geeignet (sehr gefährliches Gerät oder große Höhe).",
+    );
+  }
+}
+
+/** Das zuletzt von den Eltern freigegebene Gebot des Kindes für diesen Auftrag = der Stand, den sie gesehen haben. */
+export async function loadFirstApprovedBid(childId: string, gigId: string): Promise<(FirstApproval & { approvalId: string }) | null> {
+  const { data } = await supabaseAdmin
+    .from("youth_offer_approvals")
+    .select("id, bid_cents, snapshot, decided_by")
+    .eq("kind", "bid")
+    .eq("child_id", childId)
+    .eq("gig_id", gigId)
+    .eq("status", "approved")
+    .not("decided_by", "is", null) // nur Freigaben, die die Eltern selbst erteilt haben, nicht automatische
+    .order("decided_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  const s = (data.snapshot ?? {}) as { serviceType?: string; location?: string; description?: string | null; when?: string };
+  return {
+    approvalId: data.id,
+    bidCents: data.bid_cents,
+    serviceType: s.serviceType ?? null,
+    location: s.location ?? null,
+    description: s.description ?? null,
+    when: s.when ?? null,
+  };
+}
+
+/** Info an die Eltern, wenn etwas automatisch freigegeben wurde. Keine Aktion nötig. */
+async function sendAutoApprovalInfo(input: {
+  recipients: string[];
+  childName: string;
+  heading: string;
+  intro: string;
+  rows: { label: string; value: string }[];
+}) {
+  const html = emailTemplate({
+    badge: "Jugendschutz & Information",
+    heading: input.heading,
+    greeting: "Liebe Erziehungsberechtigte,",
+    previewText: input.heading,
+    bodyLines: [input.intro, "Sie müssen nichts tun. Wenn Sie das nicht möchten, können Sie die Dauerfreigabe im Eltern-Konto jederzeit widerrufen."],
+    infoTable: input.rows,
+    ctaLabel: "Eltern-Konto öffnen",
+    ctaUrl: `${getSiteUrl()}/eltern`,
+    footer: "Diese Nachricht dient nur Ihrer Information.",
+  });
+  await Promise.all(input.recipients.map((to) => sendEmail({ to, subject: input.heading, html }).catch(() => undefined)));
+}
+
+/**
+ * Prüft, ob das Gebot ohne neue Nachfrage bei den Eltern abgegeben werden darf:
+ *  - Dauerfreigabe für den Auftrag oder den Auftraggeber, oder
+ *  - die Eltern haben diesen Auftrag schon freigegeben und es ist nur ein weiteres Gebot derselben Verhandlung.
+ * Wenn ja, wird das Gebot sofort abgegeben und die Eltern werden nur informiert. Sonst null (dann requestBidApproval).
+ */
+export async function tryAutoApproveBid(
+  userId: string,
+  input: { gigId: string; bidCents: number; message: string | null },
+): Promise<BidCoverageReason | null> {
+  const ctx = await loadChildContext(userId);
+  const job = await loadJobDetails(input.gigId);
+  if (!job || !["open", "negotiating"].includes(job.gigStatus)) return null;
+  try {
+    assertBidAllowed(job);
+  } catch {
+    return null; // requestBidApproval meldet den passenden Grund
+  }
+
+  const [standing, first] = await Promise.all([
+    findStandingApproval(userId, job.customerId, input.gigId),
+    loadFirstApprovedBid(userId, input.gigId),
+  ]);
+  const reason = bidCoverageReason({
+    standing,
+    first,
+    job: {
+      gigId: input.gigId,
+      customerId: job.customerId,
+      serviceType: job.serviceType,
+      location: job.location,
+      description: job.description,
+      when: job.when,
+    },
+  });
+  if (!reason) return null;
+
+  const nowIso = new Date().toISOString();
+  const { data: created, error } = await supabaseAdmin
+    .from("youth_offer_approvals")
+    .insert({
+      child_id: userId,
+      kind: "bid",
+      gig_id: input.gigId,
+      bid_cents: input.bidCents,
+      message: input.message,
+      status: "approved",
+      decided_at: nowIso,
+      expires_at: expiresAt(),
+      snapshot: {
+        title: job.title,
+        activity: job.activity,
+        serviceType: job.serviceType,
+        description: job.description,
+        location: job.location,
+        when: job.when,
+        auto: reason,
+      },
+    })
+    .select("*")
+    .single();
+  if (error || !created) throw error ?? new Error("insert_failed");
+
+  try {
+    await placeApprovedBid(created as unknown as ApprovalRow);
+  } catch (err) {
+    // Gebot konnte nicht abgegeben werden: Freigabe zurücknehmen, damit nichts Unfertiges stehen bleibt
+    await supabaseAdmin.from("youth_offer_approvals").update({ status: "cancelled", decided_at: nowIso }).eq("id", created.id);
+    throw err;
+  }
+
+  const e = escapeHtml;
+  await sendAutoApprovalInfo({
+    recipients: ctx.recipients,
+    childName: ctx.childName,
+    heading: `${ctx.childName} hat ein Gebot abgegeben (automatisch freigegeben)`,
+    intro: `<strong>${e(ctx.childName)}</strong> hat ein Gebot auf einen Auftrag abgegeben. ${e(COVERAGE_TEXT[reason])}`,
+    rows: [
+      { label: "Auftrag", value: `${e(job.activity)} – ${e(job.title)}` },
+      { label: "Auftraggeber", value: `${e(job.customerName)} (${job.customerVerified ? "Identität geprüft" : "nicht verifiziert"})` },
+      { label: "Ort", value: e(job.location) },
+      { label: "Termin", value: e(job.when) },
+      { label: "Gebot", value: formatEuro(input.bidCents) },
+    ],
+  });
+  return reason;
+}
 
 /**
  * Jugendliche/r möchte ein Gebot abgeben: Das Gebot wird NICHT abgegeben, sondern den Eltern vorgelegt.
@@ -289,14 +442,7 @@ export async function requestBidApproval(
     throw new OfferApprovalRequired("Auf diesen Auftrag kann nicht mehr geboten werden.");
   }
 
-  if ((YOUTH_BLOCKED_SERVICE_TYPES as readonly string[]).includes(job.serviceType)) {
-    throw new OfferApprovalRequired("Diese Tätigkeit wird Jugendlichen nicht vermittelt.");
-  }
-  if (job.serviceType === "heckenschnitt" && mentionsDangerousHedgeEquipment(job.title, job.description)) {
-    throw new OfferApprovalRequired(
-      "Dieser Heckenschnitt ist für Jugendliche nicht geeignet (sehr gefährliches Gerät oder große Höhe).",
-    );
-  }
+  assertBidAllowed(job);
 
   const { data: dup } = await supabaseAdmin
     .from("youth_offer_approvals")
@@ -350,7 +496,7 @@ export async function requestBidApproval(
     childName: ctx.childName,
     badge: "Jugendschutz & Gebotsfreigabe",
     heading: `${ctx.childName} möchte ein Gebot abgeben`,
-    intro: `<strong>${e(ctx.childName)}</strong> möchte auf den folgenden Auftrag ein Gebot abgeben. Das Gebot wird erst abgegeben, wenn Sie es im Eltern-Konto freigeben. Bitte besprechen Sie es gemeinsam:`,
+    intro: `<strong>${e(ctx.childName)}</strong> möchte auf den folgenden Auftrag ein Gebot abgeben. Das Gebot wird erst abgegeben, wenn Sie es im Eltern-Konto freigeben. Danach fragen wir Sie nur noch einmal am Ende, falls noch verhandelt wird – im Eltern-Konto können Sie auch festlegen, nicht mehr gefragt zu werden. Bitte besprechen Sie es gemeinsam:`,
     rows: [
       { label: "Auftrag", value: `${e(job.activity)} – ${e(job.title)}` },
       ...(job.description ? [{ label: "Beschreibung", value: e(job.description) }] : []),
@@ -359,7 +505,9 @@ export async function requestBidApproval(
       { label: "Termin", value: e(job.when) },
       { label: "Gebot", value: formatEuro(input.bidCents) },
       ...(input.message ? [{ label: "Nachricht", value: e(input.message) }] : []),
-      ...(job.serviceType === "heckenschnitt" ? [{ label: "Heckenschnitt", value: e(HEDGE_YOUTH_CONDITIONS) }] : []),
+      ...(requiresParentAcknowledgement(job.serviceType)
+        ? [{ label: "Bedingungen für diese Tätigkeit", value: e(activityConditionsText(job.serviceType)) }]
+        : []),
     ],
     cta: "Gebot im Eltern-Konto prüfen",
   });
@@ -378,6 +526,7 @@ export async function decideOfferAsGuardian(
   approvalId: string,
   decision: "approve" | "decline" | "revoke",
   activityChecked = false,
+  remember: RememberChoice = "none",
 ): Promise<{ state: "approved" | "declined" }> {
   const { data: a } = await supabaseAdmin
     .from("youth_offer_approvals")
@@ -430,7 +579,7 @@ export async function decideOfferAsGuardian(
 
   // approve
   if (link.paused_at) throw new VerificationError("account_paused");
-  if ((a.snapshot as { serviceType?: string } | null)?.serviceType === "heckenschnitt" && !activityChecked) {
+  if (requiresParentAcknowledgement((a.snapshot as { serviceType?: string } | null)?.serviceType) && !activityChecked) {
     throw new VerificationError("activity_check_required");
   }
   if (a.kind === "listing") {
@@ -462,6 +611,20 @@ export async function decideOfferAsGuardian(
       .from("youth_offer_approvals")
       .update({ status: "approved", decided_at: nowIso, decided_by: guardianUserId })
       .eq("id", a.id);
+    // Dauerfreigabe, falls die Eltern "nicht mehr fragen" gewählt haben
+    if (remember !== "none" && a.gig_id) {
+      const job = await loadJobDetails(a.gig_id);
+      if (job) {
+        await rememberDecision({
+          guardianUserId,
+          childId: a.child_id,
+          gigId: a.gig_id,
+          customerId: job.customerId,
+          serviceType: job.serviceType,
+          remember,
+        });
+      }
+    }
   }
   await notifyChild(a.child_id, a.kind, titleOf(a), true, false);
   return { state: "approved" };
@@ -563,6 +726,11 @@ async function notifyChild(childId: string, kind: string, title: string, approve
 // Eltern-Konto: Übersicht
 // ---------------------------------------------------------------------------
 
+function autoReasonText(reason: string | undefined | null): string | null {
+  if (!reason) return null;
+  return (COVERAGE_TEXT as Record<string, string>)[reason] ?? "Automatisch freigegeben.";
+}
+
 export async function listOffersForChild(childId: string): Promise<GuardianOfferItem[]> {
   const { data: rows } = await supabaseAdmin
     .from("youth_offer_approvals")
@@ -608,6 +776,7 @@ export async function listOffersForChild(childId: string): Promise<GuardianOffer
         when: null,
         photoCount: (s.photos ?? []).length,
         serviceType: s.serviceType ?? "",
+        autoReason: null,
       });
     } else {
       const job = a.gig_id ? await loadJobDetails(a.gig_id) : null;
@@ -629,6 +798,7 @@ export async function listOffersForChild(childId: string): Promise<GuardianOffer
         when: job?.when ?? s.when ?? null,
         photoCount: 0,
         serviceType: (s as { serviceType?: string }).serviceType ?? job?.serviceType ?? "",
+        autoReason: autoReasonText((a.snapshot as { auto?: string } | null)?.auto),
       });
     }
   }

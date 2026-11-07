@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -27,6 +27,9 @@ import {
 } from "@/components/ui/select";
 import { createGig } from "@/lib/gigs.functions";
 import { GIG_SAFETY_TEXT } from "@/lib/consent-texts";
+import { addressExample, suggestStreets } from "@/lib/address-rules";
+import { FREIBURG_CITY_POSTAL_CODES } from "@/lib/freiburg-area";
+import { GIG_LIMITS, checkGigPosting, type GigIssue } from "@/lib/gig-quality";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -53,6 +56,26 @@ const AGE_GROUPS = [
   },
 ];
 
+/** Hinweise unter einem Feld, jeweils mit einem Beispiel, wie es richtig aussieht. */
+function FieldIssues({ issues }: { issues: GigIssue[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <ul className="mt-1 space-y-0.5 text-xs text-destructive" role="alert">
+      {issues.map((i) => (
+        <li key={i.message}>
+          {i.message}
+          {i.example ? (
+            <>
+              {" "}
+              Beispiel: <span className="font-medium">„{i.example}“</span>
+            </>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CreateGigPage() {
   const navigate = useNavigate();
   const createGigFn = useServerFn(createGig);
@@ -72,6 +95,34 @@ function CreateGigPage() {
     "helper_adult",
     "helper_pro",
   ]);
+
+  // Sofortige Prüfung (gleiche Regeln wie auf dem Server): Freiburg, Adressaufbau, Spam, Preis, Termin
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const budgetCents = Math.round(parseFloat(budgetEuros) * 100);
+  const scheduledIso = (() => {
+    if (!scheduledDate) return null;
+    const d = new Date(`${scheduledDate}T${scheduledTime}`);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  })();
+  const check = useMemo(
+    () =>
+      checkGigPosting({
+        title,
+        description,
+        address,
+        postalCode,
+        budgetCents: Number.isFinite(budgetCents) ? budgetCents : 0,
+        durationMinutes: Math.round(parseFloat(durationHours) * 60) || 0,
+        scheduledAt: scheduledIso,
+      }),
+    [title, description, address, postalCode, budgetCents, durationHours, scheduledIso],
+  );
+  const touch = (field: string) => setTouched((t) => ({ ...t, [field]: true }));
+  const issuesFor = (field: GigIssue["field"]) =>
+    submitted || touched[field] ? check.issues.filter((i) => i.field === field) : [];
+  const streetOptions = suggestStreets(address);
+  const descriptionLength = description.trim().length;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -151,12 +202,15 @@ function CreateGigPage() {
                 </Label>
                 <Input
                   id="title"
-                  placeholder="z. B. Rasen mähen und Hecke schneiden"
+                  placeholder="z. B. Hecke schneiden im Garten (ca. 8 m)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  onBlur={() => touch("title")}
+                  maxLength={GIG_LIMITS.titleMax}
                   className="mt-1"
                   required
                 />
+                <FieldIssues issues={issuesFor("title")} />
               </div>
 
               <div>
@@ -175,32 +229,42 @@ function CreateGigPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {serviceType === "heckenschnitt" && (
+                {["heckenschnitt", "gartendesign", "bewässerung"].includes(serviceType) && (
                   <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed">
-                    <strong>Hinweis für Jugendliche als Helfer:</strong> Heckenschnitt ist mit Zustimmung der Eltern
-                    möglich, aber nur bei niedriger Hecke (ohne Leiter, ca. bis 1,5 m) und ohne sehr gefährliches Gerät
-                    (keine Motor-/Kettensäge, keine Benzin- oder Stangenheckenschere). Nennst du in Titel oder
-                    Beschreibung ein solches Gerät oder eine Leiter, wird der Auftrag Jugendlichen nicht angezeigt.
+                    <strong>Hinweis für Jugendliche als Helfer:</strong> Diese Tätigkeit ist mit ausdrücklicher Zustimmung
+                    der Eltern möglich – nur bei leichter Handarbeit (bei Heckenschnitt: niedrige Hecke ohne Leiter, ca.
+                    bis 1,5 m, Handschere oder leichte Akku-/Elektro-Heckenschere). Nennst du in Titel oder Beschreibung ein
+                    sehr gefährliches Gerät (z. B. Motor-/Kettensäge, Bagger) oder eine Leiter, wird der Auftrag
+                    Jugendlichen nicht angezeigt.
                   </p>
                 )}
-                {["baumpflege", "gartendesign", "bewässerung"].includes(serviceType) && (
+                {serviceType === "baumpflege" && (
                   <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed">
-                    Diese Tätigkeit wird Jugendlichen nicht vermittelt.
+                    Baumpflege (Klettern, Sägen, Arbeiten in der Höhe) wird Jugendlichen nicht vermittelt.
                   </p>
                 )}
               </div>
 
               <div>
                 <Label htmlFor="description" className="text-sm">
-                  Beschreibung
+                  Beschreibung *
                 </Label>
                 <Textarea
                   id="description"
-                  placeholder="Beschreibe genau was zu tun ist, Besonderheiten, benötigtes Werkzeug…"
+                  placeholder="Beschreibe genau, was zu tun ist: Größe der Fläche, Besonderheiten, vorhandenes Werkzeug … Beispiel: Die Hecke (ca. 8 m lang, 1,2 m hoch) soll zurückgeschnitten werden. Akku-Heckenschere ist vorhanden."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => touch("description")}
+                  maxLength={GIG_LIMITS.descriptionMax}
                   className="mt-1 min-h-[100px]"
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {descriptionLength < GIG_LIMITS.descriptionMin
+                    ? `Noch mindestens ${GIG_LIMITS.descriptionMin - descriptionLength} Zeichen. `
+                    : ""}
+                  Bitte keine Telefonnummern, E-Mail-Adressen oder Links – Kontakt läuft sicher über den Chat.
+                </p>
+                <FieldIssues issues={issuesFor("description")} />
               </div>
             </CardContent>
           </Card>
@@ -221,15 +285,31 @@ function CreateGigPage() {
                     htmlFor="address"
                     className="text-sm flex items-center gap-1"
                   >
-                    <MapPin className="size-3" /> Adresse *
+                    <MapPin className="size-3" /> Straße und Hausnummer *
                   </Label>
                   <Input
                     id="address"
-                    placeholder="Musterstraße 42"
+                    list="street-suggestions"
+                    autoComplete="street-address"
+                    placeholder={addressExample(0)}
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
+                    onBlur={() => touch("address")}
                     className="mt-1"
                   />
+                  <datalist id="street-suggestions">
+                    {streetOptions.map((street) => (
+                      <option key={street} value={street} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Zum Beispiel „{addressExample(0)}“, „{addressExample(1)}“ oder „{addressExample(2)}“. Ort ist immer
+                    Freiburg im Breisgau; Zusätze wie „2. OG“ bitte in die Beschreibung.
+                  </p>
+                  <FieldIssues issues={issuesFor("address")} />
+                  {(submitted || touched.address) && check.warnings.length > 0 && check.address.issues.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600">{check.warnings[0]}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="postalCode" className="text-sm">
@@ -237,11 +317,25 @@ function CreateGigPage() {
                   </Label>
                   <Input
                     id="postalCode"
-                    placeholder="79100"
+                    list="plz-list"
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    maxLength={5}
+                    placeholder="79102"
                     value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value)}
+                    onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ""))}
+                    onBlur={() => touch("postalCode")}
                     className="mt-1"
                   />
+                  <datalist id="plz-list">
+                    {FREIBURG_CITY_POSTAL_CODES.map((plz) => (
+                      <option key={plz} value={plz} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Aufträge sind aktuell nur in Freiburg im Breisgau möglich (79098 bis 79117).
+                  </p>
+                  <FieldIssues issues={issuesFor("postalCode")} />
                 </div>
               </div>
 
@@ -422,9 +516,17 @@ function CreateGigPage() {
                 </label>
               </div>
 
+              <FieldIssues issues={[...issuesFor("budget"), ...issuesFor("scheduledAt")]} />
               <Button
                 className="w-full"
-                onClick={() => mutation.mutate()}
+                onClick={() => {
+                  setSubmitted(true);
+                  if (!check.ok) {
+                    toast.error("Bitte prüfe die markierten Angaben.");
+                    return;
+                  }
+                  mutation.mutate();
+                }}
                 disabled={
                   mutation.isPending ||
                   !safetyConfirmed ||
@@ -432,7 +534,7 @@ function CreateGigPage() {
                   !serviceType ||
                   !budgetEuros ||
                   !address.trim() ||
-                  !postalCode.trim() ||
+                  postalCode.length !== 5 ||
                   allowedAgeGroups.length === 0
                 }
               >

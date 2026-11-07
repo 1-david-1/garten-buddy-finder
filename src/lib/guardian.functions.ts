@@ -127,12 +127,20 @@ export const decideJobAsGuardian = createServerFn({ method: "POST" })
         requestId: z.string().uuid(),
         decision: z.enum(["approve", "decline", "revoke"]),
         activityChecked: z.boolean().optional(),
+        /** Dauerfreigabe: "none" = nur dieses Mal, "gig" = für diesen Auftrag nicht mehr fragen, "customer" = für diesen Auftraggeber immer erlauben */
+        remember: z.enum(["none", "gig", "customer"]).optional(),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { decideJobApprovalAsGuardian } = await import("@/lib/server/verification.server");
-    return decideJobApprovalAsGuardian(context.userId, data.requestId, data.decision, data.activityChecked === true);
+    return decideJobApprovalAsGuardian(
+      context.userId,
+      data.requestId,
+      data.decision,
+      data.activityChecked === true,
+      data.remember ?? "none",
+    );
   });
 
 /** Eltern entscheiden über ein Angebot oder Gebot ihres Kindes im Marktplatz. */
@@ -144,12 +152,48 @@ export const decideOfferAsGuardianFn = createServerFn({ method: "POST" })
         approvalId: z.string().uuid(),
         decision: z.enum(["approve", "decline", "revoke"]),
         activityChecked: z.boolean().optional(),
+        remember: z.enum(["none", "gig", "customer"]).optional(),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { decideOfferAsGuardian } = await import("@/lib/server/youth-offers.server");
-    return decideOfferAsGuardian(context.userId, data.approvalId, data.decision, data.activityChecked === true);
+    return decideOfferAsGuardian(
+      context.userId,
+      data.approvalId,
+      data.decision,
+      data.activityChecked === true,
+      data.remember ?? "none",
+    );
+  });
+
+/** Dauerfreigabe für einen Auftraggeber setzen (Eltern-Konto): "für diesen Auftraggeber immer erlauben". */
+export const setStandingApprovalFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        childId: z.string().uuid(),
+        customerId: z.string().uuid(),
+        /** auch Tätigkeiten mit erhöhtem Risiko (Heckenschnitt u. a.) unter den bekannten Bedingungen */
+        acknowledgesRisky: z.boolean(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { setCustomerStanding } = await import("@/lib/server/standing-approvals.server");
+    await setCustomerStanding({ guardianUserId: context.userId, ...data });
+    return { ok: true as const };
+  });
+
+/** Dauerfreigabe widerrufen: Die Eltern werden danach wieder wie gewohnt gefragt. */
+export const revokeStandingApprovalFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { revokeStandingApproval } = await import("@/lib/server/standing-approvals.server");
+    await revokeStandingApproval(context.userId, data.id);
+    return { ok: true as const };
   });
 
 export const setChildPausedFn = createServerFn({ method: "POST" })

@@ -11,8 +11,8 @@ export const GUARDIAN_CONSENT_TEXT =
   "Ich bin gesetzliche Vertretung der minderjährigen Person und willige in die Nutzung von GreenMatch für leichte, geeignete und ungefährliche Gartenarbeiten ein. Ich weiß, dass ich jeden einzelnen Auftrag gesondert freigeben muss und dass eine allgemeine Zustimmung für künftige Aufträge nicht ausreicht. Ich kann die Einwilligung und einzelne Freigaben jederzeit widerrufen, soweit der Auftrag noch nicht begonnen hat.";
 
 /** Zustimmung zu einem einzelnen Auftrag (Eltern) */
-// v2 (2026-11): Heckenschnitt-Banner mit "Trotzdem erlauben" im Eltern-Konto (siehe HEDGE_BANNER)
-export const JOB_CONSENT_VERSION = "auftrags-freigabe-2026-11-v1";
+// v2 (2026-11): Info-Banner mit "Trotzdem erlauben" bei Tätigkeiten mit erhöhtem Risiko, Dauerfreigaben (ACTIVITY_BANNERS)
+export const JOB_CONSENT_VERSION = "auftrags-freigabe-2026-11-v2";
 
 /** Bestätigung des Auftraggebers vor JEDER Veröffentlichung eines Auftrags */
 export const GIG_SAFETY_VERSION = "auftrag-geeignet-2026-10-v1";
@@ -58,6 +58,10 @@ export const ACTIVITY_RISK_NOTES: Record<string, string> = {
     "Rasenmäher sind Maschinen mit scharfen, schnell drehenden Teilen und grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein. Bitte nur nach Absprache mit den Erziehungsberechtigten freigeben und genau prüfen, ob sie für das Alter geeignet ist.",
   heckenschnitt:
     "Heckenschnitt ist für Jugendliche nur mit Ihrer Zustimmung möglich und nur, wenn die Hecke niedrig ist (ohne Leiter erreichbar, ca. bis 1,5 m) und kein sehr gefährliches Gerät genutzt wird. Nicht erlaubt sind Motor- oder Kettensägen, Benzin- oder Stangenheckenscheren und Häcksler. Handschere oder eine leichte Akku-/Elektro-Heckenschere sind möglich; Handschuhe und Schutzbrille werden empfohlen. Heckenscheren haben scharfe, schnell bewegte Schneiden und sind grundsätzlich erst ab 15 Jahren vorgesehen. Für jüngere oder vollzeitschulpflichtige Jugendliche kann die Tätigkeit wegen der Unfallgefahr unzulässig sein.",
+  gartendesign:
+    "Gartenumgestaltung kann Graben, Heben und den Einsatz von Werkzeug umfassen. Für Jugendliche ist nur leichte Handarbeit möglich (planen, Beete anlegen, pflanzen, Mulch verteilen) - ohne schwere Lasten und ohne Maschinen wie Bagger, Rüttelplatte oder Motorhacke. Die Tätigkeit kann für jüngere Jugendliche unzulässig sein.",
+  bewässerung:
+    "Bewässerungsanlagen bedeuten Graben, Rohre und Pumpen. Für Jugendliche ist nur einfache Handarbeit möglich (gießen, Schläuche oder Tropfschläuche auslegen) - ohne Elektro- und Druckanlagen und ohne Maschinen. Die Tätigkeit kann für jüngere Jugendliche unzulässig sein.",
   unkraut: "Gebückte Haltung, ggf. Dornen oder Stechpflanzen. Keine Unkrautvernichtungsmittel.",
   blumenbeete: "Geringes Risiko. Handschuhe empfohlen; keine Düngemittel oder Pflanzenschutzmittel handhaben.",
   laub: "Geringes Risiko. Keine Laubbläser oder Häcksler; rutschiges Laub beachten.",
@@ -87,6 +91,68 @@ export const HEDGE_BANNER = {
   allowButton: "Trotzdem erlauben",
   declineButton: "Nicht erlauben",
 } as const;
+
+interface ActivityBanner {
+  title: string;
+  intro: string;
+  rules: readonly string[];
+  note: string;
+  confirm: string;
+  needsCheckHint: string;
+  allowButton: string;
+  declineButton: string;
+}
+
+const SHARED_BANNER_TEXT = {
+  confirm: "Mit „Trotzdem erlauben“ bestätigen Sie, dass diese Bedingungen für den Auftrag gelten.",
+  needsCheckHint: HEDGE_BANNER.needsCheckHint,
+  allowButton: HEDGE_BANNER.allowButton,
+  declineButton: HEDGE_BANNER.declineButton,
+} as const;
+
+/** Info-Banner je Tätigkeit mit erhöhtem Risiko. Baumpflege und gefährliche Geräte gibt es hier nicht: Sie bleiben immer gesperrt. */
+export const ACTIVITY_BANNERS: Record<"heckenschnitt" | "gartendesign" | "bewässerung", ActivityBanner> = {
+  heckenschnitt: HEDGE_BANNER,
+  gartendesign: {
+    title: "Gartenumgestaltung: schwere Arbeit – bitte kurz prüfen",
+    intro: "Umgestalten heißt oft graben, heben und Werkzeug benutzen. Für Jugendliche gilt deshalb:",
+    rules: [
+      "Nur leichte Handarbeit: planen, Beete anlegen, pflanzen, Mulch verteilen",
+      "Keine schweren Lasten (z. B. Steine oder Erdsäcke über ca. 10 kg)",
+      "Nie Bagger, Rüttelplatte, Motorhacke oder andere Maschinen",
+    ],
+    note: "Unter 15 Jahren kann diese Tätigkeit unzulässig sein, Ihre Zustimmung ersetzt keine gesetzliche Vorgabe. Umfang und Geräte können wir vor Ort nicht prüfen – bitte klären Sie beides vorab mit dem Auftraggeber.",
+    ...SHARED_BANNER_TEXT,
+  },
+  bewässerung: {
+    title: "Bewässerung: Wasser und Technik – bitte kurz prüfen",
+    intro: "Bewässerungsanlagen bedeuten Graben, Rohre und Pumpen. Für Jugendliche gilt deshalb:",
+    rules: [
+      "Nur einfache Handarbeit: gießen, Schläuche oder Tropfschläuche auslegen",
+      "Keine Elektro- oder Druckanlagen, keine Pumpen am Stromnetz",
+      "Nie Graben mit Maschinen (Bagger, Motorhacke)",
+    ],
+    note: "Unter 15 Jahren kann diese Tätigkeit unzulässig sein, Ihre Zustimmung ersetzt keine gesetzliche Vorgabe. Umfang und Geräte können wir vor Ort nicht prüfen – bitte klären Sie beides vorab mit dem Auftraggeber.",
+    ...SHARED_BANNER_TEXT,
+  },
+};
+
+/** Bedingungen als ein Satz für die Eltern-Mail */
+export function activityConditionsText(serviceType: string): string {
+  if (serviceType === "heckenschnitt") return HEDGE_YOUTH_CONDITIONS;
+  const b = (ACTIVITY_BANNERS as Record<string, ActivityBanner>)[serviceType];
+  return b ? `${b.rules.join("; ")}.` : "";
+}
+
+/** Auswahl "Wie soll es weitergehen?" bei der Freigabe */
+export const REMEMBER_OPTIONS = {
+  none: { label: "Nur dieses Mal fragen", hint: "Sie werden beim ersten Schritt und – falls verhandelt wird – am Ende gefragt." },
+  gig: { label: "Für diesen Auftrag nicht mehr fragen", hint: "Auch nach einer Verhandlung (anderer Preis, Termin ...) müssen Sie nicht erneut bestätigen." },
+  customer: { label: "Für diesen Auftraggeber immer erlauben", hint: "Alle künftigen Aufträge dieses Auftraggebers werden automatisch freigegeben. Sie werden per E-Mail informiert und können es jederzeit widerrufen." },
+} as const;
+
+export const REMEMBER_RISKY_NOTE =
+  "Gilt auch für Tätigkeiten mit erhöhtem Risiko (z. B. Heckenschnitt) unter den oben genannten Bedingungen. Baumpflege und gefährliche Geräte bleiben immer ausgeschlossen.";
 
 export const GENERAL_RISK_NOTE =
   "Allgemein: Sonne und Hitze (ausreichend trinken), Verletzungen durch Werkzeug, unbekannte Personen und Orte.";

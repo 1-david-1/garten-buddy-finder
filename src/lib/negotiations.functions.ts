@@ -99,8 +99,21 @@ export const createBid = createServerFn({ method: "POST" })
     // Jugendschutz: Gebote Jugendlicher werden nicht sofort abgegeben, sondern den Eltern vorgelegt.
     // Erst nach deren Freigabe im Eltern-Konto geht das Gebot an den Auftraggeber.
     if (roles.some((r) => r.role === "helper_youth")) {
-      const { requestBidApproval, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
+      const { requestBidApproval, tryAutoApproveBid, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
       try {
+        // Nicht bei jedem Schritt fragen: Dauerfreigabe oder schon freigegebener Auftrag -> Gebot geht sofort raus
+        const auto = await tryAutoApproveBid(userId, {
+          gigId: data.gigId,
+          bidCents: data.bidCents,
+          message: data.message ?? null,
+        });
+        if (auto) {
+          return {
+            negotiation: null,
+            awaitingGuardian: null as string | null,
+            autoApproved: "Dein Gebot wurde abgegeben. Deine Eltern sind schon einverstanden und wurden nur informiert." as string | null,
+          };
+        }
         await requestBidApproval(userId, {
           gigId: data.gigId,
           bidCents: data.bidCents,
@@ -108,7 +121,7 @@ export const createBid = createServerFn({ method: "POST" })
         });
       } catch (e) {
         if (e instanceof OfferApprovalRequired) {
-          return { negotiation: null, awaitingGuardian: e.message as string | null };
+          return { negotiation: null, awaitingGuardian: e.message as string | null, autoApproved: null as string | null };
         }
         throw e;
       }
@@ -167,7 +180,7 @@ export const createBid = createServerFn({ method: "POST" })
       });
     }
 
-    return { negotiation, awaitingGuardian: null as string | null };
+    return { negotiation, awaitingGuardian: null as string | null, autoApproved: null as string | null };
   });
 
 // ---------------------------------------------------------------------------
@@ -442,15 +455,28 @@ export const rebid = createServerFn({ method: "POST" })
 
     const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", context.userId);
     if ((roles ?? []).some((r) => r.role === "helper_youth")) {
-      const { requestBidApproval, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
+      const { requestBidApproval, tryAutoApproveBid, OfferApprovalRequired } = await import("@/lib/server/youth-offers.server");
       try {
+        const auto = await tryAutoApproveBid(context.userId, {
+          gigId: n.gig_id,
+          bidCents: data.bidCents,
+          message: data.message ?? null,
+        });
+        if (auto) {
+          return {
+            awaitingGuardian: null as string | null,
+            autoApproved: "Dein neues Gebot wurde abgegeben. Deine Eltern sind schon einverstanden und wurden nur informiert." as string | null,
+          };
+        }
         await requestBidApproval(context.userId, {
           gigId: n.gig_id,
           bidCents: data.bidCents,
           message: data.message ?? null,
         });
       } catch (e) {
-        if (e instanceof OfferApprovalRequired) return { awaitingGuardian: e.message as string | null };
+        if (e instanceof OfferApprovalRequired) {
+          return { awaitingGuardian: e.message as string | null, autoApproved: null as string | null };
+        }
         throw e;
       }
     }
@@ -476,7 +502,7 @@ export const rebid = createServerFn({ method: "POST" })
       "/my-gigs",
       "Gebot ansehen",
     );
-    return { awaitingGuardian: null as string | null };
+    return { awaitingGuardian: null as string | null, autoApproved: null as string | null };
   });
 
 /**

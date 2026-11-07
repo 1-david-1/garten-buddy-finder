@@ -127,7 +127,7 @@ function MarketplacePage() {
         toast.info("Deine Eltern müssen zustimmen", { description: res.awaitingGuardian, duration: 10000 });
       } else {
         toast.success("Angebot erfolgreich abgegeben!", {
-          description: "Den Stand deiner Anfrage siehst du unter „Aufträge“.",
+          description: res.autoApproved ?? "Den Stand deiner Anfrage siehst du unter „Aufträge“.",
         });
       }
       queryClient.invalidateQueries({ queryKey: ["available-gigs"] });
@@ -163,7 +163,7 @@ function MarketplacePage() {
       if (res.awaitingGuardian) {
         toast.info("Deine Eltern müssen zustimmen", { description: res.awaitingGuardian, duration: 10000 });
       } else {
-        toast.success("Neues Gebot gesendet.");
+        toast.success("Neues Gebot gesendet.", res.autoApproved ? { description: res.autoApproved } : undefined);
       }
       setRebidId(null);
       setRebidAmount("");
