@@ -1,21 +1,34 @@
 -- ============================================================
--- Heckenschnitt für Jugendliche: Fehlermeldung "Diese Tätigkeit ist für Jugendliche nicht möglich" beheben
+-- Jugendliche und Tätigkeiten mit erhöhtem Risiko (Heckenschnitt u. a.)
 --
--- Ursache: Der Datenbank-Trigger aus 20261008000000_guardian_accounts_and_safety.sql sperrt Heckenschnitt für
--- Jugendliche komplett. Die Lockerung aus 20261024000300_youth_hedge_trimming.sql war in der Datenbank nicht
--- aktiv (Migration nicht eingespielt) - der alte Trigger lief weiter und warf den Fehler bei JEDEM Heckenschnitt.
+-- Behebt die Fehlermeldung "Diese Tätigkeit ist für Jugendliche nicht möglich" bei Heckenschnitt.
+-- Ursache: Der Datenbank-Trigger aus 20261008000000_guardian_accounts_and_safety.sql sperrte Heckenschnitt für
+-- Jugendliche komplett; die Lockerung aus 20261024000300_youth_hedge_trimming.sql war in der Datenbank nicht aktiv.
 --
--- Diese Migration stellt die Regel idempotent (CREATE OR REPLACE) wieder her, egal ob 20261024000300 schon
--- eingespielt wurde:
---   * Heckenschnitt ist für Jugendliche erlaubt - wie jeder Auftrag aber NUR nach Freigabe der Eltern für
---     genau diesen Auftrag (erzwingt enforce_youth_job_rules aus 20261021000000_security_hardening.sql beim
---     Übergang in "angenommen"/"läuft"). Die Eltern sehen im Eltern-Konto einen Info-Banner und bestätigen
---     per Klick auf "Trotzdem erlauben".
---   * NICHT möglich bleiben: Baumpflege, Gartenumgestaltung, Bewässerungsanlagen.
---   * Heckenschnitt wird abgelehnt, wenn Titel oder Beschreibung auf ein sehr gefährliches Gerät oder zu große
---     Höhe hinweisen (Motor-/Kettensäge, Benzin-/Stangenheckenschere, Häcksler, Leiter, Gerüst ...).
+-- Diese Migration stellt die Regel idempotent (CREATE OR REPLACE) her, egal ob 20261024000300 schon eingespielt wurde:
+--   * Heckenschnitt, Gartenumgestaltung und Bewässerung sind für Jugendliche möglich - wie jeder Auftrag aber NUR nach
+--     Freigabe der Eltern für genau diesen Auftrag (erzwingt enforce_youth_job_rules aus
+--     20261021000000_security_hardening.sql beim Übergang in "angenommen"/"läuft"). Die Eltern bestätigen bei diesen
+--     Tätigkeiten ausdrücklich im Eltern-Konto ("Trotzdem erlauben") und können es dauerhaft erlauben.
+--   * IMMER gesperrt, auch mit Zustimmung der Eltern: Baumpflege und alles, was auf ein sehr gefährliches Gerät oder
+--     große Höhe hinweist (Motor-/Kettensäge, Benzin-/Stangengeräte, Häcksler, Leiter, Gerüst, Bagger ...).
 --     Dieselben Stichwörter prüft die App (src/lib/hedge-rules.ts).
 -- ============================================================
+
+DO $$
+BEGIN
+  IF to_regclass('public.gigs') IS NULL THEN
+    RAISE EXCEPTION 'Die Tabelle public.gigs fehlt in dieser Datenbank. Diese Migration setzt die Basis-Migrationen (ab 20260720070048) voraus. Bitte zuerst supabase/diagnostics/check_database.sql ausführen und die fehlenden Migrationen einspielen.';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'has_role'
+  ) THEN
+    RAISE EXCEPTION 'Die Funktion public.has_role fehlt in dieser Datenbank. Bitte zuerst supabase/diagnostics/check_database.sql ausführen und die fehlenden Migrationen einspielen.';
+  END IF;
+END
+$$;
+
 CREATE OR REPLACE FUNCTION public.enforce_youth_activity_rules()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -43,14 +56,16 @@ BEGIN
      OR OLD.title IS DISTINCT FROM NEW.title
      OR OLD.description IS DISTINCT FROM NEW.description THEN
 
-    IF NEW.service_type IN ('baumpflege', 'gartendesign', 'bewässerung') THEN
-      RAISE EXCEPTION 'Diese Tätigkeit ist für Jugendliche nicht möglich: Es werden nur leichte, geeignete und ungefährliche Tätigkeiten vermittelt.';
+    -- Nie vermittelt, auch nicht mit Zustimmung der Eltern
+    IF NEW.service_type = 'baumpflege' THEN
+      RAISE EXCEPTION 'Diese Tätigkeit ist für Jugendliche nicht möglich: Baumpflege (Klettern, Sägen, Arbeiten in der Höhe) wird Jugendlichen nicht vermittelt.';
     END IF;
 
-    IF NEW.service_type = 'heckenschnitt' THEN
+    -- Tätigkeiten mit erhöhtem Risiko: nur ohne sehr gefährliches Gerät und ohne große Höhe
+    IF NEW.service_type IN ('heckenschnitt', 'gartendesign', 'bewässerung') THEN
       v_text := lower(coalesce(NEW.title, '') || ' ' || coalesce(NEW.description, ''));
-      IF v_text ~ '(kettens(ä|ae|a)ge|motors(ä|ae|a)ge|baums(ä|ae|a)ge|h(ä|ae|a)cksler|hochentaster|stangenheckenschere|stangenschere|teleskop|benzin|\mleiter\M|ger(ü|ue|u)st|hubarbeitsb(ü|ue)hne|\msteiger\M)' THEN
-        RAISE EXCEPTION 'Heckenschnitt ist für Jugendliche nur ohne sehr gefährliche Geräte (z. B. Motor-/Kettensäge, Benzin- oder Stangenheckenschere) und ohne Leiter bei niedrigen Hecken möglich.';
+      IF v_text ~ '(kettens(ä|ae|a)ge|motors(ä|ae|a)ge|baums(ä|ae|a)ge|h(ä|ae|a)cksler|hochentaster|stangenheckenschere|stangenschere|teleskop|benzin|\mleiter\M|ger(ü|ue|u)st|hubarbeitsb(ü|ue)hne|\msteiger\M|bagger|r(ü|ue|u)ttelplatte|motorhacke|trennschleifer|winkelschleifer)' THEN
+        RAISE EXCEPTION 'Diese Tätigkeit ist für Jugendliche nur ohne sehr gefährliche Geräte (z. B. Motor-/Kettensäge, Benzin- oder Stangenheckenschere, Bagger) und ohne Leiter oder Gerüst möglich.';
       END IF;
     END IF;
   END IF;
