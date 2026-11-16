@@ -267,7 +267,12 @@ WITH checks (migration, kind, obj, extra) AS (
     ('20261104000000_standing_approvals_and_posting_rules', 'policy', 'guardian_standing_approvals', 'Admins read standing approvals'),
     ('20261104000000_standing_approvals_and_posting_rules', 'policy', 'guardian_standing_approvals', 'Guardian reads own standing approvals'),
     ('20261104000000_standing_approvals_and_posting_rules', 'table', 'guardian_standing_approvals', ''),
-    ('20261104000000_standing_approvals_and_posting_rules', 'trigger', 'gigs', 'trg_enforce_gig_posting_rules')
+    ('20261104000000_standing_approvals_and_posting_rules', 'trigger', 'gigs', 'trg_enforce_gig_posting_rules'),
+    ('20261115000000_gig_location_privacy', 'column', 'gigs', 'district'),
+    ('20261115000000_gig_location_privacy', 'function', 'can_view_gig_location', ''),
+    ('20261115000000_gig_location_privacy', 'policy', 'gig_locations', 'Gig location visible to owner, accepted helper and admins'),
+    ('20261115000000_gig_location_privacy', 'table', 'gig_locations', ''),
+    ('20261115000000_gig_location_privacy', 'trigger', 'gigs', 'trg_zz_gig_location_divert')
 ),
 res AS (
   SELECT c.*,
