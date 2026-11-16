@@ -1,7 +1,7 @@
 // Gemeinsame Regeln für Buchungs-Zeitfenster (Browser UND Server nutzen dieselbe Logik).
 // Die Verfügbarkeit stammt aus echten Daten des Helfers: bestehende Aufträge, Urlaubsmodus,
-// Jugendschutz (08-18 Uhr, höchstens 2 Stunden pro Tag). Es werden nur Zeitspannen übertragen,
-// keine Auftragsdetails.
+// wiederkehrende Sperrzeiten (z. B. Stundenplan), Jugendschutz (08-18 Uhr, höchstens 2 Stunden pro Tag).
+// Es werden nur Zeitspannen übertragen, keine Auftragsdetails und keine Bezeichnungen der Sperrzeiten.
 
 export interface BusyInterval {
   /** ISO-Zeitstempel */
@@ -26,8 +26,19 @@ export interface HelperBookingInfo {
   /** Urlaubsmodus mit Rückkehrdatum (YYYY-MM-DD): davor keine Termine */
   unavailableUntil: string | null;
   busy: BusyInterval[];
+  /**
+   * Wiederkehrende Sperrzeiten des Helfers (z. B. Stundenplan), vom Server in konkrete Zeitspannen umgerechnet.
+   * Bewusst ohne Bezeichnung und ohne Regel: Kunden sehen nur, dass die Zeit nicht buchbar ist, nicht warum.
+   * Sie zählen nicht als Arbeitszeit (Jugendschutz) und haben keinen Anfahrtspuffer.
+   */
+  blocked: BusyInterval[];
   services: BookableService[];
 }
+
+/** Was die Terminprüfung vom Helfer wissen muss. */
+export type SlotInfo = Pick<HelperBookingInfo, "busy" | "isYouth" | "unavailableUntil"> & {
+  blocked?: BusyInterval[];
+};
 
 export const SLOT_TIMES = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"] as const;
 export const SLOT_MINUTES = 60;
@@ -53,7 +64,7 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): b
 
 /** Ist der Zeitraum frei (inkl. Pufferzeit) und im erlaubten Rahmen? Gibt einen Grund zurück, wenn nicht. */
 export function slotProblem(
-  info: Pick<HelperBookingInfo, "busy" | "isYouth" | "unavailableUntil">,
+  info: SlotInfo,
   start: Date,
   minutes: number = SLOT_MINUTES,
   now: Date = new Date(),
@@ -72,6 +83,12 @@ export function slotProblem(
   if (start.getDay() === 0) return "Sonntags sind keine Termine möglich.";
   if (info.isYouth && (hour < 8 || endHour > 18)) {
     return "Jugendliche Helfer arbeiten nur zwischen 08:00 und 18:00 Uhr.";
+  }
+
+  for (const b of info.blocked ?? []) {
+    if (overlaps(s, e, new Date(b.start).getTime(), new Date(b.end).getTime())) {
+      return "Der Helfer ist zu dieser Zeit nicht verfügbar.";
+    }
   }
 
   const buffer = TRAVEL_BUFFER_MINUTES * 60_000;
@@ -103,7 +120,7 @@ const WEEKDAY_NAMES = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
 /** Sechs Tage ab (heute + dayOffset) mit echten freien/belegten Zeitfenstern. */
 export function buildSchedule(
-  info: Pick<HelperBookingInfo, "busy" | "isYouth" | "unavailableUntil">,
+  info: SlotInfo,
   dayOffset: number,
   now: Date = new Date(),
 ): DaySchedule[] {

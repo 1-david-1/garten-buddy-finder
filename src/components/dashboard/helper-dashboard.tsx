@@ -67,6 +67,7 @@ import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { GuardianConsentBanner } from "@/components/verification-card";
 import { publicLocationLabel } from "@/lib/gig-location";
+import { RecurringBlocksCard } from "@/components/booking/recurring-blocks-card";
 
 interface RecentGig {
   id: string;
@@ -502,6 +503,7 @@ export function HelperDashboard() {
                 </div>
               )}
             </div>
+            <RecurringBlocksCard variant="pill" pillLabel={t("dashboard.helper.blocks.button")} />
           </div>
         </motion.div>
 

@@ -215,6 +215,7 @@ const de: Dict = {
   "dashboard.helper.unavailable": "Heute Pause",
 
   "dashboard.helper.vacation.label": "Urlaubsmodus",
+  "dashboard.helper.blocks.button": "Stundenplan & Sperrzeiten",
   "dashboard.helper.vacation.returnDateLabel": "Rückkehrdatum (optional)",
   "dashboard.helper.vacation.backOn": "Zurück ab",
   "dashboard.helper.vacation.activeNoDate":
@@ -604,6 +605,7 @@ const en: Dict = {
   "dashboard.helper.unavailable": "Off today",
 
   "dashboard.helper.vacation.label": "Vacation mode",
+  "dashboard.helper.blocks.button": "Timetable & blocked times",
   "dashboard.helper.vacation.returnDateLabel": "Return date (optional)",
   "dashboard.helper.vacation.backOn": "Back on",
   "dashboard.helper.vacation.activeNoDate": "Active, no return date set",

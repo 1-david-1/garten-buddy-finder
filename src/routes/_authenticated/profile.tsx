@@ -47,6 +47,7 @@ import {
 } from "@/lib/profile.functions";
 import { toast } from "sonner";
 import { VerificationCard } from "@/components/verification-card";
+import { RecurringBlocksCard } from "@/components/booking/recurring-blocks-card";
 import { FREIBURG_AREA_ERROR, isWithinFreiburgArea } from "@/lib/freiburg-area";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -554,6 +555,8 @@ function ProfilePage() {
               </CardContent>
             </Card>
 
+            {isHelper && <RecurringBlocksCard />}
+
             {isHelper && (
               <Card className="border-primary/20 bg-primary/5 backdrop-blur">
                 <CardContent className="pt-4 space-y-2">
@@ -570,6 +573,11 @@ function ProfilePage() {
                       <span className="text-primary">✓</span>
                       Schalte "Ich arbeite heute" im Dashboard ein, um mehr
                       Aufträge zu bekommen.
+                    </li>
+                    <li className="flex gap-1.5">
+                      <span className="text-primary">✓</span>
+                      Trage deinen Stundenplan unter „Stundenplan & Sperrzeiten“ ein – dann bucht dich niemand, wenn du
+                      keine Zeit hast.
                     </li>
                     <li className="flex gap-1.5">
                       <span className="text-primary">✓</span>

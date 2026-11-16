@@ -243,6 +243,45 @@ export type Database = {
           },
         ];
       };
+      helper_recurring_blocks: {
+        Row: {
+          created_at: string;
+          end_time: string;
+          helper_id: string;
+          id: string;
+          label: string | null;
+          start_time: string;
+          updated_at: string;
+          valid_from: string | null;
+          valid_until: string | null;
+          weekday: number;
+        };
+        Insert: {
+          created_at?: string;
+          end_time: string;
+          helper_id: string;
+          id?: string;
+          label?: string | null;
+          start_time: string;
+          updated_at?: string;
+          valid_from?: string | null;
+          valid_until?: string | null;
+          weekday: number;
+        };
+        Update: {
+          created_at?: string;
+          end_time?: string;
+          helper_id?: string;
+          id?: string;
+          label?: string | null;
+          start_time?: string;
+          updated_at?: string;
+          valid_from?: string | null;
+          valid_until?: string | null;
+          weekday?: number;
+        };
+        Relationships: [];
+      };
       invoices: {
         Row: {
           customer_id: string;

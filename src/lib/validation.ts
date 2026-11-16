@@ -242,3 +242,44 @@ export const purchaseWithScheduleSchema = z.object({
 });
 
 export const respondToBookingSchema = z.object({ gigId: uuidSchema, accept: z.boolean() });
+
+// ---------------------------------------------------------------------------
+// Wiederkehrende Sperrzeiten der Helfer (Stundenplan)
+// ---------------------------------------------------------------------------
+
+/** Höchstzahl gespeicherter Zeitbereiche pro Helfer über die Oberfläche (die Datenbank erlaubt 100, damit der Austausch alt gegen neu passt). */
+export const MAX_BLOCK_RULES = 50;
+
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Ungültige Uhrzeit.");
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datum.")
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "Ungültiges Datum.");
+
+// Bezeichnung wird nur dem Helfer selbst angezeigt. Trotzdem: nur sichtbare Zeichen, keine Steuerzeichen/Markup.
+const labelSchema = z
+  .string()
+  .trim()
+  .max(40, "Die Bezeichnung darf höchstens 40 Zeichen lang sein.")
+  .refine((v) => !/[<>\u0000-\u001F\u007F]/.test(v), "Die Bezeichnung enthält ungültige Zeichen.");
+
+const blockRuleSchema = z
+  .object({
+    weekday: z.number().int().min(1).max(7),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    label: labelSchema.nullish(),
+    validFrom: dateSchema.nullish(),
+    validUntil: dateSchema.nullish(),
+  })
+  .refine((r) => r.endTime > r.startTime, { message: "Das Ende muss nach dem Beginn liegen." })
+  .refine((r) => r.startTime >= "05:00" && r.endTime <= "23:00", {
+    message: "Sperrzeiten sind zwischen 05:00 und 23:00 Uhr möglich.",
+  })
+  .refine((r) => !r.validFrom || !r.validUntil || r.validUntil >= r.validFrom, {
+    message: "„Gilt bis“ darf nicht vor „Gilt ab“ liegen.",
+  });
+
+export const saveRecurringBlocksSchema = z.object({
+  blocks: z.array(blockRuleSchema).max(MAX_BLOCK_RULES, `Es sind höchstens ${MAX_BLOCK_RULES} Zeitbereiche möglich.`),
+});

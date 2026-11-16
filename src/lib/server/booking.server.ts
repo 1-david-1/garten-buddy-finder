@@ -8,6 +8,7 @@ import {
   type BusyInterval,
   type HelperBookingInfo,
 } from "@/lib/booking-slots";
+import { expandRecurringBlocks, type RecurringBlockRule } from "@/lib/recurring-blocks";
 
 export class BookingError extends Error {}
 
@@ -37,6 +38,7 @@ export async function loadHelperBookingInfo(helperId: string, customerId: string
     reason: null,
     unavailableUntil: null,
     busy: [],
+    blocked: [],
     services: [],
   };
   const fail = (reason: string): HelperBookingInfo => ({ ...base, reason });
@@ -82,6 +84,20 @@ export async function loadHelperBookingInfo(helperId: string, customerId: string
     };
   });
 
+  // Wiederkehrende Sperrzeiten (Stundenplan): nur als anonyme Zeitspannen weitergeben, nie die Regeln selbst.
+  const { data: blockRows } = await supabaseAdmin
+    .from("helper_recurring_blocks")
+    .select("weekday, start_time, end_time, valid_from, valid_until")
+    .eq("helper_id", helperId);
+  const rules: RecurringBlockRule[] = (blockRows ?? []).map((r) => ({
+    weekday: r.weekday,
+    startTime: String(r.start_time).slice(0, 5),
+    endTime: String(r.end_time).slice(0, 5),
+    validFrom: r.valid_from,
+    validUntil: r.valid_until,
+  }));
+  const blockedIntervals = expandRecurringBlocks(rules, now, BOOKING_WINDOW_DAYS + 2);
+
   const { data: listings } = await supabaseAdmin
     .from("service_listings")
     .select("id, title, service_type, listing_type, price_cents")
@@ -98,7 +114,7 @@ export async function loadHelperBookingInfo(helperId: string, customerId: string
     priceCents: l.price_cents as number,
   }));
 
-  return { ...base, bookable: true, unavailableUntil, busy, services };
+  return { ...base, bookable: true, unavailableUntil, busy, blocked: blockedIntervals, services };
 }
 
 /** Prüft serverseitig (maßgeblich) ob dieser Termin beim Helfer buchbar ist; wirft BookingError mit Klartext. */
