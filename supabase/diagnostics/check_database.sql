@@ -272,7 +272,12 @@ WITH checks (migration, kind, obj, extra) AS (
     ('20261115000000_gig_location_privacy', 'function', 'can_view_gig_location', ''),
     ('20261115000000_gig_location_privacy', 'policy', 'gig_locations', 'Gig location visible to owner, accepted helper and admins'),
     ('20261115000000_gig_location_privacy', 'table', 'gig_locations', ''),
-    ('20261115000000_gig_location_privacy', 'trigger', 'gigs', 'trg_zz_gig_location_divert')
+    ('20261115000000_gig_location_privacy', 'trigger', 'gigs', 'trg_zz_gig_location_divert'),
+    ('20261116000000_helper_recurring_blocks', 'function', 'enforce_helper_recurring_blocks', ''),
+    ('20261116000000_helper_recurring_blocks', 'policy', 'helper_recurring_blocks', 'Helper reads own recurring blocks'),
+    ('20261116000000_helper_recurring_blocks', 'policy', 'helper_recurring_blocks', 'Helper inserts own recurring blocks'),
+    ('20261116000000_helper_recurring_blocks', 'table', 'helper_recurring_blocks', ''),
+    ('20261116000000_helper_recurring_blocks', 'trigger', 'gigs', 'trg_enforce_helper_recurring_blocks')
 ),
 res AS (
   SELECT c.*,
