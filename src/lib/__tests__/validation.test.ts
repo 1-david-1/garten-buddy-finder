@@ -33,6 +33,7 @@ describe("Eingabevalidierung für Server-Functions", () => {
       budgetCents: 4000,
       address: "Musterstraße 1",
       postalCode: "79098",
+      district: "Wiehre",
       scheduledAt: null,
       durationMinutes: 60,
       allowedAgeGroups: ["helper_adult"],
@@ -43,6 +44,24 @@ describe("Eingabevalidierung für Server-Functions", () => {
     expect(gigInputSchema.safeParse({ ...base, postalCode: "ab" }).success).toBe(false);
     expect(gigInputSchema.safeParse({ ...base, durationMinutes: 5000 }).success).toBe(false);
     expect(gigInputSchema.safeParse({ ...base, allowedAgeGroups: [] }).success).toBe(false);
+  });
+
+  it("verlangt für Aufträge einen echten Stadtteil (die genaue Adresse bleibt verborgen)", () => {
+    const base = {
+      title: "Rasen mähen",
+      description: "Bitte vorderen Rasen mähen.",
+      serviceType: "sonstiges",
+      budgetCents: 4000,
+      address: "Musterstraße 1",
+      postalCode: "79098",
+      scheduledAt: null,
+      durationMinutes: 60,
+      allowedAgeGroups: ["helper_adult"],
+      safetyConfirmed: true,
+    };
+    expect(gigInputSchema.safeParse(base).success).toBe(false); // Stadtteil fehlt
+    expect(gigInputSchema.safeParse({ ...base, district: "Musterstraße 1" }).success).toBe(false); // keine Adresse als Stadtteil
+    expect(gigInputSchema.safeParse({ ...base, district: "Wiehre" }).success).toBe(true);
   });
 
   it("erlaubt nur Bewertungen von 1 bis 5", () => {

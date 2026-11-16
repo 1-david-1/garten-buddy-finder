@@ -2,6 +2,7 @@ import { CUSTOMER_RULES_VERSION, GIG_SAFETY_VERSION } from "@/lib/consent-texts"
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchProfilesByIds } from "@/lib/profile-lookup";
+import { attachGigLocations, fetchGigLocations, GIG_PUBLIC_COLUMNS } from "@/lib/gig-location";
 import {
   assignHelperSchema,
   cancelGigSchema,
@@ -20,6 +21,8 @@ export interface GigInput {
   budgetCents: number;
   address: string;
   postalCode: string;
+  /** Öffentliche Ortsangabe (Stadtteil). Adresse und PLZ bleiben bis zur Annahme verborgen. */
+  district: string;
   scheduledAt: string | null;
   durationMinutes: number;
   allowedAgeGroups: string[];
@@ -102,7 +105,7 @@ export const createGig = createServerFn({ method: "POST" })
       supabase.from("gigs").select("id", { count: "exact", head: true }).eq("customer_id", userId).eq("status", "open"),
       supabase
         .from("gigs")
-        .select("title, address, postal_code")
+        .select("id, title")
         .eq("customer_id", userId)
         .neq("status", "cancelled")
         .gte("created_at", since),
@@ -113,7 +116,14 @@ export const createGig = createServerFn({ method: "POST" })
       );
     }
     const newKey = duplicateKey(data.title, cleanAddress, cleanPostalCode);
-    if ((recent ?? []).some((g) => duplicateKey(g.title, g.address, g.postal_code) === newKey)) {
+    // Adressen liegen in gig_locations (nur der Auftraggeber sieht seine eigenen).
+    const recentLocations = await fetchGigLocations(supabase, (recent ?? []).map((g) => g.id));
+    if (
+      (recent ?? []).some((g) => {
+        const loc = recentLocations.get(g.id);
+        return duplicateKey(g.title, loc?.address ?? null, loc?.postalCode ?? null) === newKey;
+      })
+    ) {
       throw new Error("Diesen Auftrag hast du an dieser Adresse schon veröffentlicht. Bitte nutze den vorhandenen Auftrag.");
     }
 
@@ -125,8 +135,10 @@ export const createGig = createServerFn({ method: "POST" })
         description: data.description,
         service_type: data.serviceType,
         budget_cents: data.budgetCents,
+        // address / postal_code leitet die Datenbank in die geschützte Tabelle gig_locations um.
         address: cleanAddress,
         postal_code: cleanPostalCode,
+        district: data.district,
         scheduled_at: data.scheduledAt,
         duration_minutes: data.durationMinutes,
         allowed_age_groups: allowedAgeGroups,
@@ -213,7 +225,7 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
     }
     const addressCheck = checkFreiburgAddress(data.address, bookingPlz);
     if (!addressCheck.ok) throw new Error(describeAddressIssues(addressCheck));
-    const noteIssues = checkBookingContent({ description: data.description, scheduledAt: data.scheduledAt });
+    const noteIssues = checkBookingContent({ description: data.description, scheduledAt: data.scheduledAt, address: data.address });
     if (noteIssues.length > 0) throw new Error(noteIssues.map((i) => i.message).join(" "));
 
     const { data: gig, error } = await supabase
@@ -226,6 +238,7 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
         budget_cents: budgetCents,
         address: addressCheck.normalizedAddress,
         postal_code: addressCheck.postalCode,
+        district: data.district ?? null,
         scheduled_at: data.scheduledAt,
         duration_minutes: 60,
         assigned_helper_id: data.helperId,
@@ -288,12 +301,13 @@ export const getMyGigs = createServerFn({ method: "GET" })
 
     const { data: gigs, error } = await supabase
       .from("gigs")
-      .select("*, reviews(id)")
+      .select(`${GIG_PUBLIC_COLUMNS}, reviews(id)` as const)
       .eq("customer_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return { gigs: gigs ?? [] };
+    // Der Auftraggeber sieht die Adresse seiner eigenen Aufträge (RLS auf gig_locations).
+    return { gigs: await attachGigLocations(supabase, gigs ?? []) };
   });
 
 /**
@@ -306,7 +320,7 @@ export const getAvailableGigs = createServerFn({ method: "GET" })
 
     const { data: gigs, error } = await supabase
       .from("gigs")
-      .select("*")
+      .select(GIG_PUBLIC_COLUMNS)
       .in("status", ["open", "negotiating"])
       .order("created_at", { ascending: false });
 
@@ -324,8 +338,8 @@ export const getAvailableGigs = createServerFn({ method: "GET" })
           ? {
               id: profile.id,
               display_name: profile.displayName,
+              // Nur die Stadt - die PLZ des Auftraggebers wird nie an Helfer geliefert.
               city: profile.city,
-              postal_code: profile.postalCode,
             }
           : null,
       };
@@ -343,14 +357,16 @@ export const getGigDetails = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { supabase } = context;
 
-    const { data: gig, error } = await supabase
+    const { data: gigRow, error } = await supabase
       .from("gigs")
-      .select("*")
+      .select(GIG_PUBLIC_COLUMNS)
       .eq("id", data.gigId)
       .single();
 
     if (error) throw error;
 
+    // Adresse nur, wenn die Datenbank sie diesem Nutzer zeigt (Auftraggeber; zugewiesener Helfer nach der Annahme; Admin).
+    const [gig] = await attachGigLocations(supabase, [gigRow]);
     const profiles = await fetchProfilesByIds(supabase, [gig.customer_id]);
     const profile = profiles.get(gig.customer_id);
     return {
@@ -361,7 +377,6 @@ export const getGigDetails = createServerFn({ method: "GET" })
               id: profile.id,
               display_name: profile.displayName,
               city: profile.city,
-              postal_code: profile.postalCode,
             }
           : null,
       },

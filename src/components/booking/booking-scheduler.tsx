@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import { addressExample, checkFreiburgAddress } from "@/lib/address-rules";
+import { GIG_DISTRICTS } from "@/lib/gig-location";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -64,6 +65,8 @@ interface BookingData {
   scheduledAt: string; // ISO 8601
   serviceType: string;
   address: string;
+  /** Öffentliche Ortsangabe (Stadtteil); die genaue Adresse sieht der Helfer erst nach der Annahme */
+  district?: string;
   budgetCents: number;
   /** Gebuchtes Angebot des Helfers: Preis und Leistung kommen dann vom Angebot */
   listingId?: string;
@@ -137,6 +140,7 @@ export function BookingScheduler({
   } | null>(null);
   const [serviceType, setServiceType] = useState("");
   const [address, setAddress] = useState("");
+  const [district, setDistrict] = useState("");
   const [budget, setBudget] = useState("");
   const [listingId, setListingId] = useState<string | null>(null);
   const hasServices = !!services && services.length > 0;
@@ -198,7 +202,7 @@ export function BookingScheduler({
     : [];
 
   const handleConfirmBooking = () => {
-    if (!selectedTimeSlot || !serviceType || !address || !budget || addressIssues.length > 0) return;
+    if (!selectedTimeSlot || !serviceType || !address || !district || !budget || addressIssues.length > 0) return;
     if (!(parseFloat(budget.replace(",", ".")) > 0)) return;
 
     const scheduledAt = new Date(
@@ -210,6 +214,7 @@ export function BookingScheduler({
       scheduledAt,
       serviceType,
       address,
+      district,
       budgetCents: Math.round(parseFloat(budget.replace(",", ".")) * 100),
       ...(listingId ? { listingId } : {}),
     });
@@ -384,6 +389,25 @@ export function BookingScheduler({
           ) : (
             <p className="mt-1 text-xs text-muted-foreground">Buchungen sind aktuell nur innerhalb von Freiburg im Breisgau möglich.</p>
           )}
+          <label className="block text-sm text-muted-foreground mb-2 mt-4" htmlFor="booking-district">
+            Stadtteil (sieht der Helfer vorab)
+          </label>
+          <select
+            id="booking-district"
+            value={district}
+            onChange={(e) => setDistrict(e.target.value)}
+            className="w-full p-3 bg-muted rounded-lg border border-border/50 hover:border-border transition-colors text-foreground"
+          >
+            <option value="">Stadtteil wählen…</option>
+            {GIG_DISTRICTS.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Straße und Hausnummer sieht der Helfer erst, wenn er die Buchung angenommen hat.
+          </p>
         </motion.div>
 
         {/* Budget Input */}
@@ -550,6 +574,10 @@ export function BookingScheduler({
                   <span className="text-foreground font-medium">{address || "-"}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border/50">
+                  <span className="text-muted-foreground">Stadtteil:</span>
+                  <span className="text-foreground font-medium">{district || "-"}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Budget:</span>
                   <span className="text-foreground font-medium">{budget ? `€${budget}` : "-"}</span>
                 </div>
@@ -561,7 +589,7 @@ export function BookingScheduler({
             whileHover={shouldAnimate ? { scale: 1.02 } : {}}
             whileTap={shouldAnimate ? { scale: 0.98 } : {}}
             onClick={handleConfirmBooking}
-            disabled={!selectedTimeSlot || !serviceType || !address || !budget || addressIssues.length > 0}
+            disabled={!selectedTimeSlot || !serviceType || !address || !district || !budget || addressIssues.length > 0}
             className="w-full py-3 rounded-lg font-semibold transition-all bg-primary hover:bg-primary/90 text-primary-foreground border disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Buchungsanfrage senden

@@ -25,6 +25,7 @@ import { COVERAGE_TEXT, coverageReason } from "@/lib/approval-coverage";
 import type { RememberChoice } from "@/lib/server/standing-approvals.server";
 import { jobEnd, requiresNewApproval, type JobSnapshot } from "@/lib/job-snapshot";
 import { guardianHintForCustomer, type GuardianRequestCode, type GuardianRequestHint } from "@/lib/job-approval-gaps";
+import { publicLocationLabel } from "@/lib/gig-location";
 
 export const CONSENT_VALID_DAYS = 7;
 const RESEND_COOLDOWN_MS = 10 * 60 * 1000;
@@ -295,8 +296,14 @@ export interface JobDetails {
   when: string;
   scheduledAt: string | null;
   durationMinutes: number;
-  /** Ort, lesbar (Adresse, PLZ, Stadt) */
+  /** Ort, lesbar (Adresse, PLZ, Stadt) - NUR für Freigaben nach der Zuweisung des Helfers (Eltern, Admin) */
   location: string;
+  /**
+   * Ort ohne genaue Adresse (Stadtteil + Hinweis) - für alles VOR der Annahme, z. B. die Freigabe eines Gebots durch
+   * die Eltern. Der Zusatz "noch abgestimmt" sorgt dafür, dass die Ortsangabe bei der Änderungserkennung als
+   * "noch offen" gilt (siehe isUndetermined in approval-coverage.ts).
+   */
+  publicLocation: string;
   hasLocation: boolean;
   customerName: string;
   customerVerified: boolean;
@@ -308,11 +315,20 @@ export async function loadJobDetails(gigId: string): Promise<(JobDetails & { cus
   const { data: gig } = await supabaseAdmin
     .from("gigs")
     .select(
-      "id, title, description, service_type, scheduled_at, duration_minutes, budget_cents, postal_code, address, status, customer_id",
+      "id, title, description, service_type, scheduled_at, duration_minutes, budget_cents, district, status, customer_id",
     )
     .eq("id", gigId)
     .maybeSingle();
   if (!gig) return null;
+
+  // Die genaue Adresse liegt in gig_locations (Service-Zugang). Dieser Ort geht NUR an die Eltern des zugewiesenen
+  // jugendlichen Helfers (Freigabe-Mail, Eltern-Konto, Freigabe-Link) - damit sie informiert zustimmen können.
+  // Der Helfer selbst sieht die Adresse erst nach der Annahme.
+  const { data: loc } = await supabaseAdmin
+    .from("gig_locations")
+    .select("address, postal_code")
+    .eq("gig_id", gigId)
+    .maybeSingle();
 
   const { data: customer } = await supabaseAdmin
     .from("profiles")
@@ -320,8 +336,8 @@ export async function loadJobDetails(gigId: string): Promise<(JobDetails & { cus
     .eq("id", gig.customer_id)
     .maybeSingle();
 
-  const cityLine = [gig.postal_code, customer?.city].filter((v) => !!v && String(v).trim()).join(" ");
-  const locationParts = [gig.address?.trim(), cityLine].filter((v): v is string => !!v);
+  const cityLine = [loc?.postal_code, customer?.city].filter((v) => !!v && String(v).trim()).join(" ");
+  const locationParts = [loc?.address?.trim(), cityLine].filter((v): v is string => !!v);
 
   return {
     gigId: gig.id,
@@ -336,6 +352,7 @@ export async function loadJobDetails(gigId: string): Promise<(JobDetails & { cus
     scheduledAt: gig.scheduled_at,
     durationMinutes: gig.duration_minutes,
     location: locationParts.length > 0 ? locationParts.join(", ") : "wird noch abgestimmt",
+    publicLocation: `${publicLocationLabel(gig.district)} – genaue Adresse folgt nach der Annahme (wird noch abgestimmt)`,
     hasLocation: locationParts.length > 0,
     customerName: customer?.display_name?.trim() || "—",
     customerVerified: Boolean(customer?.verified_at),

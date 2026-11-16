@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { attachGigLocations, fetchGigLocations, GIG_PUBLIC_COLUMNS } from "@/lib/gig-location";
 
 const PSTG_TX_THRESHOLD = 25;
 const PSTG_GROSS_CENTS_THRESHOLD = 180000; // 1.800 €
@@ -35,7 +36,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       supabase
         .from("gigs")
         .select(
-          "id, title, service_type, description, budget_cents, address, scheduled_at, status, customer_id",
+          "id, title, service_type, description, budget_cents, district, scheduled_at, status, customer_id",
         )
         .eq("assigned_helper_id", userId)
         .order("scheduled_at", { ascending: false, nullsFirst: false })
@@ -43,7 +44,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       supabase
         .from("gigs")
         .select(
-          "id, title, service_type, budget_cents, address, scheduled_at, status, customer_id, created_at",
+          "id, title, service_type, budget_cents, district, scheduled_at, status, customer_id, created_at",
         )
         .eq("assigned_helper_id", userId)
         .eq("status", "pending_helper")
@@ -77,6 +78,13 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
     const pendingGigs = pendingGigsRes.data ?? [];
     const escrow = escrowRes.data ?? [];
     const reviews = reviewsRes.data ?? [];
+
+    // Genaue Adresse: nur für Aufträge, die der Helfer angenommen hat (Status assigned / in_progress).
+    // Für Buchungsanfragen (pending_helper) liefert die Datenbank bewusst keine Adresse - dort nur der Stadtteil.
+    const locations = await fetchGigLocations(supabase, [
+      ...gigs.slice(0, 8).map((g) => g.id),
+      ...pendingGigs.map((g) => g.id),
+    ]);
 
     const customerIds = Array.from(new Set([...gigs.map((g) => g.customer_id), ...pendingGigs.map((g) => g.customer_id)]));
     const { data: customerProfiles } = customerIds.length
@@ -160,7 +168,8 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       serviceType: g.service_type,
       description: g.description,
       budgetCents: g.budget_cents,
-      address: g.address,
+      address: locations.get(g.id)?.address ?? null,
+      district: g.district,
       scheduledAt: g.scheduled_at,
       status: g.status,
       customerId: g.customer_id,
@@ -172,7 +181,8 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       title: g.title,
       serviceType: g.service_type,
       budgetCents: g.budget_cents,
-      address: g.address,
+      address: locations.get(g.id)?.address ?? null,
+      district: g.district,
       scheduledAt: g.scheduled_at,
       status: g.status,
       customerId: g.customer_id,
@@ -297,13 +307,15 @@ export const getHelperGigs = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
 
-    const { data: gigs, error } = await supabase
+    const { data: gigRows, error } = await supabase
       .from("gigs")
-      .select("*")
+      .select(GIG_PUBLIC_COLUMNS)
       .eq("assigned_helper_id", userId)
       .order("scheduled_at", { ascending: false, nullsFirst: false });
 
     if (error) throw error;
+    // Adresse nur für angenommene Aufträge (RLS auf gig_locations), sonst null.
+    const gigs = await attachGigLocations(supabase, gigRows ?? []);
 
     const customerIds = Array.from(new Set(gigs.map((g) => g.customer_id)));
     const { data: customerProfiles } = customerIds.length

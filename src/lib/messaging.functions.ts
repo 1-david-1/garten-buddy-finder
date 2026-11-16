@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ADDRESS_IN_TEXT_MESSAGE, containsStreetAddress } from "@/lib/gig-location";
 
 export const MESSAGE_MAX_LENGTH = 4000;
 
@@ -253,6 +254,29 @@ export const sendMessage = createServerFn({ method: "POST" })
     if (conversationError) throw conversationError;
     if (!conversation) throw new Error("Konversation nicht gefunden.");
     assertParticipant(conversation, userId);
+
+    // Adressschutz: Eine genaue Adresse darf im Chat erst genannt werden, wenn der Auftrag angenommen ist - und nur
+    // zwischen dem Auftraggeber und dem zugewiesenen Helfer dieses Auftrags.
+    if (containsStreetAddress(data.body)) {
+      // (Typ von Hand, weil die generierten Typen die Tabelle conversations noch nicht kennen)
+      const convo = conversation as unknown as { participant_a: string; participant_b: string; gig_id: string | null };
+      let accepted = false;
+      if (convo.gig_id) {
+        const { data: gig } = await supabase
+          .from("gigs")
+          .select("status, assigned_helper_id, customer_id")
+          .eq("id", convo.gig_id)
+          .maybeSingle();
+        const parties = [convo.participant_a, convo.participant_b];
+        accepted =
+          !!gig &&
+          ["assigned", "in_progress", "completed"].includes(gig.status) &&
+          !!gig.assigned_helper_id &&
+          parties.includes(gig.assigned_helper_id) &&
+          parties.includes(gig.customer_id);
+      }
+      if (!accepted) throw new Error(ADDRESS_IN_TEXT_MESSAGE);
+    }
 
     const { data: message, error } = await supabase
       .from("messages")

@@ -10,6 +10,7 @@
  */
 import { z } from "zod";
 import { SERVICE_TYPES } from "@/lib/service-types";
+import { ADDRESS_IN_TEXT_MESSAGE, GIG_DISTRICTS, containsStreetAddress } from "@/lib/gig-location";
 
 export const uuidSchema = z.string().uuid();
 
@@ -54,6 +55,8 @@ export const gigInputSchema = z.object({
   budgetCents: centsSchema,
   address: z.string().trim().min(1, "Bitte gib eine Adresse an.").max(250),
   postalCode: postalCodeSchema,
+  /** Öffentliche Ortsangabe (Stadtteil). Die genaue Adresse bleibt bis zur Annahme verborgen. */
+  district: z.enum(GIG_DISTRICTS, { message: "Bitte wähle den Stadtteil aus der Liste." }),
   scheduledAt: isoDateTimeSchema.nullable(),
   durationMinutes: z.number().int().min(15).max(12 * 60),
   allowedAgeGroups: z.array(helperRoleSchema).min(1).max(3),
@@ -67,6 +70,8 @@ export const directBookingSchema = z.object({
   address: z.string().trim().min(1).max(250),
   /** Freiburger PLZ; fehlt sie, wird sie aus der Adresse oder dem Profil abgeleitet */
   postalCode: z.string().trim().regex(/^\d{5}$/).optional(),
+  /** Öffentliche Ortsangabe (Stadtteil), die der Helfer vor der Annahme sieht */
+  district: z.enum(GIG_DISTRICTS, { message: "Bitte wähle den Stadtteil aus der Liste." }).optional(),
   scheduledAt: isoDateTimeSchema,
   budgetCents: centsSchema,
   /** Angebot des Helfers, das gebucht wird: Preis und Leistung kommen dann vom Angebot, nicht vom Browser */
@@ -94,10 +99,16 @@ export const cancelGigSchema = z.object({
 // Gebote
 // ---------------------------------------------------------------------------
 
+/**
+ * Freitext, den der Gegenüber VOR der Annahme sieht (Gebots-Nachricht, Preisvorschlag, Buchungsnotiz):
+ * Die genaue Adresse wird erst nach der Annahme freigegeben und darf hier nicht stehen.
+ */
+const preAcceptanceMessage = z.string().trim().max(1000).refine((m) => !containsStreetAddress(m), { message: ADDRESS_IN_TEXT_MESSAGE });
+
 export const negotiationInputSchema = z.object({
   gigId: uuidSchema,
   bidCents: centsSchema,
-  message: z.string().trim().max(1000).optional(),
+  message: preAcceptanceMessage.optional(),
 });
 
 export const counterBidSchema = z.object({ negotiationId: uuidSchema, counterBidCents: centsSchema });
@@ -108,7 +119,7 @@ export const negotiationIdSchema = z.object({ negotiationId: uuidSchema });
 export const rebidSchema = z.object({
   negotiationId: uuidSchema,
   bidCents: centsSchema,
-  message: z.string().trim().max(1000).optional(),
+  message: preAcceptanceMessage.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -214,7 +225,7 @@ export const offerIdSchema = uuidSchema;
 export const makeOfferSchema = z.object({
   listingId: uuidSchema,
   amountCents: centsSchema,
-  message: z.string().trim().max(1000),
+  message: preAcceptanceMessage,
 });
 
 export const listingAmountSchema = z.object({ listingId: uuidSchema, amountCents: centsSchema });
@@ -227,7 +238,7 @@ export const purchaseWithScheduleSchema = z.object({
   listingId: uuidSchema,
   scheduledAt: isoDateTimeSchema,
   scheduledEnd: isoDateTimeSchema.optional(),
-  message: z.string().trim().max(1000).optional(),
+  message: preAcceptanceMessage.optional(),
 });
 
 export const respondToBookingSchema = z.object({ gigId: uuidSchema, accept: z.boolean() });

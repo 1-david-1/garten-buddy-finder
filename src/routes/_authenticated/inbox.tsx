@@ -8,12 +8,14 @@ import { useAppNavItems } from "@/lib/use-app-nav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Calendar, MessageSquare, Tag, Banknote, Info, Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ADDRESS_AFTER_ACCEPTANCE_NOTE, fetchGigLocations, publicLocationLabel } from "@/lib/gig-location";
 
 interface BookingRequest {
   id: string;
   service_type: string;
   description: string | null;
   address: string | null;
+  district: string | null;
   scheduled_at: string | null;
   budget_cents: number;
   status: string;
@@ -41,11 +43,12 @@ export const getInboxDataFn = createServerFn({ method: "GET" })
     // Fetch booking requests
     const { data: gigs } = await supabase
       .from("gigs")
-      .select("id, service_type, description, address, scheduled_at, budget_cents, status, created_at, customer_id")
+      .select("id, service_type, description, district, scheduled_at, budget_cents, status, created_at, customer_id")
       .eq("assigned_helper_id", userId)
       .eq("status", "negotiating")
       .order("created_at", { ascending: false });
 
+    const locations = await fetchGigLocations(supabase, (gigs || []).map((g) => g.id));
     const customerIds = [...new Set((gigs || []).map((g) => g.customer_id))];
     const { data: profiles } = customerIds.length
       ? await supabase.from("profiles").select("id, display_name").in("id", customerIds)
@@ -56,7 +59,9 @@ export const getInboxDataFn = createServerFn({ method: "GET" })
       id: g.id,
       service_type: g.service_type,
       description: g.description,
-      address: g.address,
+      // Vor der Annahme nur der Stadtteil - die genaue Adresse folgt nach der Annahme.
+      address: locations.get(g.id)?.address ?? null,
+      district: g.district,
       scheduled_at: g.scheduled_at,
       budget_cents: g.budget_cents,
       status: g.status,
@@ -332,10 +337,18 @@ function InboxPage() {
                         </div>
                       </>
                     )}
-                    {booking.address && (
+                    {booking.address ? (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Adresse:</span>
                         <span className="font-medium">{booking.address}</span>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Ort:</span>
+                          <span className="font-medium">{publicLocationLabel(booking.district)}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{ADDRESS_AFTER_ACCEPTANCE_NOTE}</p>
                       </div>
                     )}
                     <div className="flex justify-between pt-2 mt-2 border-t border-border/50">

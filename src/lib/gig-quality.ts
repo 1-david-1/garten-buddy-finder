@@ -6,6 +6,7 @@
 
 import { containsPrivateContact } from "@/lib/contact-detection";
 import { checkFreiburgAddress, describeAddressIssues, type AddressCheck } from "@/lib/address-rules";
+import { ADDRESS_IN_TEXT_MESSAGE, containsOwnStreet, containsStreetAddress } from "@/lib/gig-location";
 
 export const GIG_LIMITS = {
   titleMin: 8,
@@ -123,6 +124,10 @@ export function checkGigContent(input: Pick<GigPostingInput, "title" | "descript
   if (SPAM_PHRASES.test(text)) {
     add("description", "Der Text enthält Begriffe, die nicht zu einem Gartenauftrag passen. Bitte beschreibe nur die Gartenarbeit.");
   }
+  // Adressschutz: Titel und Beschreibung sind für alle Helfer sichtbar - die genaue Adresse darf dort nicht stehen.
+  if (containsStreetAddress(text)) {
+    add("description", ADDRESS_IN_TEXT_MESSAGE);
+  }
 
   // Preis
   if (input.budgetCents < GIG_LIMITS.minBudgetCents) {
@@ -152,7 +157,7 @@ export function checkGigContent(input: Pick<GigPostingInput, "title" | "descript
 
 /** Prüfung einer Direktbuchung: Der Titel kommt vom Angebot, die Notiz ist freiwillig, aber ohne Kontaktdaten/Spam. */
 export function checkBookingContent(
-  input: { description: string; scheduledAt: string },
+  input: { description: string; scheduledAt: string; address?: string | null },
   now = new Date(),
 ): GigIssue[] {
   const issues: GigIssue[] = [];
@@ -160,6 +165,9 @@ export function checkBookingContent(
   if (description) {
     if (containsPrivateContact(description) || /https?:|www\.|\b[a-z0-9-]+\.(de|com|net|org|info|ru|biz)\b/i.test(description)) {
       issues.push({ field: "description", message: "Bitte keine Telefonnummern, E-Mail-Adressen oder Links angeben. Kontakt läuft sicher über den Chat in GreenMatch." });
+    } else if (containsStreetAddress(description) || containsOwnStreet(description, input.address)) {
+      // Die Notiz sieht der Helfer schon vor der Annahme - die genaue Adresse wird erst danach freigegeben.
+      issues.push({ field: "description", message: ADDRESS_IN_TEXT_MESSAGE });
     } else if (SPAM_PHRASES.test(description) || (description.length >= 12 && looksLikeGibberish(description))) {
       issues.push({ field: "description", message: "Bitte beschreibe nur kurz, was gemacht werden soll." });
     }
@@ -186,6 +194,12 @@ export interface GigCheckResult {
 export function checkGigPosting(input: GigPostingInput, now = new Date(), seed = 0): GigCheckResult {
   const address = checkFreiburgAddress(input.address, input.postalCode ?? null, seed);
   const issues = checkGigContent(input, now);
+  if (
+    !issues.some((i) => i.message === ADDRESS_IN_TEXT_MESSAGE) &&
+    (containsOwnStreet(input.title, address.street) || containsOwnStreet(input.description, address.street))
+  ) {
+    issues.push({ field: "description", message: ADDRESS_IN_TEXT_MESSAGE });
+  }
   for (const i of address.issues) {
     issues.push({
       field: i.code.startsWith("plz") || i.code === "other_city" ? "postalCode" : "address",

@@ -49,6 +49,7 @@ import {
   PLATFORM_FEE_HELPER_RATE,
 } from "@/lib/platform-fees";
 import { toast } from "sonner";
+import { publicLocationLabel } from "@/lib/gig-location";
 
 export const Route = createFileRoute("/_authenticated/marketplace")({
   component: MarketplacePage,
@@ -195,7 +196,7 @@ function MarketplacePage() {
       return false;
     if (locationFilter.trim()) {
       const loc =
-        `${gig.postal_code ?? ""} ${gig.profiles?.city ?? ""}`.toLowerCase();
+        `${gig.district ?? ""} ${gig.profiles?.city ?? ""} freiburg`.toLowerCase();
       if (!loc.includes(locationFilter.toLowerCase())) return false;
     }
     return true;
@@ -274,7 +275,7 @@ function MarketplacePage() {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <Input
                     className="pl-8 h-9"
-                    placeholder="z. B. Freiburg oder 79100"
+                    placeholder="z. B. Wiehre oder Herdern"
                     value={locationFilter}
                     onChange={(e) => setLocationFilter(e.target.value)}
                   />
@@ -341,10 +342,7 @@ function MarketplacePage() {
                         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <MapPin className="size-3" />
-                            {gig.postal_code}
-                            {gig.profiles?.city
-                              ? ` · ${gig.profiles.city}`
-                              : ""}
+                            {publicLocationLabel(gig.district)}
                           </span>
                           {gig.scheduled_at && (
                             <span className="flex items-center gap-1">
@@ -574,10 +572,7 @@ function MarketplacePage() {
                 <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                   <div className="flex items-center gap-1.5">
                     <MapPin className="size-3.5" />
-                    {selectedGig.postal_code}
-                    {selectedGig.profiles?.city
-                      ? `, ${selectedGig.profiles.city}`
-                      : ""}
+                    {publicLocationLabel(selectedGig.district)}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="size-3.5" />

@@ -78,6 +78,7 @@ export function CustomerDashboard() {
       serviceType: string;
       description: string;
       address: string;
+      district?: string;
       scheduledAt: string;
       budgetCents: number;
       listingId?: string;
@@ -422,6 +423,7 @@ export function CustomerDashboard() {
                     ? "Buchung über „Helfer finden“"
                     : `Anfrage über „Helfer finden“ (Preisvorschlag des Kunden)`,
                   address: data.address,
+                  ...(data.district ? { district: data.district } : {}),
                   scheduledAt: data.scheduledAt,
                   budgetCents: data.budgetCents,
                   ...(data.listingId ? { listingId: data.listingId } : {}),

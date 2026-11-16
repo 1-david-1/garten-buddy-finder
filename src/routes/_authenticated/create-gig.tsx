@@ -30,6 +30,7 @@ import { GIG_SAFETY_TEXT } from "@/lib/consent-texts";
 import { addressExample, suggestStreets } from "@/lib/address-rules";
 import { FREIBURG_CITY_POSTAL_CODES } from "@/lib/freiburg-area";
 import { GIG_LIMITS, checkGigPosting, type GigIssue } from "@/lib/gig-quality";
+import { GIG_DISTRICTS } from "@/lib/gig-location";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -86,6 +87,7 @@ function CreateGigPage() {
   const [budgetEuros, setBudgetEuros] = useState("");
   const [address, setAddress] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [district, setDistrict] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("10:00");
   const [durationHours, setDurationHours] = useState("2");
@@ -134,6 +136,7 @@ function CreateGigPage() {
           budgetCents: Math.round(parseFloat(budgetEuros) * 100),
           address,
           postalCode,
+          district,
           scheduledAt: scheduledDate
             ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
             : null,
@@ -304,7 +307,8 @@ function CreateGigPage() {
                   </datalist>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Zum Beispiel „{addressExample(0)}“, „{addressExample(1)}“ oder „{addressExample(2)}“. Ort ist immer
-                    Freiburg im Breisgau; Zusätze wie „2. OG“ bitte in die Beschreibung.
+                    Freiburg im Breisgau; Zusätze wie „2. OG“ bitte in die Beschreibung. Die genaue Adresse ist nicht
+                    öffentlich.
                   </p>
                   <FieldIssues issues={issuesFor("address")} />
                   {(submitted || touched.address) && check.warnings.length > 0 && check.address.issues.length === 0 && (
@@ -337,6 +341,28 @@ function CreateGigPage() {
                   </p>
                   <FieldIssues issues={issuesFor("postalCode")} />
                 </div>
+              </div>
+
+              <div>
+                <Label htmlFor="district" className="text-sm">
+                  Stadtteil (öffentlich sichtbar) *
+                </Label>
+                <Select value={district} onValueChange={setDistrict}>
+                  <SelectTrigger id="district" className="mt-1 sm:max-w-xs">
+                    <SelectValue placeholder="Stadtteil wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GIG_DISTRICTS.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Helfer sehen nur Freiburg und diesen Stadtteil. Straße, Hausnummer und Postleitzahl bleiben verborgen,
+                  bis ein Helfer den Auftrag angenommen hat – danach sieht sie nur dieser Helfer.
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -481,8 +507,8 @@ function CreateGigPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">PLZ</span>
-                  <span className="font-medium">{postalCode || "—"}</span>
+                  <span className="text-muted-foreground">Stadtteil</span>
+                  <span className="font-medium">{district || "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Termin</span>
@@ -535,6 +561,7 @@ function CreateGigPage() {
                   !budgetEuros ||
                   !address.trim() ||
                   postalCode.length !== 5 ||
+                  !district ||
                   allowedAgeGroups.length === 0
                 }
               >

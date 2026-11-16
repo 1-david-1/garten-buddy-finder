@@ -66,6 +66,7 @@ import { createReview, getGigReview, updateReview } from "@/lib/reviews.function
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { GuardianConsentBanner } from "@/components/verification-card";
+import { publicLocationLabel } from "@/lib/gig-location";
 
 interface RecentGig {
   id: string;
@@ -74,6 +75,7 @@ interface RecentGig {
   description: string | null;
   budgetCents: number;
   address: string | null;
+  district: string | null;
   scheduledAt: string | null;
   status: string;
   customerId: string;
@@ -86,6 +88,7 @@ interface PendingBooking {
   serviceType: string;
   budgetCents: number;
   address: string | null;
+  district: string | null;
   scheduledAt: string | null;
   status: string;
   customerId: string;
@@ -395,7 +398,8 @@ export function HelperDashboard() {
       id: g.id,
       serviceType: g.serviceType,
       description: g.description,
-      address: g.address,
+      // Genaue Adresse nur nach Annahme; sonst der Stadtteil
+      address: g.address ?? publicLocationLabel(g.district),
       scheduledAt: g.scheduledAt,
       customerName: g.customerName,
     }));
@@ -1054,7 +1058,7 @@ export function HelperDashboard() {
                     {t("dashboard.helper.detail.address")}
                   </span>
                   <span className="font-medium">
-                    {selectedGig.address ?? "—"}
+                    {selectedGig.address ?? publicLocationLabel(selectedGig.district)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between border-b border-glass-border pb-3">

@@ -157,6 +157,7 @@ export type Database = {
           created_at: string;
           customer_id: string;
           description: string | null;
+          district: string | null;
           duration_minutes: number;
           exclusive_until: string | null;
           id: string;
@@ -176,6 +177,7 @@ export type Database = {
           created_at?: string;
           customer_id: string;
           description?: string | null;
+          district?: string | null;
           duration_minutes?: number;
           exclusive_until?: string | null;
           id?: string;
@@ -195,6 +197,7 @@ export type Database = {
           created_at?: string;
           customer_id?: string;
           description?: string | null;
+          district?: string | null;
           duration_minutes?: number;
           exclusive_until?: string | null;
           id?: string;
@@ -207,6 +210,38 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      gig_locations: {
+        Row: {
+          address: string | null;
+          created_at: string;
+          gig_id: string;
+          postal_code: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          address?: string | null;
+          created_at?: string;
+          gig_id: string;
+          postal_code?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          address?: string | null;
+          created_at?: string;
+          gig_id?: string;
+          postal_code?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "gig_locations_gig_id_fkey";
+            columns: ["gig_id"];
+            isOneToOne: true;
+            referencedRelation: "gigs";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       invoices: {
         Row: {
