@@ -1,0 +1,31 @@
+// Server-only: prüft, dass der Admin-Client wirklich mit dem Service-Role-Schlüssel arbeitet.
+//
+// Hintergrund: Ohne gültigen SUPABASE_SERVICE_ROLE_KEY bricht client.server.ts im Betrieb sofort ab
+// (nur in der Entwicklung fällt es auf den öffentlichen anon-Schlüssel zurück). Dann liefern Admin-Abfragen
+// (z. B. Rollen, Storage, verification_requests) leere Ergebnisse oder Fehler - und Funktionen
+// wie "Eltern einladen" oder "Ausweis einreichen" scheitern mit irreführenden Meldungen
+// ("nur für Jugendliche möglich"). Diese Prüfung macht die Ursache sichtbar.
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+let verified = false;
+
+export class ServerMisconfiguredError extends Error {
+  constructor(detail?: string) {
+    super(
+      `server_misconfigured: Der Server hat keinen gültigen Service-Role-Schlüssel (SUPABASE_SERVICE_ROLE_KEY fehlt oder ist ungültig).${detail ? ` Ursache: ${detail}` : ""}`,
+    );
+  }
+}
+
+export async function assertServiceRole(): Promise<void> {
+  if (verified) return;
+  try {
+    // Admin-Endpunkt: funktioniert nur mit dem Service-Role-Schlüssel.
+    const { error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
+    if (error) throw error;
+    verified = true;
+  } catch (e) {
+    console.error("[service-role] Admin-Zugriff nicht möglich:", (e as Error)?.message);
+    throw new ServerMisconfiguredError((e as Error)?.message);
+  }
+}
