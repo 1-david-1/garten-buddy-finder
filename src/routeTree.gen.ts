@@ -37,6 +37,8 @@ import { Route as ElternZustimmungTokenRouteImport } from './routes/eltern-zusti
 import { Route as AuthenticatedHelpersHelperIdRouteImport } from './routes/_authenticated/helpers/$helperId'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages/index'
 import { Route as AuthenticatedMessagesConversationIdRouteImport } from './routes/_authenticated/messages/$conversationId'
+import { Route as AuthenticatedPartnerIndexRouteImport } from './routes/_authenticated/partner/index'
+import { Route as AuthenticatedPartnerPartnerIdRouteImport } from './routes/_authenticated/partner/$partnerId'
 import { Route as AuthenticatedSellIndexRouteImport } from './routes/_authenticated/sell/index'
 import { Route as AuthenticatedSellCreateRouteImport } from './routes/_authenticated/sell/create'
 import { Route as AuthenticatedServiceListingsIndexRouteImport } from './routes/_authenticated/service-listings/index'
@@ -160,11 +162,12 @@ const ElternEinladungTokenRoute = ElternEinladungTokenRouteImport.update({
   path: '/eltern-einladung/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ElternRegistrierungTokenRoute = ElternRegistrierungTokenRouteImport.update({
-  id: '/eltern-registrierung/$token',
-  path: '/eltern-registrierung/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const ElternRegistrierungTokenRoute =
+  ElternRegistrierungTokenRouteImport.update({
+    id: '/eltern-registrierung/$token',
+    path: '/eltern-registrierung/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ElternZustimmungTokenRoute = ElternZustimmungTokenRouteImport.update({
   id: '/eltern-zustimmung/$token',
   path: '/eltern-zustimmung/$token',
@@ -187,6 +190,18 @@ const AuthenticatedMessagesConversationIdRoute =
     id: '/$conversationId',
     path: '/$conversationId',
     getParentRoute: () => AuthenticatedMessagesRouteRoute,
+  } as any)
+const AuthenticatedPartnerIndexRoute =
+  AuthenticatedPartnerIndexRouteImport.update({
+    id: '/partner/',
+    path: '/partner/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPartnerPartnerIdRoute =
+  AuthenticatedPartnerPartnerIdRouteImport.update({
+    id: '/partner/$partnerId',
+    path: '/partner/$partnerId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSellIndexRoute = AuthenticatedSellIndexRouteImport.update({
   id: '/',
@@ -243,9 +258,11 @@ export interface FileRoutesByFullPath {
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
+  '/partner/$partnerId': typeof AuthenticatedPartnerPartnerIdRoute
   '/sell/create': typeof AuthenticatedSellCreateRoute
   '/service-listings/$id': typeof AuthenticatedServiceListingsIdRoute
   '/messages/': typeof AuthenticatedMessagesIndexRoute
+  '/partner/': typeof AuthenticatedPartnerIndexRoute
   '/sell/': typeof AuthenticatedSellIndexRoute
   '/service-listings/': typeof AuthenticatedServiceListingsIndexRoute
   '/sell/edit/$id': typeof AuthenticatedSellEditIdRoute
@@ -275,9 +292,11 @@ export interface FileRoutesByTo {
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
+  '/partner/$partnerId': typeof AuthenticatedPartnerPartnerIdRoute
   '/sell/create': typeof AuthenticatedSellCreateRoute
   '/service-listings/$id': typeof AuthenticatedServiceListingsIdRoute
   '/messages': typeof AuthenticatedMessagesIndexRoute
+  '/partner': typeof AuthenticatedPartnerIndexRoute
   '/sell': typeof AuthenticatedSellIndexRoute
   '/service-listings': typeof AuthenticatedServiceListingsIndexRoute
   '/sell/edit/$id': typeof AuthenticatedSellEditIdRoute
@@ -311,9 +330,11 @@ export interface FileRoutesById {
   '/eltern-zustimmung/$token': typeof ElternZustimmungTokenRoute
   '/_authenticated/helpers/$helperId': typeof AuthenticatedHelpersHelperIdRoute
   '/_authenticated/messages/$conversationId': typeof AuthenticatedMessagesConversationIdRoute
+  '/_authenticated/partner/$partnerId': typeof AuthenticatedPartnerPartnerIdRoute
   '/_authenticated/sell/create': typeof AuthenticatedSellCreateRoute
   '/_authenticated/service-listings/$id': typeof AuthenticatedServiceListingsIdRoute
   '/_authenticated/messages/': typeof AuthenticatedMessagesIndexRoute
+  '/_authenticated/partner/': typeof AuthenticatedPartnerIndexRoute
   '/_authenticated/sell/': typeof AuthenticatedSellIndexRoute
   '/_authenticated/service-listings/': typeof AuthenticatedServiceListingsIndexRoute
   '/_authenticated/sell/edit/$id': typeof AuthenticatedSellEditIdRoute
@@ -347,9 +368,11 @@ export interface FileRouteTypes {
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
+    | '/partner/$partnerId'
     | '/sell/create'
     | '/service-listings/$id'
     | '/messages/'
+    | '/partner/'
     | '/sell/'
     | '/service-listings/'
     | '/sell/edit/$id'
@@ -379,9 +402,11 @@ export interface FileRouteTypes {
     | '/eltern-zustimmung/$token'
     | '/helpers/$helperId'
     | '/messages/$conversationId'
+    | '/partner/$partnerId'
     | '/sell/create'
     | '/service-listings/$id'
     | '/messages'
+    | '/partner'
     | '/sell'
     | '/service-listings'
     | '/sell/edit/$id'
@@ -414,9 +439,11 @@ export interface FileRouteTypes {
     | '/eltern-zustimmung/$token'
     | '/_authenticated/helpers/$helperId'
     | '/_authenticated/messages/$conversationId'
+    | '/_authenticated/partner/$partnerId'
     | '/_authenticated/sell/create'
     | '/_authenticated/service-listings/$id'
     | '/_authenticated/messages/'
+    | '/_authenticated/partner/'
     | '/_authenticated/sell/'
     | '/_authenticated/service-listings/'
     | '/_authenticated/sell/edit/$id'
@@ -635,6 +662,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMessagesConversationIdRouteImport
       parentRoute: typeof AuthenticatedMessagesRouteRoute
     }
+    '/_authenticated/partner/': {
+      id: '/_authenticated/partner/'
+      path: '/partner'
+      fullPath: '/partner/'
+      preLoaderRoute: typeof AuthenticatedPartnerIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/partner/$partnerId': {
+      id: '/_authenticated/partner/$partnerId'
+      path: '/partner/$partnerId'
+      fullPath: '/partner/$partnerId'
+      preLoaderRoute: typeof AuthenticatedPartnerPartnerIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sell/': {
       id: '/_authenticated/sell/'
       path: '/'
@@ -723,7 +764,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedHelpersHelperIdRoute: typeof AuthenticatedHelpersHelperIdRoute
+  AuthenticatedPartnerPartnerIdRoute: typeof AuthenticatedPartnerPartnerIdRoute
   AuthenticatedServiceListingsIdRoute: typeof AuthenticatedServiceListingsIdRoute
+  AuthenticatedPartnerIndexRoute: typeof AuthenticatedPartnerIndexRoute
   AuthenticatedServiceListingsIndexRoute: typeof AuthenticatedServiceListingsIndexRoute
 }
 
@@ -742,7 +785,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedHelpersHelperIdRoute: AuthenticatedHelpersHelperIdRoute,
+  AuthenticatedPartnerPartnerIdRoute: AuthenticatedPartnerPartnerIdRoute,
   AuthenticatedServiceListingsIdRoute: AuthenticatedServiceListingsIdRoute,
+  AuthenticatedPartnerIndexRoute: AuthenticatedPartnerIndexRoute,
   AuthenticatedServiceListingsIndexRoute:
     AuthenticatedServiceListingsIndexRoute,
 }
@@ -767,13 +812,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

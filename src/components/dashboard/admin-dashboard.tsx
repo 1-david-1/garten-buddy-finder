@@ -68,6 +68,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/dashboard-shell";
+import {
+  CustomizableDashboard,
+  type DashboardWidget,
+} from "@/components/dashboard/customizable-dashboard";
 import { useI18n } from "@/lib/i18n";
 import {
   adjustTrustScore,
@@ -293,6 +297,276 @@ export function AdminDashboard() {
     );
   }
 
+  // Übersicht: jede Karte ist ein Bereich, den man ein-/ausblenden und umsortieren kann.
+  const overview = overviewQ.data;
+  const overviewWidgets: DashboardWidget[] = overview
+    ? [
+        {
+          id: "kpis",
+          title: "Kennzahlen",
+          description: "Nutzer, aktive Aufträge, Umsatzvolumen und offene Streitfälle.",
+          defaultWidth: "full",
+          essential: true,
+          render: () => (
+            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("admin.overview.kpi.totalUsers")}
+              </CardTitle>
+              <UsersIcon className="size-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{overview.kpis.totalUsers}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {overview.kpis.totalHelpers} {t("admin.overview.kpi.helpers")} ·{" "}
+                {overview.kpis.totalCustomers} {t("admin.overview.kpi.customers")}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("admin.overview.kpi.activeGigs")}
+              </CardTitle>
+              <ClipboardList className="size-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{overview.kpis.activeGigs}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {overview.kpis.completedGigs} {t("admin.overview.kpi.completedGigs")}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("admin.overview.kpi.grossVolume")}
+              </CardTitle>
+              <Euro className="size-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">
+                {formatEuros(overview.kpis.grossVolumeCents, intlLocale)}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("admin.overview.kpi.platformFees")}:{" "}
+                {formatEuros(overview.kpis.platformFeesCents, intlLocale)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("admin.overview.kpi.openDisputes")}
+              </CardTitle>
+              <AlertTriangle
+                className={`size-4 ${overview.kpis.openDisputes > 0 ? "text-destructive" : "text-primary"}`}
+              />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">
+                {overview.kpis.openDisputes}
+              </div>
+            </CardContent>
+          </Card>
+            </div>
+          ),
+        },
+        {
+          id: "growth-chart",
+          title: "Wachstum",
+          description: "Neue Registrierungen und Aufträge im Zeitverlauf.",
+          render: () => (
+        <Card className="h-full border-glass-border bg-glass backdrop-blur">
+          <CardHeader>
+            <CardTitle className="font-brand text-lg">
+              {t("admin.overview.chart.title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.overview.chart.sub")}
+            </p>
+          </CardHeader>
+          <CardContent className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={overview.growthChart}>
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+                />
+                <YAxis hide />
+                <Tooltip
+                  cursor={{ fill: "var(--color-glass)" }}
+                  contentStyle={{
+                    background: "var(--color-background)",
+                    border: "1px solid var(--color-glass-border)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar
+                  dataKey="signups"
+                  name={t("admin.overview.chart.signups")}
+                  fill="var(--color-primary)"
+                  radius={[6, 6, 0, 0]}
+                />
+                <Bar
+                  dataKey="gigs"
+                  name={t("admin.overview.chart.gigs")}
+                  fill="var(--color-muted-foreground)"
+                  radius={[6, 6, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+          ),
+        },
+        {
+          id: "status-breakdown",
+          title: "Aufträge nach Status",
+          description: "Verteilung aller Aufträge auf ihre Status.",
+          render: () => (
+        <Card className="h-full border-glass-border bg-glass backdrop-blur">
+          <CardHeader>
+            <CardTitle className="font-brand text-lg">
+              {t("admin.overview.statusBreakdown.title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.overview.statusBreakdown.sub")}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(() => {
+              const total = overview.gigStatusBreakdown.reduce(
+                (s, b) => s + b.count,
+                0,
+              );
+              return overview.gigStatusBreakdown.map((b) => (
+                <div key={b.status}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {t(`status.${b.status}`)}
+                    </span>
+                    <span className="font-medium">{b.count}</span>
+                  </div>
+                  <Progress
+                    value={total > 0 ? (b.count / total) * 100 : 0}
+                    className="h-1.5"
+                  />
+                </div>
+              ));
+            })()}
+          </CardContent>
+        </Card>
+          ),
+        },
+        {
+          id: "quick-settings",
+          title: "Schnelleinstellungen",
+          description: "Wartungsmodus und Registrierung mit einem Schalter ändern.",
+          essential: true,
+          render: () => (
+        <Card className="h-full border-glass-border bg-glass backdrop-blur">
+          <CardHeader>
+            <CardTitle className="font-brand text-lg">
+              {t("admin.overview.quickSettings.title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.overview.quickSettings.sub")}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-xl border border-glass-border p-3">
+              <div className="flex items-center gap-2">
+                <Wrench className="size-4 text-muted-foreground" />
+                <span className="text-sm">{t("admin.overview.quickSettings.maintenance")}</span>
+              </div>
+              <Switch
+                checked={overview.quickSettings.maintenanceMode}
+                disabled={quickSettingMutation.isPending}
+                onCheckedChange={(checked) =>
+                  quickSettingMutation.mutate({ key: "maintenance_mode", value: checked })
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-glass-border p-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-muted-foreground" />
+                <span className="text-sm">
+                  {t("admin.overview.quickSettings.registration")}
+                </span>
+              </div>
+              <Switch
+                checked={overview.quickSettings.registrationEnabled}
+                disabled={quickSettingMutation.isPending}
+                onCheckedChange={(checked) =>
+                  quickSettingMutation.mutate({
+                    key: "registration_enabled",
+                    value: checked,
+                  })
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+          ),
+        },
+        {
+          id: "audit-preview",
+          title: "Letzte Admin-Aktionen",
+          description: "Die jüngsten Einträge aus dem Audit-Log.",
+          render: () => (
+        <Card className="h-full border-glass-border bg-glass backdrop-blur">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-brand text-lg">
+                {t("admin.overview.auditPreview.title")}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {t("admin.overview.auditPreview.sub")}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setTab("audit")}>
+              {t("admin.overview.auditPreview.viewAll")}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {overview.recentAuditLog.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("admin.overview.auditPreview.empty")}
+              </p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {overview.recentAuditLog.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-center justify-between border-b border-glass-border pb-2 last:border-0 last:pb-0"
+                  >
+                    <span>
+                      <span className="font-medium">{entry.adminName}</span>{" "}
+                      <span className="text-muted-foreground">{entry.action}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateTime(entry.createdAt, intlLocale)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+          ),
+        },
+      ]
+    : [];
+
   return (
     <DashboardShell title={t("admin.title")} navItems={navItems} activeKey="admin">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -349,241 +623,7 @@ export function AdminDashboard() {
           ) : overviewQ.isLoading || !overviewQ.data ? (
             <p className="text-muted-foreground">{t("common.loading")}</p>
           ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-normal text-muted-foreground">
-                      {t("admin.overview.kpi.totalUsers")}
-                    </CardTitle>
-                    <UsersIcon className="size-4 text-primary" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">{overviewQ.data.kpis.totalUsers}</div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {overviewQ.data.kpis.totalHelpers} {t("admin.overview.kpi.helpers")} ·{" "}
-                      {overviewQ.data.kpis.totalCustomers} {t("admin.overview.kpi.customers")}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-normal text-muted-foreground">
-                      {t("admin.overview.kpi.activeGigs")}
-                    </CardTitle>
-                    <ClipboardList className="size-4 text-primary" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">{overviewQ.data.kpis.activeGigs}</div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {overviewQ.data.kpis.completedGigs} {t("admin.overview.kpi.completedGigs")}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-normal text-muted-foreground">
-                      {t("admin.overview.kpi.grossVolume")}
-                    </CardTitle>
-                    <Euro className="size-4 text-primary" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">
-                      {formatEuros(overviewQ.data.kpis.grossVolumeCents, intlLocale)}
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("admin.overview.kpi.platformFees")}:{" "}
-                      {formatEuros(overviewQ.data.kpis.platformFeesCents, intlLocale)}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-normal text-muted-foreground">
-                      {t("admin.overview.kpi.openDisputes")}
-                    </CardTitle>
-                    <AlertTriangle
-                      className={`size-4 ${overviewQ.data.kpis.openDisputes > 0 ? "text-destructive" : "text-primary"}`}
-                    />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">
-                      {overviewQ.data.kpis.openDisputes}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader>
-                    <CardTitle className="font-brand text-lg">
-                      {t("admin.overview.chart.title")}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {t("admin.overview.chart.sub")}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={overviewQ.data.growthChart}>
-                        <XAxis
-                          dataKey="label"
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
-                        />
-                        <YAxis hide />
-                        <Tooltip
-                          cursor={{ fill: "var(--color-glass)" }}
-                          contentStyle={{
-                            background: "var(--color-background)",
-                            border: "1px solid var(--color-glass-border)",
-                            borderRadius: 12,
-                            fontSize: 12,
-                          }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Bar
-                          dataKey="signups"
-                          name={t("admin.overview.chart.signups")}
-                          fill="var(--color-primary)"
-                          radius={[6, 6, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="gigs"
-                          name={t("admin.overview.chart.gigs")}
-                          fill="var(--color-muted-foreground)"
-                          radius={[6, 6, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader>
-                    <CardTitle className="font-brand text-lg">
-                      {t("admin.overview.statusBreakdown.title")}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {t("admin.overview.statusBreakdown.sub")}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {(() => {
-                      const total = overviewQ.data.gigStatusBreakdown.reduce(
-                        (s, b) => s + b.count,
-                        0,
-                      );
-                      return overviewQ.data.gigStatusBreakdown.map((b) => (
-                        <div key={b.status}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">
-                              {t(`status.${b.status}`)}
-                            </span>
-                            <span className="font-medium">{b.count}</span>
-                          </div>
-                          <Progress
-                            value={total > 0 ? (b.count / total) * 100 : 0}
-                            className="h-1.5"
-                          />
-                        </div>
-                      ));
-                    })()}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader>
-                    <CardTitle className="font-brand text-lg">
-                      {t("admin.overview.quickSettings.title")}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {t("admin.overview.quickSettings.sub")}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between rounded-xl border border-glass-border p-3">
-                      <div className="flex items-center gap-2">
-                        <Wrench className="size-4 text-muted-foreground" />
-                        <span className="text-sm">{t("admin.overview.quickSettings.maintenance")}</span>
-                      </div>
-                      <Switch
-                        checked={overviewQ.data.quickSettings.maintenanceMode}
-                        disabled={quickSettingMutation.isPending}
-                        onCheckedChange={(checked) =>
-                          quickSettingMutation.mutate({ key: "maintenance_mode", value: checked })
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-glass-border p-3">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="size-4 text-muted-foreground" />
-                        <span className="text-sm">
-                          {t("admin.overview.quickSettings.registration")}
-                        </span>
-                      </div>
-                      <Switch
-                        checked={overviewQ.data.quickSettings.registrationEnabled}
-                        disabled={quickSettingMutation.isPending}
-                        onCheckedChange={(checked) =>
-                          quickSettingMutation.mutate({
-                            key: "registration_enabled",
-                            value: checked,
-                          })
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-glass-border bg-glass backdrop-blur">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="font-brand text-lg">
-                        {t("admin.overview.auditPreview.title")}
-                      </CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {t("admin.overview.auditPreview.sub")}
-                      </p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setTab("audit")}>
-                      {t("admin.overview.auditPreview.viewAll")}
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    {overviewQ.data.recentAuditLog.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        {t("admin.overview.auditPreview.empty")}
-                      </p>
-                    ) : (
-                      <ul className="space-y-2 text-sm">
-                        {overviewQ.data.recentAuditLog.map((entry) => (
-                          <li
-                            key={entry.id}
-                            className="flex items-center justify-between border-b border-glass-border pb-2 last:border-0 last:pb-0"
-                          >
-                            <span>
-                              <span className="font-medium">{entry.adminName}</span>{" "}
-                              <span className="text-muted-foreground">{entry.action}</span>
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDateTime(entry.createdAt, intlLocale)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </>
+              <CustomizableDashboard scope="admin" widgets={overviewWidgets} title="Überblick" />
           )}
         </TabsContent>
 

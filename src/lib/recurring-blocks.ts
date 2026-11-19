@@ -10,7 +10,12 @@
  * 20261116000000_helper_recurring_blocks.sql).
  */
 
-export const BLOCK_TIME_ZONE = "Europe/Berlin";
+import { BERLIN_TIME_ZONE, berlinDateKey, berlinParts, berlinWallTimeToDate, type BerlinParts } from "@/lib/berlin-time";
+
+// Die Zeitzonen-Hilfen liegen in berlin-time.ts; hier weiter erreichbar, weil bestehender Code sie von hier importiert.
+export const BLOCK_TIME_ZONE = BERLIN_TIME_ZONE;
+export { berlinDateKey, berlinParts, berlinWallTimeToDate };
+export type { BerlinParts };
 
 export interface RecurringBlockRule {
   /** ISO-Wochentag: 1 = Montag ... 7 = Sonntag */
@@ -28,72 +33,6 @@ export interface BlockedInterval {
   /** ISO-Zeitstempel */
   start: string;
   end: string;
-}
-
-// ---------------------------------------------------------------------------
-// Zeitzonen-Hilfen (ohne Fremdbibliothek)
-// ---------------------------------------------------------------------------
-
-let formatter: Intl.DateTimeFormat | null = null;
-function berlinFormatter(): Intl.DateTimeFormat {
-  formatter ??= new Intl.DateTimeFormat("en-GB", {
-    timeZone: BLOCK_TIME_ZONE,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    weekday: "short",
-  });
-  return formatter;
-}
-
-const WEEKDAY_ISO: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
-
-export interface BerlinParts {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  second: number;
-  /** 1 = Montag ... 7 = Sonntag */
-  isoWeekday: number;
-}
-
-/** Kalenderdatum und Uhrzeit eines Zeitpunkts in deutscher Ortszeit. */
-export function berlinParts(date: Date): BerlinParts {
-  const parts: Record<string, string> = {};
-  for (const p of berlinFormatter().formatToParts(date)) parts[p.type] = p.value;
-  return {
-    year: Number(parts.year),
-    month: Number(parts.month),
-    day: Number(parts.day),
-    hour: Number(parts.hour) % 24,
-    minute: Number(parts.minute),
-    second: Number(parts.second),
-    isoWeekday: WEEKDAY_ISO[parts.weekday] ?? 1,
-  };
-}
-
-function offsetMsAt(utcMs: number): number {
-  const p = berlinParts(new Date(utcMs));
-  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - utcMs;
-}
-
-/** Der Zeitpunkt, an dem die Wanduhr in Deutschland das angegebene Datum und die Uhrzeit zeigt. */
-export function berlinWallTimeToDate(year: number, month: number, day: number, hour: number, minute: number): Date {
-  const guess = Date.UTC(year, month - 1, day, hour, minute);
-  const first = guess - offsetMsAt(guess);
-  const second = guess - offsetMsAt(first);
-  return new Date(second);
-}
-
-export function berlinDateKey(date: Date): string {
-  const p = berlinParts(date);
-  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
 function parseTime(value: string): { hour: number; minute: number } | null {

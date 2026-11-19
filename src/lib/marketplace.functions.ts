@@ -12,6 +12,10 @@ export interface MarketplaceHelper {
   rating: number | null;
   reviewCount: number;
   availableToday: boolean;
+  /** Leistungsarten (service_type) der aktiven Angebote des Helfers, z. B. "heckenschnitt". */
+  serviceTypes: string[];
+  /** Niedrigster Preis seiner aktiven Angebote in Cent; null, wenn keine Preise hinterlegt sind. */
+  fromPriceCents: number | null;
 }
 
 /**
@@ -57,6 +61,28 @@ export const getAvailableHelpers = createServerFn({ method: "GET" })
       .in("helper_id", helperIds);
     if (reviewsErr) throw reviewsErr;
 
+    // Angebote der Helfer: damit Kunden nach Leistung filtern und einen "ab"-Preis sehen können.
+    // Reine Zusatzinfo - schlägt das fehl, bleibt die Helferliste trotzdem nutzbar.
+    const { data: listings, error: listingsErr } = await supabase
+      .from("service_listings")
+      .select("helper_id, service_type, price_cents, start_price_cents")
+      .eq("status", "active")
+      .in("helper_id", helperIds);
+    if (listingsErr) console.error("[marketplace] service_listings:", listingsErr.message);
+
+    const typesByHelper = new Map<string, Set<string>>();
+    const fromPriceByHelper = new Map<string, number>();
+    for (const l of listings ?? []) {
+      const types = typesByHelper.get(l.helper_id) ?? new Set<string>();
+      types.add(l.service_type);
+      typesByHelper.set(l.helper_id, types);
+      const price = l.price_cents ?? l.start_price_cents;
+      if (typeof price === "number" && price > 0) {
+        const current = fromPriceByHelper.get(l.helper_id);
+        if (current === undefined || price < current) fromPriceByHelper.set(l.helper_id, price);
+      }
+    }
+
     const ratingsByHelper = new Map<string, number[]>();
     for (const r of reviews ?? []) {
       const list = ratingsByHelper.get(r.helper_id) ?? [];
@@ -78,6 +104,8 @@ export const getAvailableHelpers = createServerFn({ method: "GET" })
         rating: avg,
         reviewCount: ratings.length,
         availableToday: p.available_today ?? false,
+        serviceTypes: [...(typesByHelper.get(p.id) ?? [])],
+        fromPriceCents: fromPriceByHelper.get(p.id) ?? null,
       };
     });
 

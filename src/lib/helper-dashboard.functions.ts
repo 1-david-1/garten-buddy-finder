@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { attachGigLocations, fetchGigLocations, GIG_PUBLIC_COLUMNS } from "@/lib/gig-location";
+import { berlinDayFrom, berlinParts, berlinWallTimeToDate } from "@/lib/berlin-time";
+import { isActiveStatus } from "@/lib/gig-status";
 
 const PSTG_TX_THRESHOLD = 25;
 const PSTG_GROSS_CENTS_THRESHOLD = 180000; // 1.800 €
@@ -10,7 +12,8 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const year = new Date().getFullYear();
+    // Jahr der Verdienst-Statistik nach deutscher Ortszeit (passt zur Datenbank-Funktion complete_gig_and_release)
+    const year = berlinParts(new Date()).year;
 
     const [
       profileRes,
@@ -129,19 +132,20 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       .reduce((s, e) => s + netCentsOf(e), 0);
 
     const dayLabels = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    // Letzte 7 Tage nach deutscher Ortszeit (Tagesgrenze = Mitternacht in Deutschland, nicht in UTC)
     const chart = Array.from({ length: 7 }, (_, i) => {
-      const dayStart = new Date();
-      dayStart.setHours(0, 0, 0, 0);
-      dayStart.setDate(dayStart.getDate() - (6 - i));
-      const dayEnd = new Date(dayStart.getTime() + DAY);
+      const day = berlinDayFrom(new Date(now), -(6 - i));
+      const next = berlinDayFrom(new Date(now), -(6 - i) + 1);
+      const dayStart = berlinWallTimeToDate(day.year, day.month, day.day, 0, 0).getTime();
+      const dayEnd = berlinWallTimeToDate(next.year, next.month, next.day, 0, 0).getTime();
       const cents = paidOut
         .filter((e) => {
           const t = new Date(e.paid_out_at!).getTime();
-          return t >= dayStart.getTime() && t < dayEnd.getTime();
+          return t >= dayStart && t < dayEnd;
         })
         .reduce((s, e) => s + netCentsOf(e), 0);
       return {
-        label: dayLabels[dayStart.getDay()],
+        label: dayLabels[day.isoWeekday % 7],
         euros: Math.round(cents / 100),
       };
     });
@@ -285,7 +289,8 @@ export const submitTaxId = createServerFn({ method: "POST" })
     z.object({ taxId: z.string().min(4).max(40) }).parse(input),
   )
   .handler(async ({ data, context }) => {
-    const year = new Date().getFullYear();
+    // Jahr der Verdienst-Statistik nach deutscher Ortszeit (passt zur Datenbank-Funktion complete_gig_and_release)
+    const year = berlinParts(new Date()).year;
     const { error: pErr } = await context.supabase
       .from("profile_private")
       .update({ tax_id: data.taxId })
@@ -302,6 +307,11 @@ export const submitTaxId = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Alle Aufträge des Helfers - in der Schreibweise, die die Seite "Aufträge" liest (camelCase).
+ * Vorher kamen hier die rohen Datenbank-Felder (budget_cents ...) an, die Seite las aber budgetCents/scheduledAt/customerId:
+ * Beträge und Termine blieben leer, und "Annehmen" schickte keine Kunden-ID mit (der Chat mit dem Kunden startete nicht).
+ */
 export const getHelperGigs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -311,7 +321,8 @@ export const getHelperGigs = createServerFn({ method: "GET" })
       .from("gigs")
       .select(GIG_PUBLIC_COLUMNS)
       .eq("assigned_helper_id", userId)
-      .order("scheduled_at", { ascending: false, nullsFirst: false });
+      .order("updated_at", { ascending: false })
+      .limit(300);
 
     if (error) throw error;
     // Adresse nur für angenommene Aufträge (RLS auf gig_locations), sonst null.
@@ -328,8 +339,38 @@ export const getHelperGigs = createServerFn({ method: "GET" })
       (customerProfiles ?? []).map((p) => [p.id, p.display_name]),
     );
 
-    return gigs.map((g) => ({
-      ...g,
+    // Zahlungsstatus je Auftrag (Treuhand)
+    const { data: escrowRows } = await supabase
+      .from("escrow_transactions")
+      .select("gig_id, state")
+      .in("gig_id", gigs.map((g) => g.id));
+    const paymentByGig = new Map((escrowRows ?? []).map((e) => [e.gig_id, String(e.state)]));
+
+    const rows = gigs.map((g) => ({
+      id: g.id,
+      title: g.title,
+      description: g.description,
+      serviceType: g.service_type,
+      budgetCents: g.budget_cents,
+      scheduledAt: g.scheduled_at,
+      durationMinutes: g.duration_minutes,
+      status: g.status,
+      customerId: g.customer_id,
       customerName: nameById.get(g.customer_id) ?? "—",
+      address: g.address,
+      district: g.district,
+      paymentState: paymentByGig.get(g.id) ?? null,
+      updatedAt: g.updated_at,
     }));
+
+    // Was auf dich wartet zuerst, dann anstehende Aufträge nach Termin, dann der Verlauf (neueste zuerst)
+    const rank = (r: (typeof rows)[number]) =>
+      r.status === "pending_helper" ? 0 : isActiveStatus(r.status) ? 1 : 2;
+    return rows.sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === 1) return (a.scheduledAt ?? "9999") < (b.scheduledAt ?? "9999") ? -1 : 1;
+      return a.updatedAt < b.updatedAt ? 1 : -1;
+    });
   });

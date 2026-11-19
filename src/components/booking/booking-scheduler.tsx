@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import { addressExample, checkFreiburgAddress } from "@/lib/address-rules";
 import { GIG_DISTRICTS } from "@/lib/gig-location";
+import { berlinDayFrom } from "@/lib/berlin-time";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -95,20 +96,16 @@ const WEEKDAY_NAMES = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
  * daraus ein gültiges scheduled_at gebaut werden kann.
  */
 function buildWeek(weekOffset: number): DaySchedule[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   const days: DaySchedule[] = [];
   for (let i = 0; i < 6; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + weekOffset + i);
-    // Lokales Datum (toISOString() verschiebt den Tag um die Zeitzone: die Buchung landete einen Tag früher)
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // Deutsche Ortszeit: "heute" ist der Tag in Deutschland, unabhängig von Rechner und Server
+    const d = berlinDayFrom(new Date(), weekOffset + i);
     const isToday = weekOffset === 0 && i === 0;
     days.push({
-      date: iso,
-      dayName: isToday ? "Heute" : WEEKDAY_NAMES[d.getDay()],
-      dayNumber: d.getDate(),
-      hasAvailability: d.getDay() !== 0, // sonntags standardmäßig frei
+      date: d.key,
+      dayName: isToday ? "Heute" : WEEKDAY_NAMES[d.isoWeekday % 7],
+      dayNumber: d.day,
+      hasAvailability: d.isoWeekday !== 7, // sonntags standardmäßig frei
       slots: STANDARD_SLOT_TIMES.map((time) => ({ time, available: true })),
     });
   }

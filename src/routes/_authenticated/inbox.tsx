@@ -37,7 +37,7 @@ interface Notification {
 
 export const getInboxDataFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }): Promise<{ bookingRequests: BookingRequest[]; notifications: Notification[] }> => {
     const { supabase, userId } = context;
 
     // Fetch booking requests
@@ -150,7 +150,9 @@ export const Route = createFileRoute("/_authenticated/inbox")({
 });
 
 function InboxPage() {
-  const loaderData = Route.useLoaderData();
+  // Typ von Hand festgelegt: Die Seitenleiste ist in fast jeder Seite eingebunden und hängt so am gesamten Routenbaum.
+  // Je nach Größe des Baums verliert Route.useLoaderData() dadurch ihren Typ (Zirkelbezug in der Typ-Auflösung).
+  const loaderData = Route.useLoaderData() as { bookingRequests: BookingRequest[]; notifications: Notification[] };
   const { navItems } = useAppNavItems();
 
   const formatDate = (dateStr: string) => {

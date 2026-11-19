@@ -31,6 +31,7 @@ import { addressExample, suggestStreets } from "@/lib/address-rules";
 import { FREIBURG_CITY_POSTAL_CODES } from "@/lib/freiburg-area";
 import { GIG_LIMITS, checkGigPosting, type GigIssue } from "@/lib/gig-quality";
 import { GIG_DISTRICTS } from "@/lib/gig-location";
+import { berlinDateKey } from "@/lib/berlin-time";
 import { SERVICE_TYPES } from "@/lib/service-types";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -379,7 +380,7 @@ function CreateGigPage() {
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(e.target.value)}
                     className="mt-1"
-                    min={new Date().toISOString().split("T")[0]}
+                    min={berlinDateKey(new Date())}
                   />
                 </div>
                 <div>

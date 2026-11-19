@@ -283,3 +283,11 @@ const blockRuleSchema = z
 export const saveRecurringBlocksSchema = z.object({
   blocks: z.array(blockRuleSchema).max(MAX_BLOCK_RULES, `Es sind höchstens ${MAX_BLOCK_RULES} Zeitbereiche möglich.`),
 });
+
+// ---------------------------------------------------------------------------
+// Partner (Kunden bzw. Helfer, mit denen man zusammenarbeitet)
+// ---------------------------------------------------------------------------
+
+export const partnerIdSchema = z.object({
+  partnerId: z.string().uuid("Ungültige Kennung."),
+});

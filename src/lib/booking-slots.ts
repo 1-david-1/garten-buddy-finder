@@ -2,6 +2,11 @@
 // Die Verfügbarkeit stammt aus echten Daten des Helfers: bestehende Aufträge, Urlaubsmodus,
 // wiederkehrende Sperrzeiten (z. B. Stundenplan), Jugendschutz (08-18 Uhr, höchstens 2 Stunden pro Tag).
 // Es werden nur Zeitspannen übertragen, keine Auftragsdetails und keine Bezeichnungen der Sperrzeiten.
+//
+// ALLE Tage, Wochentage und Uhrzeiten gelten in deutscher Ortszeit (siehe berlin-time.ts) - im Browser wie auf dem
+// Server. Der Server läuft in UTC; mit den Date-Methoden des Rechners (getHours, getDay ...) wurden dort im Sommer
+// Termine um 09:00 Uhr fälschlich als "vor 08:00" abgelehnt und kurz nach Mitternacht galt noch der Vortag als heute.
+import { berlinDateKey, berlinParts, berlinWallTimeToDate } from "@/lib/berlin-time";
 
 export interface BusyInterval {
   /** ISO-Zeitstempel */
@@ -51,11 +56,9 @@ export const YOUTH_MAX_MINUTES_PER_DAY = 120;
 export const BOOKING_WINDOW_DAYS = 28;
 
 /** Lokales Datum als YYYY-MM-DD (NICHT toISOString: das verschiebt den Tag um die Zeitzone). */
+/** Datum ("YYYY-MM-DD") des Tages in Deutschland. Der Name stammt aus der Zeit, als hier noch die Rechner-Zeit galt. */
 export function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return berlinDateKey(d);
 }
 
 function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
@@ -78,9 +81,10 @@ export function slotProblem(
   if (info.unavailableUntil && localDateKey(start) < info.unavailableUntil) {
     return "Der Helfer ist zu diesem Zeitpunkt nicht verfügbar (Urlaub).";
   }
-  const hour = start.getHours() + start.getMinutes() / 60;
+  const local = berlinParts(start);
+  const hour = local.hour + local.minute / 60;
   const endHour = hour + minutes / 60;
-  if (start.getDay() === 0) return "Sonntags sind keine Termine möglich.";
+  if (local.isoWeekday === 7) return "Sonntags sind keine Termine möglich.";
   if (info.isYouth && (hour < 8 || endHour > 18)) {
     return "Jugendliche Helfer arbeiten nur zwischen 08:00 und 18:00 Uhr.";
   }
@@ -118,25 +122,34 @@ export interface DaySchedule {
 
 const WEEKDAY_NAMES = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
-/** Sechs Tage ab (heute + dayOffset) mit echten freien/belegten Zeitfenstern. */
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Sechs Tage ab (heute + dayOffset) mit echten freien/belegten Zeitfenstern. "Heute" ist der Tag in Deutschland. */
 export function buildSchedule(
   info: SlotInfo,
   dayOffset: number,
   now: Date = new Date(),
 ): DaySchedule[] {
+  const today = berlinParts(now);
   const days: DaySchedule[] = [];
   for (let i = 0; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset + i);
+    // Kalenderrechnung über UTC, damit die Zeitumstellung keinen Tag verschiebt
+    const cal = new Date(Date.UTC(today.year, today.month - 1, today.day + dayOffset + i));
+    const y = cal.getUTCFullYear();
+    const m = cal.getUTCMonth() + 1;
+    const day = cal.getUTCDate();
     const isToday = dayOffset + i === 0;
     const slots = SLOT_TIMES.map((time) => {
       const [hh, mm] = time.split(":").map(Number);
-      const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
+      const start = berlinWallTimeToDate(y, m, day, hh, mm);
       return { time, available: slotProblem(info, start, SLOT_MINUTES, now) === null };
     });
     days.push({
-      date: localDateKey(d),
-      dayName: isToday ? "Heute" : WEEKDAY_NAMES[d.getDay()],
-      dayNumber: d.getDate(),
+      date: `${y}-${pad2(m)}-${pad2(day)}`,
+      dayName: isToday ? "Heute" : WEEKDAY_NAMES[cal.getUTCDay()],
+      dayNumber: day,
       hasAvailability: slots.some((s) => s.available),
       slots,
     });

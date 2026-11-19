@@ -45,32 +45,28 @@ import { createReview, updateReview, getGigReview } from "@/lib/reviews.function
 import { startConversation } from "@/lib/messaging.functions";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { describeGigStatus, describePayment, TONE_CLASSES, type PaymentState } from "@/lib/gig-status";
+import { isPaymentReleasable } from "@/lib/partners";
+import { publicLocationLabel } from "@/lib/gig-location";
+import { berlinDateTimeLocalValue, formatBerlinDate } from "@/lib/berlin-time";
+import { toastForPayout } from "@/lib/payout-toast";
+
+/** Auftrag aus getMyGigs: Zeile aus der Datenbank plus Zahlungsstatus und Name des Helfers */
+type MyGig = Tables<"gigs"> & { payment_state?: string | null; helper_name?: string | null };
 
 export const Route = createFileRoute("/_authenticated/my-gigs")({
   component: MyGigsPage,
 });
-
-const STATUS_COLORS: Record<string, string> = {
-  open: "text-blue-400 border-blue-400/30 bg-blue-400/10",
-  negotiating: "text-amber-400 border-amber-400/30 bg-amber-400/10",
-  pending_helper: "text-sky-400 border-sky-400/30 bg-sky-400/10",
-  assigned: "text-purple-400 border-purple-400/30 bg-purple-400/10",
-  in_progress: "text-orange-400 border-orange-400/30 bg-orange-400/10",
-  completed: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10",
-  cancelled: "text-red-400 border-red-400/30 bg-red-400/10",
-  draft: "text-muted-foreground border-muted-foreground/30 bg-muted/10",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  open: "Offen",
-  negotiating: "In Verhandlung",
-  pending_helper: "Preis geeinigt (Termin offen)",
-  assigned: "Zugewiesen",
-  in_progress: "In Bearbeitung",
-  completed: "Abgeschlossen",
-  cancelled: "Storniert",
-  draft: "Entwurf",
-};
 
 function formatEuros(cents: number) {
   return (cents / 100).toLocaleString("de-DE", {
@@ -121,14 +117,24 @@ function MyGigsPage() {
     enabled: !!selectedGig,
   });
 
+  // Vor dem Freigeben der Zahlung wird immer nachgefragt (Geld lässt sich nicht zurückholen)
+  const [confirmGigId, setConfirmGigId] = useState<string | null>(null);
+
   const completeMutation = useMutation({
     mutationFn: (gigId: string) => completeGigFn({ data: { gigId } }),
-    onSuccess: () => {
-      toast.success("Auftrag als abgeschlossen markiert!");
+    onSuccess: (res) => {
+      toastForPayout(res.payout, res.newlyCompleted);
       queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
+      queryClient.invalidateQueries({ queryKey: ["my-partners"] });
+      setConfirmGigId(null);
       setSelectedGig(null);
     },
-    onError: (err) => toast.error((err as Error).message),
+    onError: (err) => {
+      toast.error((err as Error).message);
+      setConfirmGigId(null);
+      // Nach einem Fehler den tatsächlichen Stand laden - nichts bleibt veraltet stehen
+      queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
+    },
   });
 
   const proposeDateMutation = useMutation({
@@ -253,12 +259,15 @@ function MyGigsPage() {
   const { navItems } = useAppNavItems();
 
   const gigs = gigsQuery.data?.gigs ?? [];
+  // Ein abgeschlossener Auftrag mit noch nicht freigegebener Zahlung wartet auf dich und bleibt deshalb unter "Aktiv".
+  const awaitsPayment = (g: MyGig) => g.status === "completed" && isPaymentReleasable(g.payment_state);
   const activeGigs = gigs.filter(
-    (g) => !["completed", "cancelled"].includes(g.status),
+    (g) => !["completed", "cancelled"].includes(g.status) || awaitsPayment(g),
   );
-  const pastGigs = gigs.filter((g) =>
-    ["completed", "cancelled"].includes(g.status),
+  const pastGigs = gigs.filter(
+    (g) => ["completed", "cancelled"].includes(g.status) && !awaitsPayment(g),
   );
+  const confirmGig = gigs.find((g) => g.id === confirmGigId) ?? null;
 
   return (
     <DashboardShell
@@ -326,7 +335,7 @@ function MyGigsPage() {
                     key={gig.id}
                     gig={gig}
                     onSelect={setSelectedGig}
-                    onComplete={() => completeMutation.mutate(gig.id)}
+                    onComplete={() => setConfirmGigId(gig.id)}
                     isCompleting={completeMutation.isPending}
                     onReview={(helperId, helperName) =>
                       handleReview(helperId, helperName, gig.id)
@@ -383,15 +392,14 @@ function MyGigsPage() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <MapPin className="size-3.5" />
-                  {selectedGigData.address ?? "—"},{" "}
-                  {selectedGigData.postal_code}
+                  {selectedGigData.address
+                    ? `${selectedGigData.address}, ${selectedGigData.postal_code ?? ""}`
+                    : publicLocationLabel(selectedGigData.district)}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="size-3.5" />
                   {selectedGigData.scheduled_at
-                    ? new Date(selectedGigData.scheduled_at).toLocaleDateString(
-                        "de-DE",
-                      )
+                    ? formatBerlinDate(selectedGigData.scheduled_at)
                     : "Flexibel"}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -420,6 +428,7 @@ function MyGigsPage() {
                   <div className="flex gap-2">
                     <Input
                       type="datetime-local"
+                      min={berlinDateTimeLocalValue(new Date())}
                       value={dateProposal}
                       onChange={(e) => setDateProposal(e.target.value)}
                       className="h-9 text-sm"
@@ -461,7 +470,7 @@ function MyGigsPage() {
                   <p className="text-xs text-muted-foreground">Sicherheit</p>
                   <SafetyActions
                     userId={selectedGigData.assigned_helper_id}
-                    userName="Helfer"
+                    userName={selectedGigData.helper_name ?? "Helfer"}
                     gigId={selectedGigData.id}
                   />
                   {(selectedGigData.status === "pending_helper" ||
@@ -653,23 +662,24 @@ function MyGigsPage() {
               </div>
 
               {/* Auftrag abschließen */}
-              {["assigned", "in_progress"].includes(selectedGigData.status) && (
+              {(["assigned", "in_progress"].includes(selectedGigData.status) || awaitsPayment(selectedGigData)) && (
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
                   <h4 className="text-sm font-semibold text-emerald-400 mb-2">
-                    Arbeit erledigt?
+                    {selectedGigData.status === "completed" ? "Zahlung noch nicht freigegeben" : "Arbeit erledigt?"}
                   </h4>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Bestätige den Abschluss, damit der Auftrag als erledigt
-                    gilt und ihr euch gegenseitig bewerten könnt.
+                    {selectedGigData.status === "completed"
+                      ? "Der Auftrag ist abgeschlossen. Gib die Zahlung jetzt frei, damit der Helfer sein Geld bekommt."
+                      : "Bestätige den Abschluss, damit der Auftrag als erledigt gilt, die Zahlung an den Helfer freigegeben wird und ihr euch gegenseitig bewerten könnt."}
                   </p>
                   <Button
                     size="sm"
                     className="bg-emerald-600 hover:bg-emerald-700"
-                    onClick={() => completeMutation.mutate(selectedGigData.id)}
+                    onClick={() => setConfirmGigId(selectedGigData.id)}
                     disabled={completeMutation.isPending}
                   >
                     <CheckCircle2 className="size-4 mr-2" />
-                    Auftrag abschließen & Zahlung freigeben
+                    {selectedGigData.status === "completed" ? "Zahlung freigeben" : "Auftrag abschließen & Zahlung freigeben"}
                   </Button>
                 </div>
               )}
@@ -677,6 +687,38 @@ function MyGigsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Bestätigung vor der Freigabe der Zahlung */}
+      <AlertDialog
+        open={!!confirmGig}
+        onOpenChange={(open) => !open && !completeMutation.isPending && setConfirmGigId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmGig?.status === "completed" ? "Zahlung freigeben?" : "Auftrag abschließen und Zahlung freigeben?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmGig?.status === "completed"
+                ? `Die Zahlung für „${confirmGig?.title}“ (${formatEuros(confirmGig?.budget_cents ?? 0)}) geht an ${confirmGig?.helper_name ?? "den Helfer"}.`
+                : `Bestätige nur, wenn „${confirmGig?.title}“ erledigt ist. Die Zahlung (${formatEuros(confirmGig?.budget_cents ?? 0)}) wird danach an ${confirmGig?.helper_name ?? "den Helfer"} freigegeben.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={completeMutation.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={completeMutation.isPending}
+              onClick={(e) => {
+                // Dialog bleibt offen, bis das Ergebnis da ist (Doppelklick-sicher)
+                e.preventDefault();
+                if (confirmGig) completeMutation.mutate(confirmGig.id);
+              }}
+            >
+              {completeMutation.isPending ? "Wird freigegeben …" : "Ja, freigeben"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Review Dialog */}
       <Dialog
@@ -752,43 +794,50 @@ function GigCard({
   isCompleting,
   onReview,
 }: {
-  gig: Tables<"gigs">;
+  gig: MyGig;
   onSelect: (id: string) => void;
   onComplete: () => void;
   isCompleting: boolean;
   onReview: (helperId: string, helperName: string) => void;
 }) {
-  const statusClass = STATUS_COLORS[gig.status] ?? STATUS_COLORS.draft;
-  const statusLabel = STATUS_LABELS[gig.status] ?? gig.status;
+  const paymentState = gig.payment_state as PaymentState;
+  const info = describeGigStatus(gig.status, "customer", { paymentState, hasScheduledDate: !!gig.scheduled_at });
+  const payment = describePayment(paymentState, "customer");
+  const canComplete =
+    ["assigned", "in_progress"].includes(gig.status) || (gig.status === "completed" && isPaymentReleasable(paymentState));
 
   return (
     <Card
-      className="border-glass-border bg-glass backdrop-blur cursor-pointer transition hover:border-primary/40"
+      className={`border-glass-border bg-glass backdrop-blur cursor-pointer transition hover:border-primary/40 ${
+        info.needsAction ? "border-amber-400/40" : ""
+      }`}
       onClick={() => onSelect(gig.id)}
     >
       <CardContent className="pt-4 pb-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-semibold truncate">{gig.title}</h3>
-              <Badge
-                variant="outline"
-                className={`shrink-0 text-[11px] ${statusClass}`}
-              >
-                {statusLabel}
+              <Badge variant="outline" className={`shrink-0 text-[11px] ${TONE_CLASSES[info.tone]}`}>
+                {info.label}
               </Badge>
+              {payment && gig.status !== "cancelled" && (
+                <Badge variant="outline" className={`shrink-0 text-[11px] ${TONE_CLASSES[payment.tone]}`}>
+                  {payment.label}
+                </Badge>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {gig.helper_name && <span>Helfer: {gig.helper_name}</span>}
               <span className="flex items-center gap-1">
                 <MapPin className="size-3" />
-                {gig.address ? `${gig.address}, ` : ""}
-                {gig.postal_code ?? "—"}
+                {gig.address ? `${gig.address}, ${gig.postal_code ?? ""}` : publicLocationLabel(gig.district)}
               </span>
               {gig.scheduled_at && (
                 <span className="flex items-center gap-1">
                   <Calendar className="size-3" />
-                  {new Date(gig.scheduled_at).toLocaleDateString("de-DE")}
+                  {formatBerlinDate(gig.scheduled_at)}
                 </span>
               )}
               <span className="flex items-center gap-1">
@@ -800,18 +849,36 @@ function GigCard({
                 {gig.duration_minutes / 60}h
               </span>
             </div>
+
+            {info.next && (
+              <p
+                className={`rounded-md px-2.5 py-1.5 text-xs ${
+                  info.needsAction ? "bg-amber-400/10 text-amber-300" : "bg-muted/40 text-muted-foreground"
+                }`}
+              >
+                {info.next}
+              </p>
+            )}
           </div>
 
-          <div
-            className="flex items-center gap-2 shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="flex shrink-0 flex-col items-end gap-2" onClick={(e) => e.stopPropagation()}>
+            {canComplete && (
+              <Button
+                size="sm"
+                className="h-7 bg-emerald-600 text-xs hover:bg-emerald-700"
+                onClick={onComplete}
+                disabled={isCompleting}
+              >
+                <CheckCircle2 className="size-3 mr-1" />
+                {gig.status === "completed" ? "Zahlung freigeben" : "Abschließen"}
+              </Button>
+            )}
             {gig.status === "completed" && gig.assigned_helper_id && (
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
-                onClick={() => onReview(gig.assigned_helper_id!, "Helfer")}
+                onClick={() => onReview(gig.assigned_helper_id!, gig.helper_name ?? "Helfer")}
               >
                 <Star className="size-3 mr-1" />
                 Bewerten

@@ -8,6 +8,7 @@ import {
   Package,
   Plus,
   Search,
+  Users,
   ShieldCheck,
   ShoppingBag,
   User,
@@ -15,6 +16,10 @@ import {
 } from "lucide-react";
 import type { DashboardNavItem } from "@/components/dashboard/dashboard-shell";
 import { getMyRoles } from "@/lib/roles.functions";
+import { getMyPartners } from "@/lib/partners.functions";
+
+/** So viele Personen zeigt das Unterfenster der Seitenleiste direkt an (der Rest über "Alle anzeigen"). */
+const SIDEBAR_PARTNER_LIMIT = 6;
 
 /**
  * Single source of truth for the sidebar navigation on every authenticated
@@ -40,6 +45,39 @@ export function useAppNavItems(): {
   const roles = rolesQuery.data?.roles ?? [];
   const isHelper = roles.some((r) => r.startsWith("helper_"));
   const isAdmin = roles.includes("admin");
+  const hasMarketRoleForPartners = isHelper || roles.includes("customer");
+
+  // Kunden (für Helfer) bzw. Helfer (für Auftraggeber) für das Unterfenster der Seitenleiste
+  const getPartnersFn = useServerFn(getMyPartners);
+  const partnersQuery = useQuery({
+    queryKey: ["my-partners"],
+    queryFn: () => getPartnersFn(),
+    enabled: rolesQuery.isSuccess && hasMarketRoleForPartners,
+    staleTime: 60_000,
+  });
+  const partners = partnersQuery.data?.partners ?? [];
+  const partnersItem: DashboardNavItem[] = hasMarketRoleForPartners
+    ? [
+        {
+          key: "partners",
+          label: isHelper ? "Kunden" : "Meine Helfer",
+          href: "/partner",
+          icon: <Users className="size-4" />,
+          badge: partners.reduce((sum, p) => sum + p.needsActionCount, 0) || undefined,
+          children: [
+            ...partners.slice(0, SIDEBAR_PARTNER_LIMIT).map((p) => ({
+              key: p.id,
+              label: p.name,
+              href: `/partner/${p.id}`,
+              badge: p.needsActionCount || undefined,
+            })),
+            ...(partners.length > SIDEBAR_PARTNER_LIMIT
+              ? [{ key: "all-partners", label: `Alle anzeigen (${partners.length})`, href: "/partner" }]
+              : []),
+          ],
+        },
+      ]
+    : [];
   // Reine Admin-Konten haben weder Kunden- noch Helfer-Menüs.
   const hasMarketRole = isHelper || roles.includes("customer");
 
@@ -134,8 +172,11 @@ export function useAppNavItems(): {
     },
   ];
 
+  // Das Partner-Unterfenster steht direkt unter den Auftrags-Punkten, vor Nachrichten und Profil.
+  const roleItemsWithPartners: DashboardNavItem[] = roleItems.length > 0 ? [...roleItems, ...partnersItem] : roleItems;
+
   return {
-    navItems: [...adminItems, ...base, ...roleItems, ...shared],
+    navItems: [...adminItems, ...base, ...roleItemsWithPartners, ...shared],
     isLoading: rolesQuery.isLoading,
   };
 }

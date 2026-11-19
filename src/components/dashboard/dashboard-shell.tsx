@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { usePathname } from "@/hooks/use-pathname";
 import {
   BarChart3,
   ClipboardList,
@@ -16,8 +17,12 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
@@ -27,11 +32,24 @@ import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/lib/auth";
 import { useI18n, type Locale } from "@/lib/i18n";
 
+/** Unterpunkt im Menü, z. B. ein einzelner Kunde oder Helfer */
+export interface DashboardNavSubItem {
+  key: string;
+  label: string;
+  href: string;
+  /** Zahl, die auf etwas hinweist, das auf dich wartet (z. B. offene Anfragen) */
+  badge?: number;
+}
+
 export interface DashboardNavItem {
   key: string;
   label: string;
   href: string;
   icon: ReactNode;
+  /** Aufklappbare Unterpunkte (unter dem Hauptpunkt eingerückt) */
+  children?: DashboardNavSubItem[];
+  /** Zahl am Hauptpunkt, z. B. Summe der offenen Aufgaben */
+  badge?: number;
 }
 
 const DashboardShellContext = createContext(false);
@@ -51,6 +69,7 @@ export function DashboardShell({
   const { t, locale, setLocale } = useI18n();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const pathname = usePathname();
 
   if (isInsideShell) {
     return <>{children}</>;
@@ -121,6 +140,25 @@ export function DashboardShell({
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
+                    {item.badge ? <SidebarMenuBadge>{item.badge}</SidebarMenuBadge> : null}
+                    {item.children && item.children.length > 0 && (
+                      <SidebarMenuSub>
+                        {item.children.map((child) => (
+                          <SidebarMenuSubItem key={child.key}>
+                            <SidebarMenuSubButton asChild size="sm" isActive={pathname === child.href}>
+                              <Link to={child.href}>
+                                <span>{child.label}</span>
+                                {child.badge ? (
+                                  <span className="ml-auto rounded-full bg-amber-400/20 px-1.5 text-[10px] font-medium text-amber-400">
+                                    {child.badge}
+                                  </span>
+                                ) : null}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    )}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

@@ -44,9 +44,9 @@ import {
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { StatsCard } from "./stats-card";
 import {
-  DraggableWidgetGrid,
-  type WidgetItem,
-} from "@/components/dashboard/draggable-widget-grid";
+  CustomizableDashboard,
+  type DashboardWidget,
+} from "@/components/dashboard/customizable-dashboard";
 import { GrowthChecklistWidget } from "@/components/dashboard/growth-checklist-widget";
 import { PreJobChecklistWidget } from "@/components/dashboard/pre-job-checklist-widget";
 import { useAppNavItems } from "@/lib/use-app-nav";
@@ -120,11 +120,6 @@ const statusColors: Record<string, string> = {
   draft: "text-muted-foreground border-muted/30 bg-muted/10",
 };
 
-const HELPER_WIDGETS: WidgetItem[] = [
-  { id: "growth-checklist", size: "lg", label: "Mehr Kunden gewinnen" },
-  { id: "pre-job-checklist", size: "lg", label: "Vor dem Einsatz" },
-];
-
 function ageFromISO(iso: string): number {
   const d = new Date(iso);
   const now = new Date();
@@ -157,24 +152,6 @@ export function HelperDashboard() {
   const queryClient = useQueryClient();
   const [selectedGig, setSelectedGig] = useState<RecentGig | null>(null);
   const [taxIdInput, setTaxIdInput] = useState("");
-
-  const [widgetOrder, setWidgetOrder] = useState<WidgetItem[]>(() => {
-    if (typeof window === "undefined") return HELPER_WIDGETS;
-    try {
-      const raw = window.localStorage.getItem("helper-dashboard-widgets");
-      if (!raw) return HELPER_WIDGETS;
-      const savedIds = JSON.parse(raw) as string[];
-      const byId = new Map(HELPER_WIDGETS.map((w) => [w.id, w]));
-      const restored = savedIds
-        .map((id) => byId.get(id))
-        .filter((w): w is WidgetItem => Boolean(w));
-      for (const w of HELPER_WIDGETS)
-        if (!restored.some((r) => r.id === w.id)) restored.push(w);
-      return restored.length ? restored : HELPER_WIDGETS;
-    } catch {
-      return HELPER_WIDGETS;
-    }
-  });
 
   const availabilityFn = useServerFn(setAvailability);
   const availabilityMutation = useMutation({
@@ -405,6 +382,511 @@ export function HelperDashboard() {
       customerName: g.customerName,
     }));
 
+  const widgets: DashboardWidget[] = [
+    {
+      id: "requests",
+      title: "Offene Buchungsanfragen",
+      description: "Neue Anfragen von Kunden, die auf deine Antwort warten.",
+      defaultWidth: "full",
+      essential: true,
+      render: () =>
+        pendingBookings && pendingBookings.length > 0 ? (
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="font-brand text-xl font-bold">Offene Buchungsanfragen</h2>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                {pendingBookings.length}
+              </span>
+            </div>
+            <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]">
+              {pendingBookings.map((booking: PendingBooking) => (
+                <Card key={booking.id} className="relative border-primary/50 bg-glass backdrop-blur shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.12)] overflow-hidden">
+                  {/* Glow accent */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-transparent" />
+                  <CardContent className="relative p-5 space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold leading-tight">{booking.title}</h3>
+                        <Badge variant="outline" className="shrink-0 text-[10px] text-amber-400 border-amber-400/30 bg-amber-400/10">
+                          Wartet
+                        </Badge>
+                      </div>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <p className="flex items-center gap-1.5">
+                          <span className="font-medium text-foreground">{booking.customerName}</span>
+                          möchte buchen
+                        </p>
+                        {booking.scheduledAt && (
+                          <p className="flex items-center gap-1.5">
+                            <CalendarClock className="size-3.5 shrink-0" />
+                            {new Date(booking.scheduledAt).toLocaleString(intlLocale, {
+                              weekday: "short",
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        )}
+                        <p className="flex items-center gap-1.5 font-semibold text-primary">
+                          <Euro className="size-3.5 shrink-0" />
+                          {formatEuros(booking.budgetCents, intlLocale)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1 gap-1.5"
+                        size="sm"
+                        disabled={respondMutation.isPending}
+                        onClick={() =>
+                          respondMutation.mutate({
+                            gigId: booking.id,
+                            accept: true,
+                            customerId: booking.customerId,
+                          })
+                        }
+                      >
+                        <MessageSquare className="size-3.5" />
+                        {booking.scheduledAt ? "Termin bestätigen" : "Annehmen & Chatten"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={respondMutation.isPending}
+                        onClick={() =>
+                          respondMutation.mutate({
+                            gigId: booking.id,
+                            accept: false,
+                            customerId: booking.customerId,
+                          })
+                        }
+                      >
+                        Ablehnen
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        ) : null,
+    },
+    {
+      id: "stats",
+      title: "Kennzahlen",
+      description: "Verdienst der Woche, Bewertung, Abschlussquote und erledigte Aufträge.",
+      defaultWidth: "full",
+      essential: true,
+      render: () => (
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.earnings")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatEuros(stats.earningsLast7Cents, intlLocale)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t("dashboard.helper.stat.vsLastWeek")}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Rating */}
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.rating")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.avgRating ? `${stats.avgRating.toFixed(1)} ★` : "—"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats.ratingCount > 0
+                  ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
+                  : t("dashboard.helper.stat.noRatings")}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Completion Rate */}
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.completionRate")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.completionRate ? `${Math.round(stats.completionRate * 100)}%` : "—"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {`${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Completed total */}
+          <Card className="border-glass-border bg-glass backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal text-muted-foreground">
+                {t("dashboard.helper.stat.completedTotal")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.completedCount}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t("dashboard.helper.stat.total")}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ),
+    },
+    {
+      id: "earnings-chart",
+      title: "Verdienst der letzten 7 Tage",
+      description: "Auszahlungen pro Tag als Balkendiagramm.",
+      render: () => (
+        <Card
+          id="earnings-chart"
+          className="h-full border-glass-border bg-glass backdrop-blur"
+        >
+          <CardHeader>
+            <CardTitle className="font-brand text-lg">
+              {t("dashboard.helper.chart.title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.helper.chart.sub")}
+            </p>
+          </CardHeader>
+          <CardContent className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chart}>
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                />
+                <YAxis hide />
+                <Tooltip
+                  cursor={{ fill: "var(--color-glass)" }}
+                  contentStyle={{
+                    background: "var(--color-background)",
+                    border: "1px solid var(--color-glass-border)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                  }}
+                  formatter={(value: number) => [
+                    `${value} €`,
+                    t("dashboard.helper.chart.title"),
+                  ]}
+                />
+                <Bar
+                  dataKey="euros"
+                  fill="var(--color-primary)"
+                  radius={[6, 6, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      ),
+    },
+    {
+      id: "gig-status",
+      title: "Auftrags-Status",
+      description: "Wie viele deiner letzten Aufträge offen, laufend oder erledigt sind.",
+      render: () => (
+        <Card className="h-full border-glass-border bg-glass backdrop-blur">
+          <CardHeader>
+            <CardTitle className="font-brand text-lg flex items-center gap-2">
+              <Zap className="size-4 text-primary" />
+              Auftrags-Status
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Letzte {totalGigs} Aufträge
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {totalGigs === 0 ? (
+              <p className="text-sm text-muted-foreground">Noch keine Aufträge.</p>
+            ) : (
+              <>
+                {/* Multi-segment progress bar */}
+                <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/30">
+                  {completedCount > 0 && (
+                    <div
+                      className="bg-emerald-400 transition-all"
+                      style={{ width: `${(completedCount / totalGigs) * 100}%` }}
+                    />
+                  )}
+                  {inProgressCount > 0 && (
+                    <div
+                      className="bg-primary transition-all"
+                      style={{ width: `${(inProgressCount / totalGigs) * 100}%` }}
+                    />
+                  )}
+                  {openCount > 0 && (
+                    <div
+                      className="bg-amber-400 transition-all"
+                      style={{ width: `${(openCount / totalGigs) * 100}%` }}
+                    />
+                  )}
+                </div>
+                {/* Legend */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                      <span className="text-muted-foreground">Abgeschlossen</span>
+                    </div>
+                    <span className="font-semibold">{completedCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary" />
+                      <span className="text-muted-foreground">In Bearbeitung</span>
+                    </div>
+                    <span className="font-semibold">{inProgressCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
+                      <span className="text-muted-foreground">Offen / Verhandlung</span>
+                    </div>
+                    <span className="font-semibold">{openCount}</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ),
+    },
+    {
+      id: "recent-orders",
+      title: "Letzte Aufträge",
+      description: "Deine neuesten Aufträge. Ein Klick öffnet die Details.",
+      defaultWidth: "full",
+      essential: true,
+      render: () => (
+        <Card
+          id="recent-gigs"
+          className="border-glass-border bg-glass backdrop-blur"
+        >
+          <CardHeader>
+            <CardTitle className="font-brand text-lg">
+              {t("dashboard.helper.orders.title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.helper.orders.sub")}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {recentGigs.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-12 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/20">
+                  <MapPin className="size-7 text-muted-foreground/40" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {t("dashboard.helper.orders.empty")}
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/marketplace">Aufträge finden</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentGigs.slice(0, 8).map((gig) => (
+                  <motion.div
+                    key={gig.id}
+                    whileHover={{ x: 3 }}
+                    transition={{ type: "spring", stiffness: 400 }}
+                    onClick={() => setSelectedGig(gig)}
+                    className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-glass-border px-4 py-3 transition-colors hover:bg-glass"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-sm">{gig.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {gig.customerName}
+                        {gig.scheduledAt && (
+                          <> · {new Date(gig.scheduledAt).toLocaleDateString(intlLocale)}</>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="font-semibold text-sm tabular-nums">
+                        {formatEuros(gig.budgetCents, intlLocale)}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 text-[11px] ${statusColors[gig.status] ?? ""}`}
+                      >
+                        {t(`status.${gig.status}`)}
+                      </Badge>
+                      <ChevronRight className="size-4 text-muted-foreground" />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+            {recentGigs.length > 0 && (
+              <div className="mt-4 text-right">
+                <Button asChild variant="ghost" size="sm" className="gap-1">
+                  <Link to="/gigs">
+                    Alle Aufträge ansehen
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ),
+    },
+    {
+      id: "pre-job",
+      title: "Vor dem Einsatz",
+      description: "Checkliste für deinen nächsten bestätigten Auftrag.",
+      essential: true,
+      render: () => (
+        <Card className="h-[28rem] overflow-hidden border-glass-border bg-glass backdrop-blur">
+          <PreJobChecklistWidget jobs={upcomingJobs} intlLocale={intlLocale} />
+        </Card>
+      ),
+    },
+    {
+      id: "pstg",
+      title: "Steuer-Monitor (PStTG)",
+      description: "Wie nah du an der Meldeschwelle für Plattform-Einnahmen bist.",
+      defaultWidth: "full",
+      render: () => (
+        <Card className="border-glass-border bg-glass backdrop-blur">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="font-brand text-lg">
+                  {t("dashboard.helper.pstg.title")}
+                </CardTitle>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {t("dashboard.helper.pstg.sub")}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-primary">
+                  {Math.round(Math.min(100, pstgRatio * 100))}%
+                </p>
+                <p className="text-xs text-muted-foreground">Schwellenwert</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Progress value={Math.min(100, pstgRatio * 100)} className="h-2.5" />
+            <div className="mt-3 flex justify-between font-mono text-[11px] text-muted-foreground">
+              <span>
+                {pstg.txCount} / {pstg.txThreshold} Tx
+              </span>
+              <span>
+                {formatEuros(pstg.grossCents, intlLocale)} /{" "}
+                {formatEuros(pstg.grossThreshold, intlLocale)}
+              </span>
+            </div>
+
+            {pstg.thresholdReached && !profile.hasTaxId && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertTitle>{t("dashboard.helper.pstg.locked")}</AlertTitle>
+                <AlertDescription>
+                  <form
+                    className="mt-3 flex gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (taxIdInput.trim())
+                        taxIdMutation.mutate(taxIdInput.trim());
+                    }}
+                  >
+                    <Input
+                      placeholder={t("dashboard.helper.pstg.taxIdLabel")}
+                      value={taxIdInput}
+                      onChange={(e) => setTaxIdInput(e.target.value)}
+                      className="h-9"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={taxIdMutation.isPending}
+                    >
+                      {t("dashboard.helper.pstg.taxIdSubmit")}
+                    </Button>
+                  </form>
+                  {taxIdMutation.isError && (
+                    <p className="mt-2 text-xs text-destructive">
+                      {t("dashboard.helper.error.generic")}
+                    </p>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      ),
+    },
+    {
+      id: "growth",
+      title: "Mehr Kunden gewinnen",
+      description: "Kleine Checkliste, die mehr Anfragen bringen soll.",
+      render: () => (
+        <Card className="h-[28rem] overflow-hidden border-glass-border bg-glass backdrop-blur">
+          <GrowthChecklistWidget userId={user?.id ?? "anon"} />
+        </Card>
+      ),
+    },
+    {
+      id: "find-orders",
+      title: "Neue Aufträge finden",
+      description: "Schnellzugriff auf den Marktplatz mit offenen Aufträgen.",
+      render: () => (
+        <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-6">
+          {/* Decorative blobs */}
+          <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-8 right-20 h-24 w-24 rounded-full bg-primary/10 blur-xl" />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Rocket className="size-5 text-primary" />
+                <span className="text-sm font-semibold text-primary uppercase tracking-widest">
+                  Neue Aufträge
+                </span>
+              </div>
+              <h2 className="font-brand text-xl font-bold">
+                Bereit für deinen nächsten Auftrag?
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Durchstöbere offene Aufträge in deiner Nähe und biete jetzt mit.
+              </p>
+            </div>
+            <Button asChild className="shrink-0 gap-2" size="lg">
+              <Link to="/marketplace">
+                Marktplatz öffnen
+                <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <DashboardShell
       title={t("dashboard.helper.title")}
@@ -532,496 +1014,8 @@ export function HelperDashboard() {
           </motion.div>
         )}
 
-        {/* ── Pending Bookings ── */}
-        {pendingBookings && pendingBookings.length > 0 && (
-          <motion.div variants={itemVariants} className="mt-8">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="font-brand text-xl font-bold">Offene Buchungsanfragen</h2>
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
-                {pendingBookings.length}
-              </span>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pendingBookings.map((booking: PendingBooking) => (
-                <Card key={booking.id} className="relative border-primary/50 bg-glass backdrop-blur shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.12)] overflow-hidden">
-                  {/* Glow accent */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-transparent" />
-                  <CardContent className="relative p-5 space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold leading-tight">{booking.title}</h3>
-                        <Badge variant="outline" className="shrink-0 text-[10px] text-amber-400 border-amber-400/30 bg-amber-400/10">
-                          Wartet
-                        </Badge>
-                      </div>
-                      <div className="space-y-1 text-sm text-muted-foreground">
-                        <p className="flex items-center gap-1.5">
-                          <span className="font-medium text-foreground">{booking.customerName}</span>
-                          möchte buchen
-                        </p>
-                        {booking.scheduledAt && (
-                          <p className="flex items-center gap-1.5">
-                            <CalendarClock className="size-3.5 shrink-0" />
-                            {new Date(booking.scheduledAt).toLocaleString(intlLocale, {
-                              weekday: "short",
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        )}
-                        <p className="flex items-center gap-1.5 font-semibold text-primary">
-                          <Euro className="size-3.5 shrink-0" />
-                          {formatEuros(booking.budgetCents, intlLocale)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        className="flex-1 gap-1.5"
-                        size="sm"
-                        disabled={respondMutation.isPending}
-                        onClick={() =>
-                          respondMutation.mutate({
-                            gigId: booking.id,
-                            accept: true,
-                            customerId: booking.customerId,
-                          })
-                        }
-                      >
-                        <MessageSquare className="size-3.5" />
-                        {booking.scheduledAt ? "Termin bestätigen" : "Annehmen & Chatten"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={respondMutation.isPending}
-                        onClick={() =>
-                          respondMutation.mutate({
-                            gigId: booking.id,
-                            accept: false,
-                            customerId: booking.customerId,
-                          })
-                        }
-                      >
-                        Ablehnen
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-
-        {/* ── Werkzeuge: verschiebbare Widgets ── */}
-        <motion.div variants={itemVariants} className="mt-8">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="font-brand text-xl font-bold">Deine Werkzeuge</h2>
-              <p className="text-sm text-muted-foreground">
-                Zum Umsortieren gedrückt halten und ziehen.
-              </p>
-            </div>
-          </div>
-          <DraggableWidgetGrid
-            items={widgetOrder}
-            maxColumns={4}
-            cellSize={200}
-            gap={16}
-            radius={20}
-            onChange={(next) => {
-              setWidgetOrder(next);
-              try {
-                window.localStorage.setItem(
-                  "helper-dashboard-widgets",
-                  JSON.stringify(next.map((w) => w.id)),
-                );
-              } catch {
-                // localStorage evtl. blockiert - Reihenfolge gilt dann nur für diese Sitzung.
-              }
-            }}
-            renderItem={(item) => {
-              if (item.id === "growth-checklist") {
-                return <GrowthChecklistWidget userId={user?.id ?? "anon"} />;
-              }
-              if (item.id === "pre-job-checklist") {
-                return (
-                  <PreJobChecklistWidget
-                    jobs={upcomingJobs}
-                    intlLocale={intlLocale}
-                  />
-                );
-              }
-              return null;
-            }}
-          />
-        </motion.div>
-
-        {/* ── Stats Grid ── */}
-        <motion.div
-          variants={itemVariants}
-          className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          {/* Earnings */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.earnings")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatEuros(stats.earningsLast7Cents, intlLocale)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t("dashboard.helper.stat.vsLastWeek")}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Rating */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.rating")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.avgRating ? `${stats.avgRating.toFixed(1)} ★` : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.ratingCount > 0
-                  ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
-                  : t("dashboard.helper.stat.noRatings")}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Completion Rate */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.completionRate")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.completionRate ? `${Math.round(stats.completionRate * 100)}%` : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {`${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Completed total */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.completedTotal")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.completedCount}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t("dashboard.helper.stat.total")}
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ── Chart + PStTG + Gig status ── */}
-        <motion.div
-          variants={itemVariants}
-          className="mt-6 grid gap-4 lg:grid-cols-3"
-        >
-          {/* Earnings chart – spans 2 cols */}
-          <Card
-            id="earnings-chart"
-            className="border-glass-border bg-glass backdrop-blur lg:col-span-2"
-          >
-            <CardHeader>
-              <CardTitle className="font-brand text-lg">
-                {t("dashboard.helper.chart.title")}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {t("dashboard.helper.chart.sub")}
-              </p>
-            </CardHeader>
-            <CardContent className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart}>
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    cursor={{ fill: "var(--color-glass)" }}
-                    contentStyle={{
-                      background: "var(--color-background)",
-                      border: "1px solid var(--color-glass-border)",
-                      borderRadius: 12,
-                      fontSize: 12,
-                    }}
-                    formatter={(value: number) => [
-                      `${value} €`,
-                      t("dashboard.helper.chart.title"),
-                    ]}
-                  />
-                  <Bar
-                    dataKey="euros"
-                    fill="var(--color-primary)"
-                    radius={[6, 6, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Gig status breakdown card */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader>
-              <CardTitle className="font-brand text-lg flex items-center gap-2">
-                <Zap className="size-4 text-primary" />
-                Auftrags-Status
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Letzte {totalGigs} Aufträge
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {totalGigs === 0 ? (
-                <p className="text-sm text-muted-foreground">Noch keine Aufträge.</p>
-              ) : (
-                <>
-                  {/* Multi-segment progress bar */}
-                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/30">
-                    {completedCount > 0 && (
-                      <div
-                        className="bg-emerald-400 transition-all"
-                        style={{ width: `${(completedCount / totalGigs) * 100}%` }}
-                      />
-                    )}
-                    {inProgressCount > 0 && (
-                      <div
-                        className="bg-primary transition-all"
-                        style={{ width: `${(inProgressCount / totalGigs) * 100}%` }}
-                      />
-                    )}
-                    {openCount > 0 && (
-                      <div
-                        className="bg-amber-400 transition-all"
-                        style={{ width: `${(openCount / totalGigs) * 100}%` }}
-                      />
-                    )}
-                  </div>
-                  {/* Legend */}
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                        <span className="text-muted-foreground">Abgeschlossen</span>
-                      </div>
-                      <span className="font-semibold">{completedCount}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary" />
-                        <span className="text-muted-foreground">In Bearbeitung</span>
-                      </div>
-                      <span className="font-semibold">{inProgressCount}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
-                        <span className="text-muted-foreground">Offen / Verhandlung</span>
-                      </div>
-                      <span className="font-semibold">{openCount}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ── PStTG Steuer-Monitor ── */}
-        <motion.div variants={itemVariants} className="mt-6">
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="font-brand text-lg">
-                    {t("dashboard.helper.pstg.title")}
-                  </CardTitle>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {t("dashboard.helper.pstg.sub")}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">
-                    {Math.round(Math.min(100, pstgRatio * 100))}%
-                  </p>
-                  <p className="text-xs text-muted-foreground">Schwellenwert</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Progress value={Math.min(100, pstgRatio * 100)} className="h-2.5" />
-              <div className="mt-3 flex justify-between font-mono text-[11px] text-muted-foreground">
-                <span>
-                  {pstg.txCount} / {pstg.txThreshold} Tx
-                </span>
-                <span>
-                  {formatEuros(pstg.grossCents, intlLocale)} /{" "}
-                  {formatEuros(pstg.grossThreshold, intlLocale)}
-                </span>
-              </div>
-
-              {pstg.thresholdReached && !profile.hasTaxId && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertTitle>{t("dashboard.helper.pstg.locked")}</AlertTitle>
-                  <AlertDescription>
-                    <form
-                      className="mt-3 flex gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (taxIdInput.trim())
-                          taxIdMutation.mutate(taxIdInput.trim());
-                      }}
-                    >
-                      <Input
-                        placeholder={t("dashboard.helper.pstg.taxIdLabel")}
-                        value={taxIdInput}
-                        onChange={(e) => setTaxIdInput(e.target.value)}
-                        className="h-9"
-                      />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        disabled={taxIdMutation.isPending}
-                      >
-                        {t("dashboard.helper.pstg.taxIdSubmit")}
-                      </Button>
-                    </form>
-                    {taxIdMutation.isError && (
-                      <p className="mt-2 text-xs text-destructive">
-                        {t("dashboard.helper.error.generic")}
-                      </p>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ── CTA Banner ── */}
-        <motion.div variants={itemVariants} className="mt-6">
-          <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-6">
-            {/* Decorative blobs */}
-            <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-8 right-20 h-24 w-24 rounded-full bg-primary/10 blur-xl" />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <Rocket className="size-5 text-primary" />
-                  <span className="text-sm font-semibold text-primary uppercase tracking-widest">
-                    Neue Aufträge
-                  </span>
-                </div>
-                <h2 className="font-brand text-xl font-bold">
-                  Bereit für deinen nächsten Auftrag?
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Durchstöbere offene Aufträge in deiner Nähe und biete jetzt mit.
-                </p>
-              </div>
-              <Button asChild className="shrink-0 gap-2" size="lg">
-                <Link to="/marketplace">
-                  Marktplatz öffnen
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* ── Recent orders ── */}
-        <motion.div variants={itemVariants} className="mt-6">
-          <Card
-            id="recent-gigs"
-            className="border-glass-border bg-glass backdrop-blur"
-          >
-            <CardHeader>
-              <CardTitle className="font-brand text-lg">
-                {t("dashboard.helper.orders.title")}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {t("dashboard.helper.orders.sub")}
-              </p>
-            </CardHeader>
-            <CardContent>
-              {recentGigs.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 py-12 text-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/20">
-                    <MapPin className="size-7 text-muted-foreground/40" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {t("dashboard.helper.orders.empty")}
-                  </p>
-                  <Button asChild variant="outline" size="sm">
-                    <Link to="/marketplace">Aufträge finden</Link>
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentGigs.map((gig) => (
-                    <motion.div
-                      key={gig.id}
-                      whileHover={{ x: 3 }}
-                      transition={{ type: "spring", stiffness: 400 }}
-                      onClick={() => setSelectedGig(gig)}
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-glass-border px-4 py-3 transition-colors hover:bg-glass"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-sm">{gig.title}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {gig.customerName}
-                          {gig.scheduledAt && (
-                            <> · {new Date(gig.scheduledAt).toLocaleDateString(intlLocale)}</>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <span className="font-semibold text-sm tabular-nums">
-                          {formatEuros(gig.budgetCents, intlLocale)}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={`shrink-0 text-[11px] ${statusColors[gig.status] ?? ""}`}
-                        >
-                          {t(`status.${gig.status}`)}
-                        </Badge>
-                        <ChevronRight className="size-4 text-muted-foreground" />
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* ── Anpassbare Bereiche ── */}
+        <CustomizableDashboard scope="helper" widgets={widgets} title="Dein Überblick" />
       </motion.div>
 
       {/* ── Gig detail sheet ── */}

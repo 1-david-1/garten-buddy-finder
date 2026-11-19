@@ -307,7 +307,28 @@ export const getMyGigs = createServerFn({ method: "GET" })
 
     if (error) throw error;
     // Der Auftraggeber sieht die Adresse seiner eigenen Aufträge (RLS auf gig_locations).
-    return { gigs: await attachGigLocations(supabase, gigs ?? []) };
+    const withLocations = await attachGigLocations(supabase, gigs ?? []);
+
+    // Zahlungsstatus je Auftrag (Treuhand), damit die Oberfläche zeigen kann, ob die Zahlung schon freigegeben ist.
+    const { data: escrows } = await supabase
+      .from("escrow_transactions")
+      .select("gig_id, state")
+      .in("gig_id", withLocations.map((g) => g.id));
+    const paymentByGig = new Map((escrows ?? []).map((e) => [e.gig_id, e.state as string]));
+
+    // Name des gewählten Helfers (für Bewertung, Nachrichten und die Anzeige in der Liste)
+    const helperProfiles = await fetchProfilesByIds(
+      supabase,
+      withLocations.map((g) => g.assigned_helper_id),
+    );
+
+    return {
+      gigs: withLocations.map((g) => ({
+        ...g,
+        payment_state: paymentByGig.get(g.id) ?? null,
+        helper_name: g.assigned_helper_id ? (helperProfiles.get(g.assigned_helper_id)?.displayName ?? null) : null,
+      })),
+    };
   });
 
 /**
@@ -413,6 +434,10 @@ export const proposeGigDate = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
 
+    if (new Date(data.scheduledAt).getTime() < Date.now()) {
+      throw new Error("Der Termin muss in der Zukunft liegen.");
+    }
+
     const { data: gig, error } = await supabase
       .from("gigs")
       .update({ scheduled_at: data.scheduledAt })
@@ -477,90 +502,66 @@ export const assignHelperToGig = createServerFn({ method: "POST" })
     const guardian = await requestJobApprovalIfNeeded(gig.id);
     return { gig, guardian };
   });
+/** Ergebnis von „Auftrag abschließen & Zahlung freigeben“ (siehe Migration 20261117000000_complete_gig_release.sql) */
+export type CompleteGigPayout = "released" | "already_released" | "disputed" | "none";
+
+/**
+ * Schließt den Auftrag ab und gibt die Zahlung frei - in EINER Datenbank-Transaktion (Funktion complete_gig_and_release).
+ * Vorher waren das drei getrennte Schritte; schlug der letzte fehl, blieb der Auftrag halb abgeschlossen.
+ * Wiederholung ist ungefährlich: nichts wird doppelt gezählt, eine fehlende Freigabe wird nachgeholt.
+ */
 export const completeGig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => parseInput(gigIdSchema, data))
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { supabase } = context;
 
-    // 1. Update Gig Status to completed
-    const { data: gig, error: gigError } = await supabase
+    const { data: result, error } = await supabase.rpc("complete_gig_and_release", { p_gig_id: data.gigId });
+    if (error) throw new Error(error.message || "Der Auftrag konnte nicht abgeschlossen werden.");
+    const outcome = (result ?? {}) as { newly_completed?: boolean; payout?: CompleteGigPayout };
+    const payout: CompleteGigPayout = outcome.payout ?? "none";
+    const newlyCompleted = outcome.newly_completed === true;
+
+    const { data: gig } = await supabase
       .from("gigs")
-      .update({ status: "completed" })
+      .select("id, title, assigned_helper_id")
       .eq("id", data.gigId)
-      .eq("customer_id", userId)
-      .select()
-      .single();
+      .maybeSingle();
 
-    if (gigError) throw gigError;
-    if (!gig) throw new Error("Gig not found or not authorized");
-
-    // 2. Release Escrow Funds
-    if (gig.assigned_helper_id) {
-      const { data: escrow, error: escrowError } = await supabase
-        .from("escrow_transactions")
-        .select("bid_cents, state")
-        .eq("gig_id", data.gigId)
-        .maybeSingle();
-
-      if (escrowError) throw escrowError;
-
-      if (escrow && escrow.state !== "paid_out") {
-        const { error: releaseError } = await supabase
-          .from("escrow_transactions")
-          .update({ state: "paid_out", paid_out_at: new Date().toISOString() })
-          .eq("gig_id", data.gigId);
-
-        if (releaseError) throw releaseError;
-
-        // 3. Update Earnings Tracker for the helper
-        const year = new Date().getFullYear();
-        const { data: tracker } = await supabase
-          .from("earnings_tracker")
-          .select("tx_count, gross_cents")
-          .eq("helper_id", gig.assigned_helper_id)
-          .eq("year", year)
-          .maybeSingle();
-
-        const newTxCount = (tracker?.tx_count ?? 0) + 1;
-        const newGrossCents = (tracker?.gross_cents ?? 0) + (escrow.bid_cents ?? 0);
-
-        const { error: trackerError } = await supabase
-          .from("earnings_tracker")
-          .upsert({
-            helper_id: gig.assigned_helper_id,
-            year,
-            tx_count: newTxCount,
-            gross_cents: newGrossCents,
-          }, { onConflict: "helper_id,year" });
-
-        if (trackerError) throw trackerError;
+    // Benachrichtigung nur beim ersten Abschluss - nicht bei Wiederholungen
+    if (newlyCompleted && gig?.assigned_helper_id) {
+      try {
+        const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
+        const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
+        const payoutLine =
+          payout === "released"
+            ? "Die Zahlung wurde freigegeben."
+            : payout === "disputed"
+              ? "Die Zahlung wird noch geklärt und erst danach freigegeben."
+              : "";
+        await notifyUserByEmail({
+          userId: gig.assigned_helper_id,
+          category: "gig_updates",
+          subject: `Auftrag „${gig.title}“ abgeschlossen`,
+          html: emailTemplate({
+            heading: "Auftrag abgeschlossen",
+            bodyLines: [`Der Auftrag „${escapeHtml(gig.title)}“ wurde als abgeschlossen markiert. ${payoutLine}`.trim()],
+            ctaLabel: "Zum Dashboard",
+            ctaPath: "/dashboard",
+          }),
+          inApp: {
+            title: "Auftrag abgeschlossen",
+            body: `„${gig.title}“ wurde als abgeschlossen markiert.${payoutLine ? ` ${payoutLine}` : ""}`,
+            link: "/dashboard",
+          },
+        });
+      } catch (notifyError) {
+        // Der Abschluss ist gespeichert; eine fehlgeschlagene Benachrichtigung darf ihn nicht als Fehler erscheinen lassen.
+        console.error("completeGig: Benachrichtigung fehlgeschlagen", notifyError);
       }
-
-      // Notifications
-      const { notifyUserByEmail } = await import("@/lib/server/notifications.server");
-      const { emailTemplate, escapeHtml } = await import("@/lib/server/email.server");
-      await notifyUserByEmail({
-        userId: gig.assigned_helper_id,
-        category: "gig_updates",
-        subject: `Auftrag „${gig.title}“ abgeschlossen`,
-        html: emailTemplate({
-          heading: "Auftrag abgeschlossen",
-          bodyLines: [
-            `Der Auftrag „${escapeHtml(gig.title)}“ wurde als abgeschlossen markiert. Die Auszahlung wird gemäß eurer Treuhand-Regelung verarbeitet.`,
-          ],
-          ctaLabel: "Zum Dashboard",
-          ctaPath: "/dashboard",
-        }),
-        inApp: {
-          title: "Auftrag abgeschlossen",
-          body: `„${gig.title}“ wurde als abgeschlossen markiert.`,
-          link: "/dashboard",
-        },
-      });
     }
 
-    return { gig };
+    return { gigId: data.gigId, status: "completed" as const, newlyCompleted, payout };
   });
 
 const CANCELLABLE_STATUSES = ["pending_helper", "assigned", "in_progress"];

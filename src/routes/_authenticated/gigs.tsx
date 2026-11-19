@@ -31,35 +31,11 @@ import { respondToBooking } from "@/lib/service-listings.functions";
 import { startConversation } from "@/lib/messaging.functions";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
+import { describeGigStatus, describePayment, TONE_CLASSES, type PaymentState } from "@/lib/gig-status";
 
 export const Route = createFileRoute("/_authenticated/gigs")({
   component: GigsPage,
 });
-
-const statusVariant: Record<
-  string,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  completed: "default",
-  in_progress: "secondary",
-  assigned: "secondary",
-  pending_helper: "outline",
-  negotiating: "outline",
-  open: "outline",
-  cancelled: "destructive",
-  draft: "outline",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  completed: "Abgeschlossen",
-  in_progress: "In Bearbeitung",
-  assigned: "Zugewiesen",
-  pending_helper: "Ausstehend",
-  negotiating: "In Verhandlung",
-  open: "Offen",
-  cancelled: "Storniert",
-  draft: "Entwurf",
-};
 
 function formatEuros(cents: number, locale: string) {
   return (cents / 100).toLocaleString(locale, {
@@ -318,31 +294,47 @@ function GigsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentGigs.map((gig) => (
-                  <TableRow key={gig.id}>
-                    <TableCell className="font-medium">{gig.title}</TableCell>
+                {recentGigs.map((gig) => {
+                  const info = describeGigStatus(gig.status, "helper", {
+                    paymentState: gig.paymentState as PaymentState,
+                    hasScheduledDate: !!gig.scheduledAt,
+                  });
+                  const payment = describePayment(gig.paymentState as PaymentState, "helper");
+                  return (
+                  <TableRow key={gig.id} className={info.needsAction ? "bg-amber-400/5" : undefined}>
+                    <TableCell className="font-medium">
+                      <div>{gig.title}</div>
+                      {info.next && <p className="mt-0.5 max-w-xs text-xs font-normal text-muted-foreground">{info.next}</p>}
+                    </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {gig.customerName}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
                       {gig.scheduledAt
-                        ? new Date(gig.scheduledAt).toLocaleDateString(
-                            intlLocale,
-                          )
+                        ? new Date(gig.scheduledAt).toLocaleDateString(intlLocale, { timeZone: "Europe/Berlin" })
                         : "—"}
                     </TableCell>
                     <TableCell>
                       {formatEuros(gig.budgetCents, intlLocale)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant[gig.status] ?? "outline"}>
-                        {STATUS_LABELS[gig.status] ?? gig.status}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant="outline" className={TONE_CLASSES[info.tone]}>
+                          {info.label}
+                        </Badge>
+                        {payment && gig.status !== "cancelled" && (
+                          <Badge variant="outline" className={`text-[10px] ${TONE_CLASSES[payment.tone]}`}>
+                            {payment.label}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         {gig.status === "pending_helper" || gig.status === "assigned" ? (
                           <>
+                            {/* Annehmen gibt es nur bei einer offenen Anfrage - bei einem bestätigten Auftrag wäre der Knopf wirkungslos */}
+                            {gig.status === "pending_helper" && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -359,6 +351,7 @@ function GigsPage() {
                               <CheckCircle2 className="size-3" />
                               {gig.scheduledAt ? "Termin bestätigen" : "Anfrage annehmen"}
                             </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
@@ -373,8 +366,24 @@ function GigsPage() {
                               }
                             >
                               <X className="size-3" />
-                              Ablehnen
+                              {gig.status === "assigned" ? "Absagen" : "Ablehnen"}
                             </Button>
+                            {gig.status === "assigned" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  messageMutation.mutate({
+                                    otherUserId: gig.customerId,
+                                    gigId: gig.id,
+                                  })
+                                }
+                                disabled={messageMutation.isPending}
+                                title="Chat starten"
+                              >
+                                <MessageSquare className="size-4" />
+                              </Button>
+                            )}
                           </>
                         ) : (
                           <Button
@@ -395,7 +404,8 @@ function GigsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
