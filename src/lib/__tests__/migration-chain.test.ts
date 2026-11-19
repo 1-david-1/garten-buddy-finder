@@ -13,11 +13,10 @@ describe("Migrationen", () => {
       seen.set(version, [...(seen.get(version) ?? []), f]);
     }
     const dupes = [...seen.entries()].filter(([, list]) => list.length > 1);
-    // 20260926000000 ist bekannt: gigs_realtime + die abgelöste notifications-Datei. Letztere bitte löschen.
-    expect(dupes.map(([v]) => v).filter((v) => v !== "20260926000000")).toEqual([]);
+    expect(dupes.map(([v]) => v)).toEqual([]);
   });
 
-  it("die Tabelle notifications wird nur einmal angelegt (die abgelöste Migration ist leer)", () => {
+  it("die Tabelle notifications wird nur einmal angelegt", () => {
     const creators = files.filter((f) => /create table[^;]*public\.notifications\b/i.test(readFileSync(resolve(dir, f), "utf-8").replace(/--[^\n]*/g, "")));
     // Die Reparatur-Migration legt sie nur an, falls sie in der Datenbank ganz fehlt (innerhalb eines IF).
     expect(creators.filter((f) => !f.startsWith("20261103000100"))).toEqual(["20260930000000_notifications.sql"]);
