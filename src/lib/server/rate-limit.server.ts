@@ -6,6 +6,19 @@
 // Rate-Limit darf die App nie komplett lahmlegen.
 import { getRequest } from "@tanstack/react-start/server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { sendSecurityAlert } from "@/lib/server/alert.server";
+
+// Ausfälle des Rate-Limits sollen nicht still bleiben. Gemeldet wird höchstens alle 10 Minuten pro
+// Meldungsart (und Serverinstanz), damit ein dauerhafter Ausfall den Webhook nicht flutet.
+const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
+const lastAlertAt = new Map<string, number>();
+
+async function alertRateLimitProblem(kind: string, title: string, reason?: string): Promise<void> {
+  const now = Date.now();
+  if (now - (lastAlertAt.get(kind) ?? 0) < ALERT_COOLDOWN_MS) return;
+  lastAlertAt.set(kind, now);
+  await sendSecurityAlert(title, { grund: reason?.slice(0, 200) });
+}
 
 export class RateLimitError extends Error {
   constructor(message = "Zu viele Anfragen. Bitte versuche es in ein paar Minuten erneut.") {
@@ -59,7 +72,13 @@ export async function checkRateLimit({ action, key, max, windowSeconds }: RateLi
     if (error) throw error;
     return data !== false;
   } catch (err) {
-    console.error("[rate-limit] Prüfung nicht möglich, Anfrage wird durchgelassen:", (err as Error)?.message);
+    const reason = (err as Error)?.message;
+    console.error("[rate-limit] Prüfung nicht möglich, Anfrage wird durchgelassen:", reason);
+    await alertRateLimitProblem(
+      "check_failed",
+      "Rate-Limit nicht verfügbar - Anfragen werden ohne Begrenzung durchgelassen",
+      reason,
+    );
     return true;
   }
 }
@@ -72,6 +91,17 @@ export function enforceUserRateLimit(userId: string, action: string, max: number
 /** Limit pro IP für öffentliche Endpunkte (ohne Anmeldung). Ohne erkennbare IP (lokale Entwicklung) kein Limit. */
 export async function enforceIpRateLimit(action: string, max: number, windowSeconds: number) {
   const ip = getClientIp();
-  if (!ip) return;
+  if (!ip) {
+    // Lokal normal. Im Betrieb heißt das: Die IP ist nicht erkennbar (z. B. nicht hinter Cloudflare),
+    // und alle öffentlichen Endpunkte (Token-Abfragen, Eltern-Registrierung) sind ungebremst.
+    if (import.meta.env.PROD) {
+      await alertRateLimitProblem(
+        "no_ip",
+        "Rate-Limit pro IP wirkungslos - keine Client-IP erkennbar",
+        `Aktion: ${action}`,
+      );
+    }
+    return;
+  }
   await enforceRateLimit({ action, key: await shortHash(ip), max, windowSeconds });
 }
