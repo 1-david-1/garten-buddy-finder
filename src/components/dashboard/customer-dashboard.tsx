@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  Activity,
   CalendarClock,
   CheckCircle2,
   ChevronRight,
@@ -15,6 +16,7 @@ import {
   RotateCcw,
   Search,
   Star,
+  Wallet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,11 +55,31 @@ import { createDirectBookingRequest, getMyGigs } from "@/lib/gigs.functions";
 import { getMyConversations } from "@/lib/messaging.functions";
 import { getMyFavorites, getMyProfile, toggleFavorite } from "@/lib/profile.functions";
 import {
+  appointmentCalendar,
   countGigGroups,
   deriveCustomerTasks,
+  gigJourney,
+  monthlyBudget,
   pickNextAppointment,
   relativeDay,
+  serviceBreakdown,
+  sumBudget,
+  upcomingAppointments,
 } from "@/lib/customer-dashboard-data";
+import {
+  BudgetBars,
+  BudgetChart,
+  DateChip,
+  DateTile,
+  JourneyTrack,
+  LegendItem,
+  LiveTile,
+  MiniCalendar,
+  ProgressRing,
+  RatingStars,
+  ServiceBar,
+} from "@/components/dashboard/customer-visuals";
+import { euros, GROUP_COLORS, tintFor } from "@/lib/dashboard-format";
 
 type AgeBadge = "helper_youth" | "helper_adult" | "helper_pro";
 
@@ -94,9 +116,6 @@ const formatDayShort = (iso: string) =>
     day: "2-digit",
     month: "2-digit",
   });
-
-const euros = (cents: number) =>
-  (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
 /* ------------------------------------------------------------------ *
  * Kleine Bausteine
@@ -191,6 +210,13 @@ type GigsQuery = ReturnType<typeof useGigsQuery>;
 function useGigsQuery() {
   const fn = useServerFn(getMyGigs);
   return useQuery({ queryKey: ["my-gigs"], queryFn: () => fn() });
+}
+
+/** "Jetzt" für die Grafiken - wechselt mit dem deutschen Kalendertag, nicht bei jedem Rendern. */
+function useDayNow(): Date {
+  const today = useBerlinToday();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- der Tageswechsel ist der Auslöser, nicht ein Wert im Rumpf
+  return useMemo(() => new Date(), [today]);
 }
 
 function AttentionWidget({
@@ -327,7 +353,12 @@ function GettingStartedWidget({ gigsQuery, profileName }: { gigsQuery: GigsQuery
 }
 
 function NextAppointmentWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
+  const compact = useDashboardDensity() === "compact";
   const next = useMemo(() => pickNextAppointment(gigsQuery.data?.gigs ?? []), [gigsQuery.data]);
+  const later = useMemo(
+    () => upcomingAppointments(gigsQuery.data?.gigs ?? [], new Date(), compact ? 1 : 2),
+    [gigsQuery.data, compact],
+  );
   const when = next?.scheduled_at ? new Date(next.scheduled_at) : null;
   const relative = next?.scheduled_at ? relativeDay(next.scheduled_at) : "";
 
@@ -351,19 +382,22 @@ function NextAppointmentWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
           Noch kein Termin geplant. Sobald ein Helfer bestätigt, siehst du ihn hier.
         </EmptyHint>
       ) : (
-        <div className="space-y-3">
-          <div>
-            <p className="text-2xl font-semibold leading-tight">
-              {next.status === "in_progress" && !when
-                ? "Läuft gerade"
-                : relative || (next.scheduled_at ? formatDayShort(next.scheduled_at) : "")}
-            </p>
-            {next.scheduled_at && (
-              <p className="text-sm text-muted-foreground">
-                {formatDayShort(next.scheduled_at)}, {formatBerlinTime(next.scheduled_at)} Uhr
-                {next.status === "in_progress" ? " · läuft gerade" : ""}
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            {when ? <DateTile iso={next.scheduled_at!} /> : <LiveTile />}
+            <div className="min-w-0">
+              <p className="text-2xl font-semibold leading-tight">
+                {next.status === "in_progress" && !when
+                  ? "Läuft gerade"
+                  : relative || (next.scheduled_at ? formatDayShort(next.scheduled_at) : "")}
               </p>
-            )}
+              {next.scheduled_at && (
+                <p className="text-sm text-muted-foreground">
+                  {formatDayShort(next.scheduled_at)}, {formatBerlinTime(next.scheduled_at)} Uhr
+                  {next.status === "in_progress" ? " · läuft gerade" : ""}
+                </p>
+              )}
+            </div>
           </div>
           <div className="rounded-xl border border-glass-border p-3 text-sm">
             <p className="font-medium">{next.title}</p>
@@ -383,6 +417,25 @@ function NextAppointmentWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
               <ChevronRight className="size-4" />
             </Link>
           </Button>
+          {later.length > 0 && (
+            <div className="border-t border-glass-border pt-4">
+              <p className="mb-3 text-xs text-muted-foreground">Danach</p>
+              <ul className="space-y-3">
+                {later.map((g) => (
+                  <li key={g.id} className="flex items-center gap-3">
+                    <DateChip iso={g.scheduled_at!} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{g.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatDayShort(g.scheduled_at!)}, {formatBerlinTime(g.scheduled_at!)} Uhr
+                        {g.helper_name ? ` · mit ${g.helper_name}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </WidgetCard>
@@ -393,9 +446,10 @@ function MyGigsWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
   const compact = useDashboardDensity() === "compact";
   const gigs = gigsQuery.data?.gigs ?? [];
   const groups = useMemo(() => countGigGroups(gigs), [gigs]);
-  const recent = gigs
-    .filter((g) => g.status !== "cancelled" && g.status !== "draft")
-    .slice(0, compact ? 3 : 4);
+  // Was noch läuft oder auf dich wartet, steht vorn; Abgeschlossenes danach (jeweils in der alten Reihenfolge).
+  const listed = gigs.filter((g) => g.status !== "cancelled" && g.status !== "draft");
+  const isFinished = (g: (typeof gigs)[number]) => gigJourney(g)?.finished ?? true;
+  const recent = [...listed.filter((g) => !isFinished(g)), ...listed.filter(isFinished)].slice(0, compact ? 3 : 4);
 
   return (
     <WidgetCard
@@ -428,49 +482,193 @@ function MyGigsWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
           Du hast noch keinen Auftrag. Beschreibe, was gemacht werden soll – Helfer in deiner Nähe melden sich.
         </EmptyHint>
       ) : (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2 text-center">
-            {[
-              { label: "Offen", value: groups.open },
-              { label: "Geplant", value: groups.planned },
-              { label: "Erledigt", value: groups.done },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl border border-glass-border px-2 py-3">
-                <p className="text-xl font-semibold tabular-nums">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            <span className="tabular-nums">{groups.open}</span> offen ·{" "}
+            <span className="tabular-nums">{groups.planned}</span> geplant ·{" "}
+            <span className="tabular-nums">{groups.done}</span> erledigt
+          </p>
           <ul className="space-y-2">
             {recent.map((g) => {
               const info = describeGigStatus(g.status, "customer", {
                 paymentState: g.payment_state as PaymentState,
                 hasScheduledDate: !!g.scheduled_at,
               });
+              const journey = gigJourney(g);
               return (
                 <li key={g.id}>
                   <Link
                     to="/my-gigs"
                     className={cn(
-                      "flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-colors hover:bg-glass",
+                      "block rounded-xl border px-3 py-3 transition-colors hover:bg-glass",
                       info.needsAction ? "border-amber-400/40" : "border-glass-border",
                     )}
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{g.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {g.scheduled_at ? formatBerlinDate(g.scheduled_at) : "Kein Termin"} ·{" "}
-                        {euros(g.budget_cents)}
-                      </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{g.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {g.scheduled_at ? formatBerlinDate(g.scheduled_at) : "Kein Termin"} ·{" "}
+                          {euros(g.budget_cents)}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn("shrink-0 text-[11px]", TONE_CLASSES[info.tone])}>
+                        {info.label}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className={cn("shrink-0 text-[11px]", TONE_CLASSES[info.tone])}>
-                      {info.label}
-                    </Badge>
+                    {journey && !journey.finished && (
+                      <JourneyTrack
+                        className="mt-3"
+                        journey={journey}
+                        needsAction={info.needsAction}
+                        compact={compact}
+                      />
+                    )}
                   </Link>
                 </li>
               );
             })}
           </ul>
+        </div>
+      )}
+    </WidgetCard>
+  );
+}
+
+function OverviewWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
+  const compact = useDashboardDensity() === "compact";
+  const now = useDayNow();
+  const gigs = useMemo(() => gigsQuery.data?.gigs ?? [], [gigsQuery.data]);
+  const groups = useMemo(() => countGigGroups(gigs), [gigs]);
+  const totals = useMemo(() => sumBudget(gigs), [gigs]);
+  const months = useMemo(() => monthlyBudget(gigs, now), [gigs, now]);
+  const calendar = useMemo(() => appointmentCalendar(gigs, now), [gigs, now]);
+  const total = groups.open + groups.planned + groups.done;
+  // Neue Kunden sehen hier noch nichts - "So startest du" erklärt den Anfang.
+  if (gigsQuery.data && total === 0) return null;
+  const confirmedDates = calendar.reduce((n, d) => n + d.confirmed, 0);
+  const requestedDates = calendar.reduce((n, d) => n + d.requested, 0);
+
+  return (
+    <WidgetCard title="Auf einen Blick" icon={<Activity className="size-5 text-primary" />}>
+      {gigsQuery.isLoading ? (
+        <Loading />
+      ) : gigsQuery.isError ? (
+        <LoadError onRetry={() => gigsQuery.refetch()} />
+      ) : (
+        <div className="grid gap-6 md:grid-cols-3">
+          <section aria-labelledby="overview-gigs">
+            <h3 id="overview-gigs" className="mb-3 text-xs font-medium text-muted-foreground">
+              Aufträge
+            </h3>
+            <div className="flex items-center gap-5">
+              <ProgressRing
+                size={compact ? 96 : 120}
+                center={total}
+                caption={total === 1 ? "Auftrag" : "Aufträge"}
+                segments={[
+                  { key: "open", value: groups.open, color: GROUP_COLORS.open },
+                  { key: "planned", value: groups.planned, color: GROUP_COLORS.planned },
+                  { key: "done", value: groups.done, color: GROUP_COLORS.done },
+                ]}
+              />
+              <ul className="min-w-0 max-w-36 flex-1 space-y-2">
+                <LegendItem color={GROUP_COLORS.open} label="Offen" value={groups.open} />
+                <LegendItem color={GROUP_COLORS.planned} label="Geplant" value={groups.planned} />
+                <LegendItem color={GROUP_COLORS.done} label="Erledigt" value={groups.done} />
+              </ul>
+            </div>
+          </section>
+
+          <section
+            aria-labelledby="overview-budget"
+            className="border-t border-glass-border pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0"
+          >
+            <h3 id="overview-budget" className="mb-3 text-xs font-medium text-muted-foreground">
+              Budget
+            </h3>
+            <p className="text-2xl font-semibold tabular-nums leading-none">{euros(totals.paidCents)}</p>
+            <p className="mb-4 mt-1 text-xs text-muted-foreground">
+              bezahlt{totals.plannedCents > 0 ? ` · ${euros(totals.plannedCents)} geplant` : ""}
+            </p>
+            <BudgetBars months={months} />
+            <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground" aria-hidden>
+              <LegendItem compact color="var(--primary)" label="bezahlt" />
+              <LegendItem compact hatched color="var(--primary)" label="geplant" />
+            </ul>
+          </section>
+
+          <section
+            aria-labelledby="overview-calendar"
+            className="border-t border-glass-border pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0"
+          >
+            <h3 id="overview-calendar" className="mb-3 text-xs font-medium text-muted-foreground">
+              Termine · diese und nächste Woche
+            </h3>
+            <MiniCalendar days={calendar} />
+            {confirmedDates + requestedDates === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">Gerade steht kein Termin an.</p>
+            )}
+          </section>
+        </div>
+      )}
+    </WidgetCard>
+  );
+}
+
+function BudgetWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
+  const now = useDayNow();
+  const gigs = useMemo(() => gigsQuery.data?.gigs ?? [], [gigsQuery.data]);
+  const totals = useMemo(() => sumBudget(gigs), [gigs]);
+  const months = useMemo(() => monthlyBudget(gigs, now), [gigs, now]);
+  const services = useMemo(() => serviceBreakdown(gigs), [gigs]);
+  const hasMoney = months.some((m) => m.paidCents + m.plannedCents > 0);
+  // Ohne echte Aufträge (auch ohne stornierte) gibt es nichts zu zeigen.
+  if (gigsQuery.data && services.length === 0) return null;
+
+  return (
+    <WidgetCard title="Budget im Verlauf" icon={<Wallet className="size-5 text-primary" />}>
+      {gigsQuery.isLoading ? (
+        <Loading />
+      ) : gigsQuery.isError ? (
+        <LoadError onRetry={() => gigsQuery.refetch()} />
+      ) : (
+        // Container-Abfrage statt Bildschirmbreite: halbe Breite stapelt, volle Breite steht nebeneinander.
+        <div className="@container">
+          <div className="grid gap-x-10 gap-y-6 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl:content-start">
+            <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 @2xl:col-start-2 @2xl:row-start-1">
+              <div>
+                <p className="text-xs text-muted-foreground">Insgesamt bezahlt</p>
+                <p className="text-2xl font-semibold tabular-nums leading-tight">{euros(totals.paidCents)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Noch geplant</p>
+                <p className="text-lg font-semibold tabular-nums leading-tight">{euros(totals.plannedCents)}</p>
+              </div>
+            </div>
+
+            <div className="@2xl:col-start-1 @2xl:row-span-2 @2xl:row-start-1">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Drei Monate zurück, zwei voraus</p>
+                <ul className="flex gap-4">
+                  <LegendItem color="var(--primary)" label="Bezahlt" />
+                  <LegendItem color="var(--primary)" label="Geplant" hatched />
+                </ul>
+              </div>
+              {hasMoney ? (
+                <BudgetChart months={months} />
+              ) : (
+                <EmptyHint>
+                  In diesem Zeitraum ist noch kein Budget im Spiel. Sobald ein Helfer bestätigt, erscheint es hier.
+                </EmptyHint>
+              )}
+            </div>
+
+            <div className="@2xl:col-start-2 @2xl:row-start-2">
+              <p className="mb-2 text-xs text-muted-foreground">Wofür du Helfer buchst</p>
+              <ServiceBar shares={services} />
+            </div>
+          </div>
         </div>
       )}
     </WidgetCard>
@@ -576,9 +774,14 @@ function FavoritesWidget({
             return (
               <li
                 key={f.helper_id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-glass-border px-3 py-2.5"
+                className="flex items-center gap-3 rounded-xl border border-glass-border px-3 py-2.5"
               >
-                <div className="min-w-0">
+                <Avatar className="size-9">
+                  <AvatarFallback className="text-xs" style={tintFor(profile?.display_name ?? "Helfer")}>
+                    {(profile?.display_name ?? "Helfer").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{profile?.display_name ?? "Helfer"}</p>
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     {profile?.city ?? "Ort unbekannt"}
@@ -849,7 +1052,7 @@ function HelperCard({
         <div className="flex items-start gap-3">
           <Avatar className="size-12">
             {h.imageUrl && <AvatarImage src={h.imageUrl} alt={h.name} />}
-            <AvatarFallback>{h.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback style={tintFor(h.name)}>{h.name.slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-semibold">{h.name}</h3>
@@ -862,9 +1065,11 @@ function HelperCard({
                 </span>
               )}
               {h.rating !== null ? (
-                <span className="inline-flex items-center gap-1">
-                  <Star className="size-3 fill-amber-400 text-amber-400" />
-                  {h.rating.toFixed(1).replace(".", ",")} ({h.reviewCount})
+                <span className="inline-flex items-center gap-1.5">
+                  <RatingStars rating={h.rating} />
+                  <span className="tabular-nums">
+                    {h.rating.toFixed(1).replace(".", ",")} ({h.reviewCount})
+                  </span>
                 </span>
               ) : (
                 <span>Noch keine Bewertungen</span>
@@ -1084,6 +1289,14 @@ export function CustomerDashboard() {
       render: () => <AttentionWidget gigsQuery={gigsQuery} unreadMessages={unreadMessages} />,
     },
     {
+      id: "overview",
+      title: "Auf einen Blick",
+      description: "Aufträge als Ring, Budget der letzten Monate und ein Mini-Kalender mit deinen Terminen.",
+      defaultWidth: "full",
+      essential: true,
+      render: () => <OverviewWidget gigsQuery={gigsQuery} />,
+    },
+    {
       id: "getting-started",
       title: "So startest du",
       description: "Drei kurze Schritte zum ersten Auftrag. Verschwindet, sobald du einen Auftrag hast.",
@@ -1103,6 +1316,13 @@ export function CustomerDashboard() {
       description: "Wie viele Aufträge offen, geplant und erledigt sind – plus die letzten Einträge.",
       essential: true,
       render: () => <MyGigsWidget gigsQuery={gigsQuery} />,
+    },
+    {
+      id: "budget",
+      title: "Budget im Verlauf",
+      description: "Bezahlt und geplant je Monat als Diagramm – und wofür du Helfer buchst.",
+      defaultWidth: "full",
+      render: () => <BudgetWidget gigsQuery={gigsQuery} />,
     },
     {
       id: "messages",
