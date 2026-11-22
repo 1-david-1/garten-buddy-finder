@@ -8,7 +8,8 @@
  * (berlin-time.ts), nicht in der Zeitzone des Rechners.
  */
 
-import { berlinDateKey, berlinDayFrom, berlinParts } from "@/lib/berlin-time";
+import { berlinDateKey, berlinDayFrom } from "@/lib/berlin-time";
+import { monthKeyOf, monthWindow, type MonthSlot } from "@/lib/month-buckets";
 import { describeGigStatus, type PaymentState } from "@/lib/gig-status";
 import { isPaymentReleasable } from "@/lib/partners";
 
@@ -189,7 +190,7 @@ export function relativeDay(iso: string, now: Date = new Date()): string {
 
 /* ------------------------------------------------------------------ *
  * Grafiken: Auftragsfortschritt, Budget, Leistungen, Kalender
- * (reine Funktionen - die Darstellung steckt in customer-visuals.tsx)
+ * (reine Funktionen - die Darstellung steckt in dashboard-visuals.tsx)
  * ------------------------------------------------------------------ */
 
 export const JOURNEY_STEPS = [
@@ -259,20 +260,9 @@ export function sumBudget(gigs: GigLike[]): { paidCents: number; plannedCents: n
   return { paidCents, plannedCents };
 }
 
-const MONTH_SHORT = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"] as const;
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
-export interface BudgetMonth {
-  /** "YYYY-MM" */
-  key: string;
-  /** "Nov" */
-  label: string;
-  /** "Nov 2026" - für Tooltip und Textalternative. */
-  title: string;
+export interface BudgetMonth extends MonthSlot {
   paidCents: number;
   plannedCents: number;
-  /** Der aktuelle Monat (deutsche Ortszeit). */
-  current: boolean;
 }
 
 /**
@@ -286,24 +276,12 @@ export function monthlyBudget(
   monthsBack = 3,
   monthsAhead = 2,
 ): BudgetMonth[] {
-  const t = berlinParts(now);
-  const months: BudgetMonth[] = [];
-  const byKey = new Map<string, BudgetMonth>();
-  for (let i = -monthsBack; i <= monthsAhead; i++) {
-    const d = new Date(Date.UTC(t.year, t.month - 1 + i, 1));
-    const year = d.getUTCFullYear();
-    const month = d.getUTCMonth();
-    const bucket: BudgetMonth = {
-      key: `${year}-${pad2(month + 1)}`,
-      label: MONTH_SHORT[month],
-      title: `${MONTH_SHORT[month]} ${year}`,
-      paidCents: 0,
-      plannedCents: 0,
-      current: i === 0,
-    };
-    months.push(bucket);
-    byKey.set(bucket.key, bucket);
-  }
+  const months: BudgetMonth[] = monthWindow(now, monthsBack, monthsAhead).map((slot) => ({
+    ...slot,
+    paidCents: 0,
+    plannedCents: 0,
+  }));
+  const byKey = new Map(months.map((m) => [m.key, m]));
 
   for (const g of gigs) {
     const kind = budgetKind(g);
@@ -311,8 +289,7 @@ export function monthlyBudget(
     if (!kind || !when) continue;
     const date = new Date(when);
     if (Number.isNaN(date.getTime())) continue;
-    const p = berlinParts(date);
-    const bucket = byKey.get(`${p.year}-${pad2(p.month)}`);
+    const bucket = byKey.get(monthKeyOf(date));
     if (!bucket) continue;
     if (kind === "paid") bucket.paidCents += g.budget_cents;
     else bucket.plannedCents += g.budget_cents;

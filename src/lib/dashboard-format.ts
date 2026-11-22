@@ -4,6 +4,7 @@
  */
 
 import type { CSSProperties } from "react";
+import { BERLIN_TIME_ZONE } from "@/lib/berlin-time";
 import { OTHER_SERVICE } from "@/lib/customer-dashboard-data";
 import { SERVICE_TYPES } from "@/lib/service-types";
 
@@ -33,3 +34,12 @@ export function tintFor(name: string): CSSProperties {
   const hue = 110 + (hash % 120);
   return { backgroundColor: `oklch(0.34 0.07 ${hue})`, color: `oklch(0.9 0.08 ${hue})` };
 }
+
+/** "Mi., 19.11." - Wochentag und Tag in deutscher Ortszeit. */
+export const formatDayShort = (iso: string) =>
+  new Date(iso).toLocaleDateString("de-DE", {
+    timeZone: BERLIN_TIME_ZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });

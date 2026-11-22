@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   CalendarClock,
-  CheckCircle2,
   ChevronRight,
   Euro,
   MapPin,
@@ -16,16 +15,7 @@ import {
   TrendingDown,
   TrendingUp,
   XCircle,
-  Zap,
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -68,6 +58,18 @@ import { toast } from "sonner";
 import { GuardianConsentBanner } from "@/components/verification-card";
 import { publicLocationLabel } from "@/lib/gig-location";
 import { RecurringBlocksCard } from "@/components/booking/recurring-blocks-card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { JourneyTrack } from "@/components/dashboard/dashboard-visuals";
+import {
+  EarningsWidget,
+  GigStatusWidget,
+  HelperStats,
+  ScheduleWidget,
+} from "@/components/dashboard/helper-widgets";
+import { tintFor } from "@/lib/dashboard-format";
+import { gigJourney } from "@/lib/customer-dashboard-data";
+import { HELPER_JOURNEY_LABELS } from "@/lib/helper-dashboard-data";
+import { describeGigStatus, type PaymentState } from "@/lib/gig-status";
 
 interface RecentGig {
   id: string;
@@ -79,6 +81,7 @@ interface RecentGig {
   district: string | null;
   scheduledAt: string | null;
   status: string;
+  paymentState: string | null;
   customerId: string;
   customerName: string;
 }
@@ -344,7 +347,7 @@ export function HelperDashboard() {
     );
   }
 
-  const { profile, stats, chart, pstg, recentGigs, pendingBookings } = q.data;
+  const { profile, stats, chart, earningsMonths, pstg, recentGigs, agenda, pendingBookings } = q.data;
   const isYouth = profile.birthdate
     ? ageFromISO(profile.birthdate) < 18
     : false;
@@ -353,34 +356,17 @@ export function HelperDashboard() {
     pstg.grossCents / pstg.grossThreshold,
   );
 
-  // Gig status breakdown for progress bar
-  const completedCount = recentGigs.filter(g => g.status === "completed").length;
-  const inProgressCount = recentGigs.filter(g => g.status === "in_progress" || g.status === "assigned").length;
-  const openCount = recentGigs.filter(g => g.status === "open" || g.status === "negotiating").length;
-  const totalGigs = recentGigs.length;
-
-  // Für die "Vor dem Einsatz"-Checkliste: bestätigte, noch nicht erledigte
-  // Aufträge, die nächsten zuerst (kein Termin = ans Ende).
-  const upcomingJobs = recentGigs
-    .filter((g) => g.status === "assigned" || g.status === "in_progress")
-    .sort((a, b) => {
-      if (!a.scheduledAt && !b.scheduledAt) return 0;
-      if (!a.scheduledAt) return 1;
-      if (!b.scheduledAt) return -1;
-      return (
-        new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
-      );
-    })
-    .slice(0, 5)
-    .map((g) => ({
-      id: g.id,
-      serviceType: g.serviceType,
-      description: g.description,
-      // Genaue Adresse nur nach Annahme; sonst der Stadtteil
-      address: g.address ?? publicLocationLabel(g.district),
-      scheduledAt: g.scheduledAt,
-      customerName: g.customerName,
-    }));
+  // Für die "Vor dem Einsatz"-Checkliste: bestätigte, noch nicht erledigte Einsätze, die nächsten zuerst
+  // (kein Termin = ans Ende). Kommt aus der Agenda, damit auch bei vielen Terminen die nächsten dabei sind.
+  const upcomingJobs = agenda.slice(0, 5).map((g) => ({
+    id: g.id,
+    serviceType: g.serviceType,
+    description: g.description,
+    // Genaue Adresse nur nach Annahme; sonst der Stadtteil
+    address: g.address ?? publicLocationLabel(g.district),
+    scheduledAt: g.scheduledAt,
+    customerName: g.customerName,
+  }));
 
   const widgets: DashboardWidget[] = [
     {
@@ -479,198 +465,40 @@ export function HelperDashboard() {
       description: "Verdienst der Woche, Bewertung, Abschlussquote und erledigte Aufträge.",
       defaultWidth: "full",
       essential: true,
-      render: () => (
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.earnings")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatEuros(stats.earningsLast7Cents, intlLocale)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t("dashboard.helper.stat.vsLastWeek")}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Rating */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.rating")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.avgRating ? `${stats.avgRating.toFixed(1)} ★` : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.ratingCount > 0
-                  ? `${stats.ratingCount} ${t("dashboard.helper.stat.ratingSub")}`
-                  : t("dashboard.helper.stat.noRatings")}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Completion Rate */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.completionRate")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.completionRate ? `${Math.round(stats.completionRate * 100)}%` : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {`${stats.completedCount} / ${stats.finishedCount} ${t("dashboard.helper.stat.completionSub")}`}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Completed total */}
-          <Card className="border-glass-border bg-glass backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal text-muted-foreground">
-                {t("dashboard.helper.stat.completedTotal")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.completedCount}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t("dashboard.helper.stat.total")}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      ),
+      render: () => <HelperStats stats={stats} chart={chart} locale={intlLocale} />,
+    },
+    {
+      id: "schedule",
+      title: "Deine Einsätze",
+      description: "Nächster Einsatz, was danach kommt, und ein Mini-Kalender mit Einsätzen und offenen Anfragen.",
+      defaultWidth: "full",
+      essential: true,
+      render: () => <ScheduleWidget agenda={agenda} requests={pendingBookings} />,
     },
     {
       id: "earnings-chart",
-      title: "Verdienst der letzten 7 Tage",
-      description: "Auszahlungen pro Tag als Balkendiagramm.",
+      title: "Verdienst",
+      description: "Auszahlungen der letzten 7 Tage oder 6 Monate und was noch auf Freigabe wartet.",
+      essential: true,
       render: () => (
-        <Card
-          id="earnings-chart"
-          className="h-full border-glass-border bg-glass backdrop-blur"
-        >
-          <CardHeader>
-            <CardTitle className="font-brand text-lg">
-              {t("dashboard.helper.chart.title")}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {t("dashboard.helper.chart.sub")}
-            </p>
-          </CardHeader>
-          <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chart}>
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                />
-                <YAxis hide />
-                <Tooltip
-                  cursor={{ fill: "var(--color-glass)" }}
-                  contentStyle={{
-                    background: "var(--color-background)",
-                    border: "1px solid var(--color-glass-border)",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                  formatter={(value: number) => [
-                    `${value} €`,
-                    t("dashboard.helper.chart.title"),
-                  ]}
-                />
-                <Bar
-                  dataKey="euros"
-                  fill="var(--color-primary)"
-                  radius={[6, 6, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <EarningsWidget chart={chart} months={earningsMonths} stats={stats} locale={intlLocale} />
       ),
     },
     {
       id: "gig-status",
       title: "Auftrags-Status",
-      description: "Wie viele deiner letzten Aufträge offen, laufend oder erledigt sind.",
+      description: "Wie viele deiner letzten Aufträge offen, laufend oder erledigt sind. Standardmäßig ausgeblendet – die Erfolgsquote oben und die Liste „Letzte Aufträge“ zeigen das Wichtigste schon.",
+      defaultVisible: false,
+      render: () => <GigStatusWidget statuses={recentGigs.map((g) => g.status)} />,
+    },
+    {
+      id: "pre-job",
+      title: "Vor dem Einsatz",
+      description: "Checkliste für deinen nächsten bestätigten Auftrag.",
+      essential: true,
       render: () => (
-        <Card className="h-full border-glass-border bg-glass backdrop-blur">
-          <CardHeader>
-            <CardTitle className="font-brand text-lg flex items-center gap-2">
-              <Zap className="size-4 text-primary" />
-              Auftrags-Status
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Letzte {totalGigs} Aufträge
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {totalGigs === 0 ? (
-              <p className="text-sm text-muted-foreground">Noch keine Aufträge.</p>
-            ) : (
-              <>
-                {/* Multi-segment progress bar */}
-                <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted/30">
-                  {completedCount > 0 && (
-                    <div
-                      className="bg-emerald-400 transition-all"
-                      style={{ width: `${(completedCount / totalGigs) * 100}%` }}
-                    />
-                  )}
-                  {inProgressCount > 0 && (
-                    <div
-                      className="bg-primary transition-all"
-                      style={{ width: `${(inProgressCount / totalGigs) * 100}%` }}
-                    />
-                  )}
-                  {openCount > 0 && (
-                    <div
-                      className="bg-amber-400 transition-all"
-                      style={{ width: `${(openCount / totalGigs) * 100}%` }}
-                    />
-                  )}
-                </div>
-                {/* Legend */}
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                      <span className="text-muted-foreground">Abgeschlossen</span>
-                    </div>
-                    <span className="font-semibold">{completedCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary" />
-                      <span className="text-muted-foreground">In Bearbeitung</span>
-                    </div>
-                    <span className="font-semibold">{inProgressCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
-                      <span className="text-muted-foreground">Offen / Verhandlung</span>
-                    </div>
-                    <span className="font-semibold">{openCount}</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
+        <Card className="h-[28rem] overflow-hidden border-glass-border bg-glass backdrop-blur">
+          <PreJobChecklistWidget jobs={upcomingJobs} intlLocale={intlLocale} />
         </Card>
       ),
     },
@@ -714,18 +542,26 @@ export function HelperDashboard() {
                     whileHover={{ x: 3 }}
                     transition={{ type: "spring", stiffness: 400 }}
                     onClick={() => setSelectedGig(gig)}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-glass-border px-4 py-3 transition-colors hover:bg-glass"
+                    className="cursor-pointer rounded-xl border border-glass-border px-4 py-3 transition-colors hover:bg-glass"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-sm">{gig.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {gig.customerName}
-                        {gig.scheduledAt && (
-                          <> · {new Date(gig.scheduledAt).toLocaleDateString(intlLocale)}</>
-                        )}
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
+                      <Avatar className="size-9 shrink-0">
+                        <AvatarFallback className="text-xs" style={tintFor(gig.customerName)}>
+                          {gig.customerName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-sm">{gig.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {gig.customerName}
+                          {gig.scheduledAt && (
+                            <> · {new Date(gig.scheduledAt).toLocaleDateString(intlLocale)}</>
+                          )}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="ml-auto flex shrink-0 items-center gap-3">
                       <span className="font-semibold text-sm tabular-nums">
                         {formatEuros(gig.budgetCents, intlLocale)}
                       </span>
@@ -737,6 +573,23 @@ export function HelperDashboard() {
                       </Badge>
                       <ChevronRight className="size-4 text-muted-foreground" />
                     </div>
+                    </div>
+                    {(() => {
+                      const journey = gigJourney({ status: gig.status, payment_state: gig.paymentState });
+                      if (!journey || journey.finished) return null;
+                      const info = describeGigStatus(gig.status, "helper", {
+                        paymentState: gig.paymentState as PaymentState,
+                        hasScheduledDate: !!gig.scheduledAt,
+                      });
+                      return (
+                        <JourneyTrack
+                          className="mt-3"
+                          journey={journey}
+                          labels={HELPER_JOURNEY_LABELS}
+                          needsAction={info.needsAction}
+                        />
+                      );
+                    })()}
                   </motion.div>
                 ))}
               </div>
@@ -752,17 +605,6 @@ export function HelperDashboard() {
               </div>
             )}
           </CardContent>
-        </Card>
-      ),
-    },
-    {
-      id: "pre-job",
-      title: "Vor dem Einsatz",
-      description: "Checkliste für deinen nächsten bestätigten Auftrag.",
-      essential: true,
-      render: () => (
-        <Card className="h-[28rem] overflow-hidden border-glass-border bg-glass backdrop-blur">
-          <PreJobChecklistWidget jobs={upcomingJobs} intlLocale={intlLocale} />
         </Card>
       ),
     },
@@ -856,7 +698,7 @@ export function HelperDashboard() {
       title: "Neue Aufträge finden",
       description: "Schnellzugriff auf den Marktplatz mit offenen Aufträgen.",
       render: () => (
-        <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-6">
+        <div className="relative flex h-full flex-col justify-center overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-6">
           {/* Decorative blobs */}
           <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-8 right-20 h-24 w-24 rounded-full bg-primary/10 blur-xl" />

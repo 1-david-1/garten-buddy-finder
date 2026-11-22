@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { attachGigLocations, fetchGigLocations, GIG_PUBLIC_COLUMNS } from "@/lib/gig-location";
 import { berlinDayFrom, berlinParts, berlinWallTimeToDate } from "@/lib/berlin-time";
+import { monthlyEarnings, pendingPayoutCents } from "@/lib/helper-dashboard-data";
 import { isActiveStatus } from "@/lib/gig-status";
 
 const PSTG_TX_THRESHOLD = 25;
@@ -23,6 +24,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       escrowRes,
       reviewsRes,
       earningsRes,
+      agendaRes,
     ] = await Promise.all([
       supabase
         .from("profiles")
@@ -67,6 +69,17 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
         .eq("helper_id", userId)
         .eq("year", year)
         .maybeSingle(),
+      // Bestätigte und laufende Einsätze, der nächste zuerst. Bewusst eigene Abfrage: Die Liste "letzte Aufträge"
+      // ist nach Datum absteigend und würde bei vielen Terminen gerade die nächsten abschneiden.
+      supabase
+        .from("gigs")
+        .select(
+          "id, title, service_type, description, budget_cents, district, scheduled_at, status, customer_id",
+        )
+        .eq("assigned_helper_id", userId)
+        .in("status", ["assigned", "in_progress"])
+        .order("scheduled_at", { ascending: true, nullsFirst: false })
+        .limit(20),
     ]);
 
     if (profileRes.error) throw profileRes.error;
@@ -76,20 +89,31 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
     if (escrowRes.error) throw escrowRes.error;
     if (reviewsRes.error) throw reviewsRes.error;
     if (earningsRes.error) throw earningsRes.error;
+    if (agendaRes.error) throw agendaRes.error;
 
     const gigs = gigsRes.data ?? [];
     const pendingGigs = pendingGigsRes.data ?? [];
+    const agenda = agendaRes.data ?? [];
     const escrow = escrowRes.data ?? [];
     const reviews = reviewsRes.data ?? [];
 
     // Genaue Adresse: nur für Aufträge, die der Helfer angenommen hat (Status assigned / in_progress).
     // Für Buchungsanfragen (pending_helper) liefert die Datenbank bewusst keine Adresse - dort nur der Stadtteil.
     const locations = await fetchGigLocations(supabase, [
-      ...gigs.slice(0, 8).map((g) => g.id),
-      ...pendingGigs.map((g) => g.id),
+      ...new Set([
+        ...gigs.slice(0, 8).map((g) => g.id),
+        ...agenda.map((g) => g.id),
+        ...pendingGigs.map((g) => g.id),
+      ]),
     ]);
 
-    const customerIds = Array.from(new Set([...gigs.map((g) => g.customer_id), ...pendingGigs.map((g) => g.customer_id)]));
+    const customerIds = Array.from(
+      new Set([
+        ...gigs.map((g) => g.customer_id),
+        ...agenda.map((g) => g.customer_id),
+        ...pendingGigs.map((g) => g.customer_id),
+      ]),
+    );
     const { data: customerProfiles } = customerIds.length
       ? await supabase
           .from("profiles")
@@ -166,6 +190,12 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
         tracker.gross_cents >= PSTG_GROSS_CENTS_THRESHOLD,
     };
 
+    // Neueste Treuhand-Zahlung je Auftrag (escrow ist nach Erstellung absteigend sortiert)
+    const paymentStateByGig = new Map<string, string>();
+    for (const e of escrow) {
+      if (!paymentStateByGig.has(e.gig_id)) paymentStateByGig.set(e.gig_id, e.state);
+    }
+
     const recentGigs = gigs.slice(0, 8).map((g) => ({
       id: g.id,
       title: g.title,
@@ -176,7 +206,21 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       district: g.district,
       scheduledAt: g.scheduled_at,
       status: g.status,
+      paymentState: paymentStateByGig.get(g.id) ?? null,
       customerId: g.customer_id,
+      customerName: nameById.get(g.customer_id) ?? "—",
+    }));
+
+    const agendaJobs = agenda.map((g) => ({
+      id: g.id,
+      title: g.title,
+      serviceType: g.service_type,
+      description: g.description,
+      budgetCents: g.budget_cents,
+      address: locations.get(g.id)?.address ?? null,
+      district: g.district,
+      scheduledAt: g.scheduled_at,
+      status: g.status,
       customerName: nameById.get(g.customer_id) ?? "—",
     }));
 
@@ -220,6 +264,7 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
       stats: {
         earningsLast7Cents: last7Total,
         earningsPrev7Cents: prev7Total,
+        pendingPayoutCents: pendingPayoutCents(escrow),
         earningsTrendPct:
           prev7Total > 0
             ? ((last7Total - prev7Total) / prev7Total) * 100
@@ -231,8 +276,11 @@ export const getHelperDashboard = createServerFn({ method: "GET" })
         ratingCount,
       },
       chart,
+      // Verdienst je Monat (letzte 6 Monate, nach den letzten 90 Treuhand-Zahlungen)
+      earningsMonths: monthlyEarnings(escrow, new Date(now), 6),
       pstg,
       recentGigs,
+      agenda: agendaJobs,
       pendingBookings,
     };
   });

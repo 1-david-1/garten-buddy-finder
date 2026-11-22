@@ -67,7 +67,6 @@ import {
   upcomingAppointments,
 } from "@/lib/customer-dashboard-data";
 import {
-  BudgetBars,
   BudgetChart,
   DateChip,
   DateTile,
@@ -78,8 +77,8 @@ import {
   ProgressRing,
   RatingStars,
   ServiceBar,
-} from "@/components/dashboard/customer-visuals";
-import { euros, GROUP_COLORS, tintFor } from "@/lib/dashboard-format";
+} from "@/components/dashboard/dashboard-visuals";
+import { euros, formatDayShort, GROUP_COLORS, tintFor } from "@/lib/dashboard-format";
 
 type AgeBadge = "helper_youth" | "helper_adult" | "helper_pro";
 
@@ -107,15 +106,6 @@ const ageBadgeLabel: Record<AgeBadge, string> = {
 
 const serviceLabel = (value: string) =>
   SERVICE_TYPES.find((s) => s.value === value)?.label ?? value;
-
-/** "Mi., 19.11." - Wochentag und Tag in deutscher Ortszeit. */
-const formatDayShort = (iso: string) =>
-  new Date(iso).toLocaleDateString("de-DE", {
-    timeZone: BERLIN_TIME_ZONE,
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-  });
 
 /* ------------------------------------------------------------------ *
  * Kleine Bausteine
@@ -540,8 +530,6 @@ function OverviewWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
   const now = useDayNow();
   const gigs = useMemo(() => gigsQuery.data?.gigs ?? [], [gigsQuery.data]);
   const groups = useMemo(() => countGigGroups(gigs), [gigs]);
-  const totals = useMemo(() => sumBudget(gigs), [gigs]);
-  const months = useMemo(() => monthlyBudget(gigs, now), [gigs, now]);
   const calendar = useMemo(() => appointmentCalendar(gigs, now), [gigs, now]);
   const total = groups.open + groups.planned + groups.done;
   // Neue Kunden sehen hier noch nichts - "So startest du" erklärt den Anfang.
@@ -556,7 +544,7 @@ function OverviewWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
       ) : gigsQuery.isError ? (
         <LoadError onRetry={() => gigsQuery.refetch()} />
       ) : (
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2">
           <section aria-labelledby="overview-gigs">
             <h3 id="overview-gigs" className="mb-3 text-xs font-medium text-muted-foreground">
               Aufträge
@@ -578,24 +566,6 @@ function OverviewWidget({ gigsQuery }: { gigsQuery: GigsQuery }) {
                 <LegendItem color={GROUP_COLORS.done} label="Erledigt" value={groups.done} />
               </ul>
             </div>
-          </section>
-
-          <section
-            aria-labelledby="overview-budget"
-            className="border-t border-glass-border pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0"
-          >
-            <h3 id="overview-budget" className="mb-3 text-xs font-medium text-muted-foreground">
-              Budget
-            </h3>
-            <p className="text-2xl font-semibold tabular-nums leading-none">{euros(totals.paidCents)}</p>
-            <p className="mb-4 mt-1 text-xs text-muted-foreground">
-              bezahlt{totals.plannedCents > 0 ? ` · ${euros(totals.plannedCents)} geplant` : ""}
-            </p>
-            <BudgetBars months={months} />
-            <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground" aria-hidden>
-              <LegendItem compact color="var(--primary)" label="bezahlt" />
-              <LegendItem compact hatched color="var(--primary)" label="geplant" />
-            </ul>
           </section>
 
           <section
@@ -1291,7 +1261,7 @@ export function CustomerDashboard() {
     {
       id: "overview",
       title: "Auf einen Blick",
-      description: "Aufträge als Ring, Budget der letzten Monate und ein Mini-Kalender mit deinen Terminen.",
+      description: "Deine Aufträge als Ring und ein Mini-Kalender mit deinen Terminen.",
       defaultWidth: "full",
       essential: true,
       render: () => <OverviewWidget gigsQuery={gigsQuery} />,
@@ -1320,8 +1290,9 @@ export function CustomerDashboard() {
     {
       id: "budget",
       title: "Budget im Verlauf",
-      description: "Bezahlt und geplant je Monat als Diagramm – und wofür du Helfer buchst.",
+      description: "Bezahlt und geplant je Monat als Diagramm – und wofür du Helfer buchst. Standardmäßig ausgeblendet.",
       defaultWidth: "full",
+      defaultVisible: false,
       render: () => <BudgetWidget gigsQuery={gigsQuery} />,
     },
     {
