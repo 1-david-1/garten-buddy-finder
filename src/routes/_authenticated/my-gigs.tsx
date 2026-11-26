@@ -1,7 +1,7 @@
 import { SafetyActions } from "@/components/safety-actions";
 import { SafetyAbortButton } from "@/components/safety-abort-button";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,7 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getMyGigs, completeGig, proposeGigDate } from "@/lib/gigs.functions";
+import { getMyGigs, completeGig, proposeGigDate, type GigReviewRef } from "@/lib/gigs.functions";
 import {
   getNegotiationsForGig,
   counterBid,
@@ -61,11 +61,22 @@ import { publicLocationLabel } from "@/lib/gig-location";
 import { berlinDateTimeLocalValue, formatBerlinDate } from "@/lib/berlin-time";
 import { toastForPayout } from "@/lib/payout-toast";
 
-/** Auftrag aus getMyGigs: Zeile aus der Datenbank plus Zahlungsstatus und Name des Helfers */
-type MyGig = Tables<"gigs"> & { payment_state?: string | null; helper_name?: string | null };
+/** Auftrag aus getMyGigs: Zeile aus der Datenbank plus Zahlungsstatus, Name des Helfers und Bewertungs-Richtungen */
+type MyGig = Tables<"gigs"> & {
+  payment_state?: string | null;
+  helper_name?: string | null;
+  reviews?: GigReviewRef[] | null;
+};
 
 export const Route = createFileRoute("/_authenticated/my-gigs")({
   component: MyGigsPage,
+  validateSearch: (search: Record<string, unknown>): {
+    gig?: string;
+    tab?: "active" | "past";
+  } => ({
+    ...(typeof search.gig === "string" ? { gig: search.gig } : {}),
+    ...(search.tab === "past" || search.tab === "active" ? { tab: search.tab } : {}),
+  }),
 });
 
 function formatEuros(cents: number) {
@@ -78,11 +89,14 @@ function formatEuros(cents: number) {
 function MyGigsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { gig: searchGig, tab: searchTab } = Route.useSearch();
   const [selectedGig, setSelectedGig] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>(searchTab === "past" ? "past" : "active");
   const [reviewGig, setReviewGig] = useState<{
     id: string;
     helperId: string;
     helperName: string;
+    title?: string;
   } | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
@@ -90,6 +104,7 @@ function MyGigsPage() {
   const [counterNegId, setCounterNegId] = useState<string | null>(null);
   const [dateProposal, setDateProposal] = useState("");
   const [isEditingReview, setIsEditingReview] = useState(false);
+  const [isLoadingReview, setIsLoadingReview] = useState(false);
 
   const getMyGigsFn = useServerFn(getMyGigs);
   const getNegotiationsFn = useServerFn(getNegotiationsForGig);
@@ -106,6 +121,81 @@ function MyGigsPage() {
     queryKey: ["my-gigs"],
     queryFn: () => getMyGigsFn(),
   });
+
+  const activeReviewGigIdRef = useRef<string | null>(null);
+  const handleReview = useCallback(
+    async (helperId: string, helperName: string, gigId: string, gigTitle?: string) => {
+      activeReviewGigIdRef.current = gigId;
+      setReviewGig({ id: gigId, helperId, helperName, title: gigTitle });
+      setReviewRating(5);
+      setReviewComment("");
+      setIsEditingReview(false);
+      setIsLoadingReview(true);
+      try {
+        const reviewData = await getGigReviewFn({ data: { gigId } });
+        if (activeReviewGigIdRef.current !== gigId) return;
+        const existingReview = reviewData.review;
+
+        if (existingReview) {
+          setReviewRating(existingReview.rating);
+          setReviewComment(existingReview.comment ?? "");
+          setIsEditingReview(true);
+        }
+      } catch {
+        if (activeReviewGigIdRef.current === gigId) {
+          setReviewGig(null);
+          toast.error("Bewertung konnte nicht geladen werden.");
+        }
+      } finally {
+        if (activeReviewGigIdRef.current === gigId) {
+          setIsLoadingReview(false);
+        }
+      }
+    },
+    [getGigReviewFn],
+  );
+
+  // Wenn ein Auftrag per Search-Param kommt (?gig=ID&tab=past), direkt zum
+  // passenden Bereich wechseln und die Bewertung bzw. den Auftrag oeffnen.
+  useEffect(() => {
+    if (searchTab === "past" || searchTab === "active") {
+      setActiveTab(searchTab);
+    }
+  }, [searchTab]);
+
+  const handledDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!searchGig) {
+      handledDeepLinkRef.current = null;
+      return;
+    }
+    if (handledDeepLinkRef.current === searchGig || !gigsQuery.data) return;
+
+    const gig = gigsQuery.data.gigs.find((g) => g.id === searchGig);
+    if (!gig) {
+      if (!gigsQuery.isFetching) {
+        handledDeepLinkRef.current = searchGig;
+        navigate({ to: "/my-gigs", search: {}, replace: true });
+      }
+      return;
+    }
+
+    handledDeepLinkRef.current = searchGig;
+    const isUnpaidCompleted = gig.status === "completed" && isPaymentReleasable(gig.payment_state);
+    const isPast = ["completed", "cancelled"].includes(gig.status) && !isUnpaidCompleted;
+    if (isPast) {
+      setActiveTab("past");
+    }
+
+    if (gig.status === "completed" && gig.assigned_helper_id && !isUnpaidCompleted) {
+      void handleReview(gig.assigned_helper_id, gig.helper_name ?? "Helfer", gig.id, gig.title);
+    } else {
+      setSelectedGig(gig.id);
+    }
+
+    // Search-Params entfernen, damit ein Reload nicht nochmal triggert
+    navigate({ to: "/my-gigs", search: {}, replace: true });
+  }, [searchGig, gigsQuery.data, gigsQuery.isFetching, handleReview, navigate]);
 
   const selectedGigData = gigsQuery.data?.gigs.find(
     (g) => g.id === selectedGig,
@@ -206,55 +296,49 @@ function MyGigsPage() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: () => {
-      if (isEditingReview) {
-        return updateReviewFn({
-          data: {
-            gigId: reviewGig!.id,
-            helperId: reviewGig!.helperId,
-            rating: reviewRating,
-            comment: reviewComment,
-          },
-        });
-      }
-      return createReviewFn({
-        data: {
-          gigId: reviewGig!.id,
-          helperId: reviewGig!.helperId,
-          rating: reviewRating,
-          comment: reviewComment,
-        },
-      });
+    mutationFn: (vars: { gigId: string; rating: number; comment: string; isEditing: boolean }) => {
+      const payload = {
+        gigId: vars.gigId,
+        rating: vars.rating,
+        comment: vars.comment,
+      };
+      return vars.isEditing
+        ? updateReviewFn({ data: payload })
+        : createReviewFn({ data: payload });
     },
-    onSuccess: () => {
-      toast.success(isEditingReview ? "Bewertung aktualisiert!" : "Bewertung abgegeben!");
+    onSuccess: (res, vars) => {
+      toast.success(vars.isEditing ? "Bewertung aktualisiert!" : "Bewertung abgegeben!");
+      activeReviewGigIdRef.current = null;
       setReviewGig(null);
       setReviewRating(5);
       setReviewComment("");
       setIsEditingReview(false);
+      // Cache sofort aktualisieren und im Hintergrund neu laden, damit der Bewertungs-Button im Dashboard sofort verschwindet
+      queryClient.setQueryData(
+        ["my-gigs"],
+        (old: Awaited<ReturnType<typeof getMyGigsFn>> | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            gigs: old.gigs.map((g) => {
+              if (g.id !== vars.gigId) return g;
+              const existing = Array.isArray(g.reviews) ? g.reviews : [];
+              if (existing.some((r) => r.direction === "customer_to_helper")) {
+                return g;
+              }
+              return {
+                ...g,
+                reviews: [...existing, { id: res.review.id, direction: "customer_to_helper" }],
+              };
+            }),
+          };
+        },
+      );
+      queryClient.invalidateQueries({ queryKey: ["my-gigs"] });
+      queryClient.invalidateQueries({ queryKey: ["marketplace-helpers"] });
     },
     onError: (err) => toast.error((err as Error).message),
   });
-
-  const handleReview = async (helperId: string, helperName: string, gigId: string) => {
-    try {
-      const reviewData = await getGigReviewFn({ data: { gigId } });
-      const existingReview = reviewData.review;
-
-      if (existingReview) {
-        setReviewRating(existingReview.rating);
-        setReviewComment(existingReview.comment ?? "");
-        setIsEditingReview(true);
-      } else {
-        setReviewRating(5);
-        setReviewComment("");
-        setIsEditingReview(false);
-      }
-      setReviewGig({ id: gigId, helperId, helperName });
-    } catch (error) {
-      toast.error("Bewertung konnte nicht geladen werden.");
-    }
-  };
 
   const { navItems } = useAppNavItems();
 
@@ -310,7 +394,7 @@ function MyGigsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="active">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
             <TabsTrigger value="active">
               Aktiv{" "}
@@ -338,7 +422,7 @@ function MyGigsPage() {
                     onComplete={() => setConfirmGigId(gig.id)}
                     isCompleting={completeMutation.isPending}
                     onReview={(helperId, helperName) =>
-                      handleReview(helperId, helperName, gig.id)
+                      handleReview(helperId, helperName, gig.id, gig.title)
                     }
                   />
                 ))
@@ -361,7 +445,7 @@ function MyGigsPage() {
                     onComplete={() => {}}
                     isCompleting={false}
                     onReview={(helperId, helperName) =>
-                      handleReview(helperId, helperName, gig.id)
+                      handleReview(helperId, helperName, gig.id, gig.title)
                     }
                   />
                 ))
@@ -723,64 +807,89 @@ function MyGigsPage() {
       {/* Review Dialog */}
       <Dialog
         open={!!reviewGig}
-        onOpenChange={(open) => !open && setReviewGig(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            activeReviewGigIdRef.current = null;
+            setReviewGig(null);
+            setIsLoadingReview(false);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bewertung abgeben</DialogTitle>
+            <DialogTitle>
+              {isEditingReview ? "Bewertung bearbeiten" : "Bewertung abgeben"}
+            </DialogTitle>
             <DialogDescription>
-              Bewerte die Arbeit von {reviewGig?.helperName}
+              {reviewGig?.title
+                ? `„${reviewGig.title}“ – Bewerte die Arbeit von ${reviewGig.helperName}`
+                : `Bewerte die Arbeit von ${reviewGig?.helperName}`}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <Label className="text-sm">Bewertung</Label>
-              <div className="flex gap-2 mt-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => setReviewRating(star)}
-                    className={`text-2xl transition-transform hover:scale-110 ${
-                      star <= reviewRating
-                        ? "text-amber-400"
-                        : "text-muted-foreground/30"
-                    }`}
-                  >
-                    ★
-                  </button>
-                ))}
-                <span className="ml-2 text-sm text-muted-foreground self-center">
-                  {reviewRating}/5
-                </span>
+          {isLoadingReview ? (
+            <p className="text-sm text-muted-foreground py-4">Lädt…</p>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm">Bewertung</Label>
+                <div className="flex gap-2 mt-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className={`text-2xl transition-transform hover:scale-110 ${
+                        star <= reviewRating
+                          ? "text-amber-400"
+                          : "text-muted-foreground/30"
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                  <span className="ml-2 text-sm text-muted-foreground self-center">
+                    {reviewRating}/5
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <Label htmlFor="review-comment" className="text-sm">
-                Kommentar (optional)
-              </Label>
-              <Textarea
-                id="review-comment"
-                placeholder="Wie war die Arbeit? Was hat besonders gut geklappt?"
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                className="mt-1"
-                rows={3}
-              />
-            </div>
+              <div>
+                <Label htmlFor="review-comment" className="text-sm">
+                  Kommentar (optional)
+                </Label>
+                <Textarea
+                  id="review-comment"
+                  placeholder="Wie war die Arbeit? Was hat besonders gut geklappt?"
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
 
-            <Button
-              className="w-full"
-              onClick={() => reviewMutation.mutate()}
-              disabled={reviewMutation.isPending}
-            >
-              <Star className="size-4 mr-2" />
-              {reviewMutation.isPending
-                ? "Wird gespeichert…"
-                : "Bewertung senden"}
-            </Button>
-          </div>
+              <Button
+                className="w-full"
+                onClick={() =>
+                  reviewGig &&
+                  reviewMutation.mutate({
+                    gigId: reviewGig.id,
+                    rating: reviewRating,
+                    comment: reviewComment,
+                    isEditing: isEditingReview,
+                  })
+                }
+                disabled={reviewMutation.isPending}
+              >
+                <Star className="size-4 mr-2" />
+                {reviewMutation.isPending
+                  ? "Wird gespeichert…"
+                  : isEditingReview
+                    ? "Bewertung aktualisieren"
+                    : "Bewertung senden"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </DashboardShell>
@@ -805,6 +914,8 @@ function GigCard({
   const payment = describePayment(paymentState, "customer");
   const canComplete =
     ["assigned", "in_progress"].includes(gig.status) || (gig.status === "completed" && isPaymentReleasable(paymentState));
+  const hasCustomerReview =
+    Array.isArray(gig.reviews) && gig.reviews.some((r) => r.direction === "customer_to_helper");
 
   return (
     <Card
@@ -881,7 +992,7 @@ function GigCard({
                 onClick={() => onReview(gig.assigned_helper_id!, gig.helper_name ?? "Helfer")}
               >
                 <Star className="size-3 mr-1" />
-                Bewerten
+                {hasCustomerReview ? "Bewertung bearbeiten" : "Bewerten"}
               </Button>
             )}
             <ChevronRight className="size-4 text-muted-foreground" />

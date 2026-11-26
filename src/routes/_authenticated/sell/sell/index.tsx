@@ -39,7 +39,7 @@ import {
 } from "@/lib/service-listings.functions";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/sell/")({
+export const Route = createFileRoute("/_authenticated/sell/sell/")({
   component: SellDashboard,
 });
 

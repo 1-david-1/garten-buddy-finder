@@ -17,7 +17,7 @@ import {
 } from "@/lib/service-listings.functions";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/sell/create")({
+export const Route = createFileRoute("/_authenticated/sell/sell/create")({
   component: CreateListingPage,
 });
 
