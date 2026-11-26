@@ -34,7 +34,7 @@ describe("Kunden-Dashboard: Aufgaben", () => {
         gig({ id: "2", status: "negotiating" }),
         gig({ id: "3", status: "pending_helper" }),
         gig({ id: "4", status: "completed", assigned_helper_id: "h", reviews: [] }),
-        gig({ id: "5", status: "completed", assigned_helper_id: "h", reviews: [{ id: "r" }] }),
+        gig({ id: "5", status: "completed", assigned_helper_id: "h", reviews: [{ id: "r", direction: "customer_to_helper" }] }),
         gig({ id: "6", status: "completed", assigned_helper_id: "h" }),
         gig({ id: "7", status: "open" }),
         gig({ id: "8", status: "completed", assigned_helper_id: "h", payment_state: "held", reviews: [] }),
@@ -51,14 +51,37 @@ describe("Kunden-Dashboard: Aufgaben", () => {
     ]);
     const pay = tasks[0];
     expect(pay.cta).toBe("Zahlung freigeben");
+    const review = tasks.find((t) => t.key === "review-4");
+    expect(review?.gigId).toBe("4");
+    expect(review?.tab).toBe("past");
     expect(tasks[4].title).toBe("2 ungelesene Nachrichten");
     expect(tasks[4].target).toBe("messages");
     expect(tasks[5].tone).toBe("info");
   });
 
+  it("berücksichtigt die Bewertungsrichtung: Helfer-Bewertung versteckt nicht den Kunden-Button", () => {
+    const helperOnly = gig({
+      id: "only-helper",
+      status: "completed",
+      assigned_helper_id: "h",
+      reviews: [{ id: "r2", direction: "helper_to_customer" }],
+    });
+    const both = gig({
+      id: "both",
+      status: "completed",
+      assigned_helper_id: "h",
+      reviews: [
+        { id: "r2", direction: "helper_to_customer" },
+        { id: "r1", direction: "customer_to_helper" },
+      ],
+    });
+    const tasks = deriveCustomerTasks([helperOnly, both], 0);
+    expect(tasks.map((t) => t.key)).toEqual(["review-only-helper"]);
+  });
+
   it("fragt nach der Zahlung nur, solange sie wirklich freigegeben werden kann", () => {
     const done = (payment_state: string | null) =>
-      gig({ id: "x", status: "completed", assigned_helper_id: "h", payment_state, reviews: [{ id: "r" }] });
+      gig({ id: "x", status: "completed", assigned_helper_id: "h", payment_state, reviews: [{ id: "r", direction: "customer_to_helper" }] });
     expect(awaitsPaymentRelease(done("held"))).toBe(true);
     expect(awaitsPaymentRelease(done("pending"))).toBe(true);
     expect(awaitsPaymentRelease(done("releasing"))).toBe(true);

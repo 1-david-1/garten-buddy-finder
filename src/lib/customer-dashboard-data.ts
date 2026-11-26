@@ -43,6 +43,25 @@ export interface DashboardTask {
   hint: string;
   cta: string;
   target: TaskTarget;
+  /** Auftrag-ID für die Weiterleitung (z. B. /my-gigs?gig=ID&tab=past). */
+  gigId?: string;
+  /** Ziel-Tab auf /my-gigs, wenn direkt ein Auftrag geöffnet werden soll. */
+  tab?: "active" | "past";
+}
+
+interface EmbeddedReview {
+  id?: string;
+  direction?: string | null;
+}
+
+function hasCustomerReview(reviews: unknown): boolean {
+  if (!Array.isArray(reviews)) return false;
+  return reviews.some(
+    (r): r is EmbeddedReview =>
+      typeof r === "object" &&
+      r !== null &&
+      (r as EmbeddedReview).direction === "customer_to_helper",
+  );
 }
 
 /** Abgeschlossen, aber die Zahlung ist noch nicht freigegeben - das wartet auf den Kunden. */
@@ -91,7 +110,7 @@ export function deriveCustomerTasks(gigs: GigLike[], unreadMessages: number): Da
       g.status === "completed" &&
       g.assigned_helper_id &&
       Array.isArray(g.reviews) &&
-      g.reviews.length === 0
+      !hasCustomerReview(g.reviews)
     ) {
       tasks.push({
         key: `review-${g.id}`,
@@ -100,6 +119,8 @@ export function deriveCustomerTasks(gigs: GigLike[], unreadMessages: number): Da
         hint: "Eine kurze Bewertung hilft dem Helfer und anderen Kunden.",
         cta: "Bewerten",
         target: "gigs",
+        gigId: g.id,
+        tab: "past",
       });
     }
   }

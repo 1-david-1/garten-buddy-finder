@@ -291,6 +291,11 @@ export const createDirectBookingRequest = createServerFn({ method: "POST" })
     return { gig };
   });
 
+export interface GigReviewRef {
+  id: string;
+  direction: string;
+}
+
 /**
  * Lädt alle eigenen Gigs (als Customer)
  */
@@ -301,7 +306,7 @@ export const getMyGigs = createServerFn({ method: "GET" })
 
     const { data: gigs, error } = await supabase
       .from("gigs")
-      .select(`${GIG_PUBLIC_COLUMNS}, reviews(id)` as const)
+      .select(`${GIG_PUBLIC_COLUMNS}, reviews(id, direction)` as const)
       .eq("customer_id", userId)
       .order("created_at", { ascending: false });
 
@@ -325,6 +330,11 @@ export const getMyGigs = createServerFn({ method: "GET" })
     return {
       gigs: withLocations.map((g) => ({
         ...g,
+        reviews: (Array.isArray(g.reviews)
+          ? g.reviews
+          : g.reviews && typeof g.reviews === "object" && "id" in g.reviews
+            ? [g.reviews]
+            : []) as GigReviewRef[],
         payment_state: paymentByGig.get(g.id) ?? null,
         helper_name: g.assigned_helper_id ? (helperProfiles.get(g.assigned_helper_id)?.displayName ?? null) : null,
       })),
