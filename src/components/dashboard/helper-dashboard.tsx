@@ -266,20 +266,29 @@ export function HelperDashboard() {
   }, [selectedGig?.id, customerReviewQuery.data]);
 
   const customerReviewMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (vars: { gigId: string; rating: number; comment: string; isUpdate: boolean }) => {
       const payload = {
-        gigId: selectedGig!.id,
-        rating: customerReviewRating,
-        comment: customerReviewComment,
+        gigId: vars.gigId,
+        rating: vars.rating,
+        comment: vars.comment,
       };
-      return customerReviewQuery.data?.review
+      return vars.isUpdate
         ? updateReviewFn({ data: payload })
         : createReviewFn({ data: payload });
     },
-    onSuccess: () => {
+    onSuccess: (res, vars) => {
       toast.success("Bewertung gespeichert.");
+      queryClient.setQueryData(
+        ["gig-review-of-customer", vars.gigId],
+        (old: Awaited<ReturnType<typeof getGigReviewFn>> | undefined) => ({
+          review: {
+            ...(old?.review ?? { customer: null, helper: null }),
+            ...res.review,
+          },
+        }),
+      );
       queryClient.invalidateQueries({
-        queryKey: ["gig-review-of-customer", selectedGig?.id],
+        queryKey: ["gig-review-of-customer", vars.gigId],
       });
     },
     onError: (err) =>
@@ -1068,7 +1077,14 @@ export function HelperDashboard() {
                           size="sm"
                           className="mt-2"
                           disabled={customerReviewMutation.isPending}
-                          onClick={() => customerReviewMutation.mutate()}
+                          onClick={() =>
+                            customerReviewMutation.mutate({
+                              gigId: selectedGig.id,
+                              rating: customerReviewRating,
+                              comment: customerReviewComment,
+                              isUpdate: Boolean(customerReviewQuery.data?.review),
+                            })
+                          }
                         >
                           {customerReviewQuery.data?.review
                             ? "Bewertung aktualisieren"

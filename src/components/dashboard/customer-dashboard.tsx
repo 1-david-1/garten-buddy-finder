@@ -262,7 +262,12 @@ function AttentionWidget({
                   <p className="text-xs text-muted-foreground">{task.hint}</p>
                 </div>
                 <Button asChild size="sm" variant={task.tone === "action" ? "default" : "outline"}>
-                  <Link to={task.target === "messages" ? "/messages" : "/my-gigs"}>{task.cta}</Link>
+                  <Link
+                    to={task.target === "messages" ? "/messages" : "/my-gigs"}
+                    search={task.gigId ? { gig: task.gigId, tab: task.tab } : undefined}
+                  >
+                    {task.cta}
+                  </Link>
                 </Button>
               </li>
             ))}
